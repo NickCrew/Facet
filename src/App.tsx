@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { Copy, Download, FileDown, FileJson, Upload } from 'lucide-react'
+import { Copy, Download, FileDown, FileJson, Settings2, Upload } from 'lucide-react'
 import './index.css'
-import type { PriorityByVector, ResumeData } from './types'
+import type {
+  PriorityByVector,
+  ResumeData,
+  ResumeThemeOverrides,
+  ResumeThemePresetId,
+} from './types'
 import { assembleResume, getPriorityForVector } from './engine/assembler'
 import { renderResumeAsText } from './utils/textRenderer'
 import { renderResumeAsMarkdown } from './utils/markdownRenderer'
@@ -10,13 +15,48 @@ import { toVectorKey, useUiStore } from './store/uiStore'
 import { componentKeys } from './utils/componentKeys'
 import { VectorBar } from './components/VectorBar'
 import { ComponentLibrary } from './components/ComponentLibrary'
-import { LivePreview } from './components/LivePreview'
+import { PdfPreview } from './components/PdfPreview'
 import { StatusBar } from './components/StatusBar'
 import { ImportExport } from './components/ImportExport'
+import { mergeResumeData } from './engine/importMerge'
 import { reorderById } from './utils/reorderById'
+import { resolveEffectiveBulletOrders } from './utils/bulletOrder'
+import { buildResumePdfFileName } from './utils/pdfFormatting'
+import {
+  analyzeJobDescription,
+  prepareJobDescription,
+  type JdAnalysisResult,
+} from './utils/jdAnalyzer'
+import {
+  ensureSkillGroupVectors,
+  reorderSkillGroupForSelection,
+} from './utils/skillGroupVectors'
+import { useFocusTrap } from './utils/useFocusTrap'
 import { defaultVectorsForSelection } from './utils/vectorPriority'
+import {
+  THEME_PRESETS,
+  THEME_PRESET_IDS,
+  normalizeThemeState,
+  resolveTheme,
+} from './themes/theme'
+import { ThemeEditorPanel } from './components/ThemeEditorPanel'
+import { usePdfPreview } from './hooks/usePdfPreview'
+import { VariantSaveCanceledError, useSavedVariants } from './hooks/useSavedVariants'
 
 const vectorFallbackColors = ['#2563EB', '#0D9488', '#7C3AED', '#EA580C', '#4F46E5', '#0891B2']
+
+const colorThemeKeys = new Set<keyof ResumeThemeOverrides>([
+  'colorBody',
+  'colorHeading',
+  'colorSection',
+  'colorDim',
+  'colorRule',
+  'roleTitleColor',
+  'datesColor',
+  'subtitleColor',
+  'competencyLabelColor',
+  'projectUrlColor',
+])
 
 function slugify(value: string) {
   return value
@@ -35,6 +75,46 @@ function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
+interface JdSuggestionSelection {
+  applyPrimaryVector: boolean
+  applyTargetLine: boolean
+  bulletAdjustmentIds: string[]
+}
+
+function FacetWordmark() {
+  return (
+    <div className="facet-lockup" role="img" aria-label="Facet">
+      <svg
+        className="facet-mark"
+        viewBox="0 0 34 42"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <defs>
+          <clipPath id="facet-mark-upper">
+            <path d="M0 0 H34 V42 L0 21 Z" />
+          </clipPath>
+          <clipPath id="facet-mark-lower">
+            <path d="M0 21 L34 42 V42 H0 Z" />
+          </clipPath>
+        </defs>
+        <g clipPath="url(#facet-mark-upper)">
+          <path d="M4 2 H28 V10 H13 V18 H24 V26 H13 V40 H4 Z" fill="#6cb8e8" />
+        </g>
+        <g clipPath="url(#facet-mark-lower)">
+          <path d="M4 2 H28 V10 H13 V18 H24 V26 H13 V40 H4 Z" fill="#2d6a96" />
+        </g>
+        <line x1="0" y1="21" x2="34" y2="42" stroke="#7ac4f0" strokeWidth="0.5" opacity="0.4" />
+      </svg>
+      <span className="facet-wordmark" aria-hidden="true">
+        acet
+      </span>
+    </div>
+  )
+}
+
 function App() {
   const { data, setData } = useResumeStore()
   const {
@@ -44,19 +124,70 @@ function App() {
     setPanelRatio,
     manualOverrides,
     variantOverrides,
+    resetAllOverrides,
     resetOverridesForVector,
     setOverride,
     setVariantOverride,
     bulletOrders,
     setRoleBulletOrder,
+    resetRoleBulletOrder,
   } = useUiStore()
 
   const [draggingSplit, setDraggingSplit] = useState(false)
   const [importExportMode, setImportExportMode] = useState<'import' | 'export' | null>(null)
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null)
+  const [jdModalOpen, setJdModalOpen] = useState(false)
+  const [jdInput, setJdInput] = useState('')
+  const [jdAnalysisResult, setJdAnalysisResult] = useState<JdAnalysisResult | null>(null)
+  const [jdSelection, setJdSelection] = useState<JdSuggestionSelection>({
+    applyPrimaryVector: true,
+    applyTargetLine: true,
+    bulletAdjustmentIds: [],
+  })
+  const [jdWordCount, setJdWordCount] = useState(0)
+  const [jdWasTruncated, setJdWasTruncated] = useState(false)
+  const [jdLoading, setJdLoading] = useState(false)
+  const [jdError, setJdError] = useState<string | null>(null)
+  const [themePanelOpen, setThemePanelOpen] = useState(false)
   const noticeTimeoutRef = useRef<number | null>(null)
+  const jdModalRef = useRef<HTMLDivElement>(null)
+  const jdAnalysisEndpointRaw = (import.meta.env.VITE_ANTHROPIC_PROXY_URL as string | undefined) ?? ''
+  const jdAnalysisEndpoint = useMemo(() => {
+    if (!jdAnalysisEndpointRaw) {
+      return ''
+    }
+
+    try {
+      const url = new URL(jdAnalysisEndpointRaw)
+      if (url.username || url.password) {
+        return ''
+      }
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+        return ''
+      }
+      return url.toString()
+    } catch {
+      return ''
+    }
+  }, [jdAnalysisEndpointRaw])
 
   const vectorKey = toVectorKey(selectedVector)
+  const bulletTextById = useMemo(
+    () =>
+      Object.fromEntries(
+        data.roles.flatMap((role) =>
+          role.bullets.map((bullet) => [bullet.id, bullet.text]),
+        ),
+      ),
+    [data.roles],
+  )
+  const themeState = useMemo(() => normalizeThemeState(data.theme), [data.theme])
+  const resolvedTheme = useMemo(() => resolveTheme(themeState), [themeState])
+  const activeThemeLabel = useMemo(() => {
+    const preset = THEME_PRESETS[themeState.preset]
+    const isModified = Boolean(themeState.overrides && Object.keys(themeState.overrides).length > 0)
+    return isModified ? `${preset.name} (modified)` : preset.name
+  }, [themeState])
   const overridesForVector = useMemo(
     () => manualOverrides[vectorKey] ?? {},
     [manualOverrides, vectorKey],
@@ -65,6 +196,13 @@ function App() {
     () => variantOverrides[vectorKey] ?? {},
     [variantOverrides, vectorKey],
   )
+  const defaultBulletOrders = useMemo(() => bulletOrders.all ?? {}, [bulletOrders])
+  const activeBulletOrders = useMemo(() => bulletOrders[vectorKey] ?? {}, [bulletOrders, vectorKey])
+  const effectiveBulletOrders = useMemo(
+    () => resolveEffectiveBulletOrders(bulletOrders, selectedVector),
+    [bulletOrders, selectedVector],
+  )
+  const jdEndpointInvalid = jdAnalysisEndpointRaw.length > 0 && !jdAnalysisEndpoint
 
   const assembledResult = useMemo(
     () =>
@@ -72,11 +210,29 @@ function App() {
         selectedVector,
         manualOverrides: overridesForVector,
         variantOverrides: variantsForVector,
-        bulletOrderByRole: bulletOrders[vectorKey] ?? {},
+        bulletOrderByRole: effectiveBulletOrders,
         targetPages: 2,
       }),
-    [data, selectedVector, overridesForVector, variantsForVector, bulletOrders, vectorKey],
+    [data, selectedVector, overridesForVector, variantsForVector, effectiveBulletOrders],
   )
+  const nearPageLimit =
+    assembledResult.estimatedPageUsage >= 1.8 && assembledResult.estimatedPageUsage < 2
+  const overPageLimit =
+    assembledResult.estimatedPageUsage >= 2 ||
+    assembledResult.warnings.some(
+      (warning) => warning.code === 'must_over_budget' || warning.code === 'over_budget_after_trim',
+    )
+  const {
+    previewBlobUrl,
+    cachedPdfBlob,
+    pageCount: pdfPageCount,
+    pending: pdfRenderPending,
+    error: pdfRenderError,
+  } = usePdfPreview({
+    resume: assembledResult.resume,
+    theme: resolvedTheme,
+  })
+  useFocusTrap(jdModalOpen, jdModalRef, () => setJdModalOpen(false))
 
   useEffect(() => {
     if (!draggingSplit) {
@@ -132,25 +288,222 @@ function App() {
   }
 
   const updateData = (fn: (current: ResumeData) => ResumeData) => {
-    setData(fn(data))
+    setData(fn(useResumeStore.getState().data))
+  }
+  const {
+    savedVariants,
+    activeVariantId,
+    setActiveVariantId,
+    activeVariant,
+    variantDirty,
+    getSnapshotForVector,
+    applySavedVariant,
+    persistVariant,
+    onSaveCurrentVariant,
+    onDeleteActiveVariant,
+  } = useSavedVariants({
+    data,
+    selectedVector,
+    overridesForVector,
+    variantsForVector,
+    activeBulletOrders,
+    themeState,
+    updateData,
+    showNotice,
+  })
+
+  const setThemePreset = (preset: ResumeThemePresetId) => {
+    updateData((current) => ({
+      ...current,
+      theme: normalizeThemeState({ preset }),
+    }))
   }
 
-  const onDownloadDocx = async () => {
-    try {
-      const { renderResumeAsDocx } = await import('./utils/docxRenderer')
-      const blob = await renderResumeAsDocx(assembledResult.resume)
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `vector-resume-${selectedVector}.docx`
-      document.body.append(link)
-      link.click()
-      link.remove()
-      window.setTimeout(() => URL.revokeObjectURL(url), 10000)
-      showNotice('success', 'DOCX downloaded')
-    } catch {
-      showNotice('error', 'Unable to generate DOCX. Please try again.')
+  const setThemeOverride = <K extends keyof ResumeThemeOverrides>(key: K, value: ResumeThemeOverrides[K]) => {
+    updateData((current) => {
+      if (typeof value === 'number' && !Number.isFinite(value)) {
+        return current
+      }
+
+      const normalizedValue =
+        typeof value === 'string' && colorThemeKeys.has(key)
+          ? (value.replace(/^#/, '') as ResumeThemeOverrides[K])
+          : value
+
+      const normalized = normalizeThemeState(current.theme)
+      const nextTheme = normalizeThemeState({
+        preset: normalized.preset,
+        overrides: {
+          ...(normalized.overrides ?? {}),
+          [key]: normalizedValue,
+        },
+      })
+
+      return {
+        ...current,
+        theme: nextTheme,
+      }
+    })
+  }
+
+  const resetThemeOverrides = () => {
+    updateData((current) => {
+      const normalized = normalizeThemeState(current.theme)
+      return {
+        ...current,
+        theme: { preset: normalized.preset },
+      }
+    })
+  }
+
+  const onAnalyzeJd = async () => {
+    setJdError(null)
+    setJdAnalysisResult(null)
+
+    const prepared = prepareJobDescription(jdInput)
+    setJdWordCount(prepared.wordCount)
+    setJdWasTruncated(prepared.truncated)
+
+    if (!jdAnalysisEndpoint) {
+      setJdError('JD analysis is disabled. Configure VITE_ANTHROPIC_PROXY_URL to enable it.')
+      return
     }
+
+    setJdLoading(true)
+    try {
+      const result = await analyzeJobDescription(prepared, data, jdAnalysisEndpoint)
+      setJdAnalysisResult(result)
+      setJdSelection({
+        applyPrimaryVector: true,
+        applyTargetLine: true,
+        bulletAdjustmentIds: result.bullet_adjustments.map((adjustment) => adjustment.bullet_id),
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setJdError(message)
+    } finally {
+      setJdLoading(false)
+    }
+  }
+
+  const applyJdSelections = (saveAsVariant: boolean) => {
+    if (!jdAnalysisResult) {
+      return
+    }
+
+    const hasPrimaryVector = data.vectors.some((vector) => vector.id === jdAnalysisResult.primary_vector)
+    const baseVector =
+      jdSelection.applyPrimaryVector && hasPrimaryVector
+        ? jdAnalysisResult.primary_vector
+        : selectedVector
+
+    if (jdSelection.applyPrimaryVector && hasPrimaryVector) {
+      setSelectedVector(jdAnalysisResult.primary_vector)
+    }
+
+    const targetVector = baseVector === 'all' ? data.vectors[0]?.id ?? 'all' : baseVector
+    const selectedBulletIds = new Set(jdSelection.bulletAdjustmentIds)
+    const priorityOverridesForVariant =
+      targetVector === 'all'
+        ? []
+        : jdAnalysisResult.bullet_adjustments
+            .filter((adjustment) => selectedBulletIds.has(adjustment.bullet_id))
+            .map((adjustment) => ({
+              bulletId: adjustment.bullet_id,
+              vectorId: targetVector,
+              priority: adjustment.recommended_priority,
+            }))
+    const snapshotForSave = saveAsVariant
+      ? {
+          ...getSnapshotForVector(baseVector),
+          priorityOverrides: priorityOverridesForVariant,
+        }
+      : null
+
+    updateData((current) => {
+      const nextTargetLines = [...current.target_lines]
+      if (jdSelection.applyTargetLine && jdAnalysisResult.suggested_target_line.trim().length > 0) {
+        const existing = nextTargetLines.find(
+          (line) =>
+            line.id === jdAnalysisResult.suggested_target_line ||
+            line.text.trim() === jdAnalysisResult.suggested_target_line.trim(),
+        )
+        if (!existing) {
+          nextTargetLines.push({
+            id: createId('target-line'),
+            text: jdAnalysisResult.suggested_target_line.trim(),
+            vectors: defaultVectorsForSelection(targetVector, current.vectors),
+          })
+        }
+      }
+
+      return {
+        ...current,
+        target_lines: nextTargetLines,
+        roles: current.roles.map((role) => ({
+          ...role,
+          bullets: role.bullets.map((bullet) => {
+            const adjustment = jdAnalysisResult.bullet_adjustments.find(
+              (item) => item.bullet_id === bullet.id && selectedBulletIds.has(item.bullet_id),
+            )
+            if (!adjustment || targetVector === 'all') {
+              return bullet
+            }
+
+            return {
+              ...bullet,
+              vectors: {
+                ...bullet.vectors,
+                [targetVector]: adjustment.recommended_priority,
+              },
+            }
+          }),
+        })),
+      }
+    })
+
+    showNotice('success', 'Applied selected JD suggestions')
+
+    if (saveAsVariant) {
+      const suggestedName = jdAnalysisResult.positioning_note
+        .split(/[.!?]/)
+        .map((part) => part.trim())
+        .find((part) => part.length > 0)
+        ?.slice(0, 36)
+      const variantName = window.prompt('Variant name', suggestedName ?? 'JD Variant')?.trim()
+      if (variantName) {
+        try {
+          persistVariant(
+            variantName,
+            'Generated from JD analysis',
+            baseVector,
+            snapshotForSave ?? getSnapshotForVector(baseVector),
+          )
+          showNotice('success', `Applied and saved variant ${variantName}`)
+        } catch (error) {
+          if (!(error instanceof VariantSaveCanceledError)) {
+            showNotice('error', 'Applied suggestions, but failed to save variant.')
+          }
+        }
+      }
+    }
+  }
+
+  const onDownloadPdf = () => {
+    if (!cachedPdfBlob) {
+      showNotice('error', 'PDF is still rendering. Please try again in a moment.')
+      return
+    }
+
+    const url = URL.createObjectURL(cachedPdfBlob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = buildResumePdfFileName(data.meta.name, selectedVector, data.vectors)
+    document.body.append(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 10000)
+    showNotice('success', 'PDF downloaded')
   }
 
   const onCopyText = async () => {
@@ -194,6 +547,19 @@ function App() {
     updateData((current) => ({
       ...current,
       vectors: [...current.vectors, { id, label, color }],
+      skill_groups: current.skill_groups.map((skillGroup) => {
+        const normalized = ensureSkillGroupVectors(skillGroup, current.vectors)
+        return {
+          ...skillGroup,
+          vectors: {
+            ...normalized,
+            [id]: {
+              priority: 'optional',
+              order: Object.keys(normalized).length + 1,
+            },
+          },
+        }
+      }),
     }))
     setSelectedVector(id)
   }
@@ -251,10 +617,15 @@ function App() {
             id: createId('skill'),
             label: payload.label?.trim() || 'New Skill Group',
             content: payload.content?.trim() ?? '',
-            // Skill groups are ordered per-vector, but they are not included/excluded per-vector.
-            order: {
-              default: current.skill_groups.length + 1,
-            },
+            vectors: Object.fromEntries(
+              current.vectors.map((vector) => [
+                vector.id,
+                {
+                  priority: 'strong',
+                  order: current.skill_groups.length + 1,
+                },
+              ]),
+            ),
           },
         ],
       }))
@@ -337,14 +708,85 @@ function App() {
   return (
     <div className="app-shell">
       <header className="top-bar">
-        <div>
-          <h1>Vector Resume</h1>
-          <p>Strategic resume assembly for multi-vector applications.</p>
+        <div className="top-bar-brand">
+          <FacetWordmark />
+          <p className="top-bar-tagline">Same diamond. Different face.</p>
         </div>
         <div className="top-bar-actions">
+          <div className="theme-controls">
+            <label className="theme-picker" htmlFor="theme-preset">
+              Theme
+            </label>
+            <select
+              id="theme-preset"
+              className="component-input compact theme-select"
+              value={themeState.preset}
+              onChange={(event) => setThemePreset(event.target.value as ResumeThemePresetId)}
+              aria-label="Theme preset"
+            >
+              {THEME_PRESET_IDS.map((presetId) => (
+                <option key={presetId} value={presetId}>
+                  {THEME_PRESETS[presetId].name}
+                </option>
+              ))}
+            </select>
+            <span className="theme-status">{activeThemeLabel}</span>
+            <button
+              className={`btn-secondary ${themePanelOpen ? 'selected' : ''}`}
+              type="button"
+              onClick={() => setThemePanelOpen((current) => !current)}
+              aria-expanded={themePanelOpen}
+              aria-controls="theme-overrides-panel"
+            >
+              <Settings2 size={16} />
+              Theme Tokens
+            </button>
+          </div>
+          <div className="variant-controls">
+            <select
+              className="component-input compact"
+              aria-label="Load saved variant"
+              value={activeVariantId ?? ''}
+              onChange={(event) => {
+                const nextId = event.target.value
+                if (!nextId) {
+                  setActiveVariantId(null)
+                  return
+                }
+                const variant = savedVariants.find((item) => item.id === nextId)
+                if (!variant) {
+                  setActiveVariantId(null)
+                  return
+                }
+                applySavedVariant(variant)
+              }}
+            >
+              <option value="">Saved Variants</option>
+              {savedVariants.map((variant) => (
+                <option key={variant.id} value={variant.id}>
+                  {variant.name} ({variant.baseVector})
+                </option>
+              ))}
+            </select>
+            <button className="btn-secondary" type="button" onClick={onSaveCurrentVariant}>
+              Save Current
+            </button>
+            <button
+              className="btn-secondary"
+              type="button"
+              onClick={onDeleteActiveVariant}
+              disabled={!activeVariant}
+              aria-label={activeVariant ? `Delete variant ${activeVariant.name}` : 'Delete Variant'}
+            >
+              Delete Variant
+            </button>
+          </div>
           <button className="btn-secondary" type="button" onClick={() => setImportExportMode('import')}>
             <Upload size={16} />
             Import
+          </button>
+          <button className="btn-secondary" type="button" onClick={() => setJdModalOpen(true)}>
+            Analyze JD
           </button>
           <button className="btn-secondary" type="button" onClick={() => setImportExportMode('export')}>
             <FileJson size={16} />
@@ -358,19 +800,43 @@ function App() {
             <FileDown size={16} />
             Copy Markdown
           </button>
-          <button className="btn-primary" type="button" onClick={onDownloadDocx}>
+          <button
+            className="btn-primary"
+            type="button"
+            onClick={onDownloadPdf}
+            disabled={pdfRenderPending || Boolean(pdfRenderError)}
+          >
             <Download size={16} />
-            Download DOCX
+            Download PDF
           </button>
         </div>
       </header>
+
+      <ThemeEditorPanel
+        open={themePanelOpen}
+        activePreset={themeState.preset}
+        resolvedTheme={resolvedTheme}
+        onSetPreset={setThemePreset}
+        onSetOverride={setThemeOverride}
+        onResetOverrides={resetThemeOverrides}
+      />
 
       <VectorBar
         vectors={data.vectors}
         selectedVector={selectedVector}
         onSelect={setSelectedVector}
         onAddVector={onAddVector}
-        onResetAuto={() => resetOverridesForVector(vectorKey)}
+        onResetAuto={() => {
+          if (selectedVector === 'all') {
+            const confirmed = window.confirm('Reset overrides for all vectors?')
+            if (!confirmed) {
+              return
+            }
+            resetAllOverrides()
+            return
+          }
+          resetOverridesForVector(vectorKey)
+        }}
       />
 
       {!data.vectors.length ? (
@@ -396,9 +862,54 @@ function App() {
               selectedVector={selectedVector}
               includedByKey={overridesForVector}
               variantByKey={variantsForVector}
-              bulletOrderByRole={bulletOrders[vectorKey] ?? {}}
+              bulletOrderByRole={effectiveBulletOrders}
+              activeVectorBulletOrderByRole={activeBulletOrders}
+              defaultBulletOrderByRole={defaultBulletOrders}
               onToggleComponent={toggleComponentWithPriority}
               onSetVariant={(componentKey, variant) => setVariantOverride(vectorKey, componentKey, variant)}
+              onUpdateMetaField={(field, value) =>
+                updateData((current) => ({
+                  ...current,
+                  meta: {
+                    ...current.meta,
+                    [field]: value,
+                  },
+                }))
+              }
+              onUpdateMetaLink={(index, field, value) =>
+                updateData((current) => ({
+                  ...current,
+                  meta: {
+                    ...current.meta,
+                    links: current.meta.links.map((link, linkIndex) =>
+                      linkIndex === index
+                        ? {
+                            ...link,
+                            [field]: field === 'label' ? value || undefined : value,
+                          }
+                        : link,
+                    ),
+                  },
+                }))
+              }
+              onAddMetaLink={() =>
+                updateData((current) => ({
+                  ...current,
+                  meta: {
+                    ...current.meta,
+                    links: [...current.meta.links, { url: '' }],
+                  },
+                }))
+              }
+              onRemoveMetaLink={(index) =>
+                updateData((current) => ({
+                  ...current,
+                  meta: {
+                    ...current.meta,
+                    links: current.meta.links.filter((_, linkIndex) => linkIndex !== index),
+                  },
+                }))
+              }
               onUpdateTargetLine={(id, text) =>
                 updateData((current) => ({
                   ...current,
@@ -451,7 +962,31 @@ function App() {
                 updateData((current) => ({
                   ...current,
                   skill_groups: current.skill_groups.map((skillGroup) =>
-                    skillGroup.id === id ? { ...skillGroup, [field]: value } : skillGroup,
+                    skillGroup.id !== id
+                      ? skillGroup
+                      : (() => {
+                          const nextSkillGroup = {
+                            ...skillGroup,
+                            [field]: value,
+                          }
+                          return {
+                            ...nextSkillGroup,
+                            vectors: ensureSkillGroupVectors(nextSkillGroup, current.vectors),
+                          }
+                        })(),
+                  ),
+                }))
+              }
+              onUpdateSkillGroupVectors={(id, vectors) =>
+                updateData((current) => ({
+                  ...current,
+                  skill_groups: current.skill_groups.map((skillGroup) =>
+                    skillGroup.id === id
+                      ? {
+                          ...skillGroup,
+                          vectors,
+                        }
+                      : skillGroup,
                   ),
                 }))
               }
@@ -460,16 +995,9 @@ function App() {
                   const reordered = reorderById(current.skill_groups, order)
                   return {
                     ...current,
-                    skill_groups: reordered.map((skill, index) => {
-                      const orderKey = selectedVector === 'all' ? 'default' : selectedVector
-                      return {
-                        ...skill,
-                        order: {
-                          ...skill.order,
-                          [orderKey]: index + 1,
-                        },
-                      }
-                    }),
+                    skill_groups: reordered.map((skill, index) =>
+                      reorderSkillGroupForSelection(skill, selectedVector, current.vectors, index + 1),
+                    ),
                   }
                 })
               }
@@ -507,6 +1035,7 @@ function App() {
                 toggleComponentWithPriority(componentKeys.bullet(roleId, bulletId), vectors)
               }
               onReorderBullets={handleRoleBulletReorder}
+              onResetRoleBulletOrder={(roleId) => resetRoleBulletOrder(vectorKey, roleId)}
               onAddComponent={onAddComponent}
             />
           </section>
@@ -525,17 +1054,158 @@ function App() {
           />
 
           <section className="preview-column" style={{ width: `${(1 - panelRatio) * 100}%` }}>
-            <LivePreview assembled={assembledResult.resume} />
+            <PdfPreview blobUrl={previewBlobUrl} loading={pdfRenderPending} error={pdfRenderError} />
           </section>
         </main>
       )}
 
+      {jdModalOpen ? (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="jd-analyzer-title">
+          <div className="modal-card jd-modal" ref={jdModalRef} tabIndex={-1}>
+            <header className="modal-header">
+              <h3 id="jd-analyzer-title">Analyze Job Description</h3>
+              <button className="btn-ghost" type="button" onClick={() => setJdModalOpen(false)}>
+                Close
+              </button>
+            </header>
+            <textarea
+              className="import-textarea"
+              aria-label="Job description input"
+              placeholder="Paste a job description..."
+              value={jdInput}
+              onChange={(event) => setJdInput(event.target.value)}
+            />
+            {!jdAnalysisEndpoint ? (
+              <p className="error-text">
+                {jdEndpointInvalid
+                  ? 'JD analysis endpoint is invalid. Use http(s) URL without embedded credentials.'
+                  : 'JD analysis disabled. Set `VITE_ANTHROPIC_PROXY_URL` to enable this feature.'}
+              </p>
+            ) : null}
+            {jdWordCount > 0 && jdWordCount < 50 ? (
+              <p className="warning-text" role="status">
+                JD appears short (&lt; 50 words). Analysis quality may be limited.
+              </p>
+            ) : null}
+            {jdWasTruncated ? (
+              <p className="warning-text" role="status">
+                Long JD truncated to fit analysis context window.
+              </p>
+            ) : null}
+            {jdError ? (
+              <p className="error-text" role="alert">
+                {jdError}
+              </p>
+            ) : null}
+            <button
+              className="btn-primary"
+              type="button"
+              disabled={jdLoading || jdInput.trim().length === 0 || !jdAnalysisEndpoint}
+              onClick={onAnalyzeJd}
+            >
+              {jdLoading ? 'Analyzing…' : 'Analyze'}
+            </button>
+
+            {jdAnalysisResult ? (
+              <div className="jd-results">
+                <section className="jd-section">
+                  <label className="jd-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={jdSelection.applyPrimaryVector}
+                      onChange={(event) =>
+                        setJdSelection((current) => ({
+                          ...current,
+                          applyPrimaryVector: event.target.checked,
+                        }))
+                      }
+                    />
+                    <span>Apply vector recommendation: {jdAnalysisResult.primary_vector}</span>
+                  </label>
+                </section>
+
+                <section className="jd-section">
+                  <h4>Bullet Adjustments</h4>
+                  {jdAnalysisResult.bullet_adjustments.map((adjustment) => (
+                    <label className="jd-checkbox" key={adjustment.bullet_id}>
+                      <input
+                        type="checkbox"
+                        checked={jdSelection.bulletAdjustmentIds.includes(adjustment.bullet_id)}
+                        onChange={(event) =>
+                          setJdSelection((current) => ({
+                            ...current,
+                            bulletAdjustmentIds: event.target.checked
+                              ? Array.from(new Set([...current.bulletAdjustmentIds, adjustment.bullet_id]))
+                              : current.bulletAdjustmentIds.filter((id) => id !== adjustment.bullet_id),
+                          }))
+                        }
+                      />
+                      <span>
+                        {(bulletTextById[adjustment.bullet_id] ?? adjustment.bullet_id).slice(0, 90)}
+                        : {adjustment.recommended_priority} ({adjustment.reason})
+                      </span>
+                    </label>
+                  ))}
+                </section>
+
+                <section className="jd-section">
+                  <label className="jd-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={jdSelection.applyTargetLine}
+                      onChange={(event) =>
+                        setJdSelection((current) => ({
+                          ...current,
+                          applyTargetLine: event.target.checked,
+                        }))
+                      }
+                    />
+                    <span>Apply target line suggestion: {jdAnalysisResult.suggested_target_line}</span>
+                  </label>
+                </section>
+
+                <section className="jd-section">
+                  <h4>Skill Gaps</h4>
+                  <ul className="jd-skill-gaps">
+                    {jdAnalysisResult.skill_gaps.map((gap) => (
+                      <li key={gap}>{gap}</li>
+                    ))}
+                  </ul>
+                </section>
+
+                <section className="jd-section">
+                  <h4>Positioning Note</h4>
+                  <p>{jdAnalysisResult.positioning_note}</p>
+                </section>
+
+                <div className="jd-actions">
+                  <button className="btn-secondary" type="button" onClick={() => applyJdSelections(false)}>
+                    Apply Selected
+                  </button>
+                  <button className="btn-primary" type="button" onClick={() => applyJdSelections(true)}>
+                    Apply & Save as Variant
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       <StatusBar
-        pageCount={assembledResult.estimatedPages}
+        pageCount={pdfPageCount}
+        pageCountPending={pdfRenderPending}
         bulletCount={assembledResult.resume.roles.reduce((acc, role) => acc + role.bullets.length, 0)}
         skillGroupCount={assembledResult.resume.skillGroups.length}
-        overBudget={assembledResult.warnings.length > 0}
+        nearBudget={nearPageLimit}
+        overBudget={overPageLimit}
         mustOverBudget={assembledResult.warnings.some((warning) => warning.code === 'must_over_budget')}
+        activeVariantLabel={
+          activeVariant
+            ? `${activeVariant.name} (based on ${activeVariant.baseVector})`
+            : undefined
+        }
+        variantDirty={variantDirty}
       />
 
       <ImportExport
@@ -544,7 +1214,23 @@ function App() {
         mode={importExportMode ?? 'import'}
         data={data}
         onClose={() => setImportExportMode(null)}
-        onImport={(nextData) => setData(nextData)}
+        onImport={(nextData, importMode, warnings) => {
+          if (importMode === 'merge') {
+            updateData((current) => mergeResumeData(current, nextData))
+          } else {
+            setData(nextData)
+          }
+
+          if (warnings.length > 0) {
+            showNotice(
+              'success',
+              `${importMode === 'merge' ? 'Merged' : 'Imported'} with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}.`,
+            )
+            return
+          }
+
+          showNotice('success', importMode === 'merge' ? 'Import merged successfully' : 'Import replaced successfully')
+        }}
       />
       {notice ? (
         <div
