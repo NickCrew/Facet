@@ -12,6 +12,7 @@ function renderPanel(overrides: Partial<{
 }> = {}) {
   const onSetPreset = vi.fn()
   const onSetOverride = vi.fn()
+  const onAdjustDensityStep = vi.fn()
   const onResetOverrides = vi.fn()
 
   render(
@@ -21,11 +22,12 @@ function renderPanel(overrides: Partial<{
       resolvedTheme={THEME_PRESETS['ferguson-v12']}
       onSetPreset={onSetPreset}
       onSetOverride={onSetOverride}
+      onAdjustDensityStep={onAdjustDensityStep}
       onResetOverrides={onResetOverrides}
     />,
   )
 
-  return { onSetPreset, onSetOverride, onResetOverrides }
+  return { onSetPreset, onSetOverride, onAdjustDensityStep, onResetOverrides }
 }
 
 describe('ThemeEditorPanel preset gallery', () => {
@@ -54,5 +56,14 @@ describe('ThemeEditorPanel preset gallery', () => {
     fireEvent.click(button!)
 
     expect(onSetPreset).toHaveBeenCalledWith('signal-clean')
+  })
+
+  it('supports one-step tighten and loosen spacing controls', () => {
+    const { onAdjustDensityStep } = renderPanel()
+    fireEvent.click(screen.getByRole('button', { name: 'Tighten spacing one step' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Loosen spacing one step' }))
+
+    expect(onAdjustDensityStep).toHaveBeenNthCalledWith(1, 'tighten')
+    expect(onAdjustDensityStep).toHaveBeenNthCalledWith(2, 'loosen')
   })
 })

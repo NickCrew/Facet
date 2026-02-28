@@ -58,6 +58,37 @@ const colorThemeKeys = new Set<keyof ResumeThemeOverrides>([
   'projectUrlColor',
 ])
 
+type ThemeDensityKey =
+  | 'sectionGapBefore'
+  | 'sectionGapAfter'
+  | 'roleGap'
+  | 'roleLineGapAfter'
+  | 'bulletGap'
+  | 'paragraphGap'
+  | 'contactGapAfter'
+  | 'competencyGap'
+  | 'projectGap'
+  | 'marginTop'
+  | 'marginBottom'
+  | 'marginLeft'
+  | 'marginRight'
+
+const themeDensityKeys: ThemeDensityKey[] = [
+  'sectionGapBefore',
+  'sectionGapAfter',
+  'roleGap',
+  'roleLineGapAfter',
+  'bulletGap',
+  'paragraphGap',
+  'contactGapAfter',
+  'competencyGap',
+  'projectGap',
+  'marginTop',
+  'marginBottom',
+  'marginLeft',
+  'marginRight',
+]
+
 function slugify(value: string) {
   return value
     .toLowerCase()
@@ -352,6 +383,33 @@ function App() {
       return {
         ...current,
         theme: { preset: normalized.preset },
+      }
+    })
+  }
+
+  const adjustThemeDensity = (direction: 'tighten' | 'loosen') => {
+    updateData((current) => {
+      const normalized = normalizeThemeState(current.theme)
+      const resolved = resolveTheme(normalized)
+      const multiplier = direction === 'tighten' ? 0.92 : 1.08
+      const nextOverrides: ResumeThemeOverrides = {
+        ...(normalized.overrides ?? {}),
+      }
+
+      for (const key of themeDensityKeys) {
+        const baseValue = resolved[key]
+        if (typeof baseValue !== 'number') {
+          continue
+        }
+        nextOverrides[key] = Number((baseValue * multiplier).toFixed(3))
+      }
+
+      return {
+        ...current,
+        theme: normalizeThemeState({
+          preset: normalized.preset,
+          overrides: nextOverrides,
+        }),
       }
     })
   }
@@ -818,6 +876,7 @@ function App() {
         resolvedTheme={resolvedTheme}
         onSetPreset={setThemePreset}
         onSetOverride={setThemeOverride}
+        onAdjustDensityStep={adjustThemeDensity}
         onResetOverrides={resetThemeOverrides}
       />
 

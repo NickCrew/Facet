@@ -221,6 +221,31 @@ select {
   font-size: 13px;
 }
 
+.theme-panel-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.theme-density-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.theme-density-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+.theme-density-button {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
 .theme-preset-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -562,6 +587,20 @@ select {
 
 .library-section-toggle.expanded svg {
   transform: rotate(90deg);
+}
+
+.library-section-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--duration-slow) var(--easing);
+}
+
+.library-section-collapse.expanded {
+  grid-template-rows: 1fr;
+}
+
+.library-section-collapse > .library-section-panel {
+  overflow: hidden;
 }
 
 .library-section-panel {
@@ -1195,7 +1234,9 @@ select {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(23, 23, 23, 0.25);
+  background: rgba(10, 12, 16, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: grid;
   place-items: center;
   z-index: 30;
@@ -1467,6 +1508,16 @@ select {
 
   .theme-panel {
     padding: var(--space-3);
+  }
+
+  .theme-panel-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .theme-panel-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .theme-gallery-header {
