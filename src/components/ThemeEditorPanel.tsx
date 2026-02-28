@@ -19,6 +19,7 @@ interface ThemeEditorPanelProps {
     key: K,
     value: ResumeThemeOverrides[K],
   ) => void
+  onAdjustDensityStep: (direction: 'tighten' | 'loosen') => void
   onResetOverrides: () => void
 }
 
@@ -176,6 +177,7 @@ export function ThemeEditorPanel({
   resolvedTheme,
   onSetPreset,
   onSetOverride,
+  onAdjustDensityStep,
   onResetOverrides,
 }: ThemeEditorPanelProps) {
   const [activeTab, setActiveTab] = useState<ThemeTabId>('typography')
@@ -504,9 +506,30 @@ export function ThemeEditorPanel({
     <section className="theme-panel" id="theme-overrides-panel" aria-label="Theme token overrides">
       <div className="theme-panel-header">
         <h2>Theme Overrides</h2>
-        <button className="btn-secondary" type="button" onClick={onResetOverrides}>
-          Reset to Preset
-        </button>
+        <div className="theme-panel-actions">
+          <div className="theme-density-controls" aria-label="Spacing density controls">
+            <span className="theme-density-label">Density</span>
+            <button
+              className="btn-secondary theme-density-button"
+              type="button"
+              onClick={() => onAdjustDensityStep('tighten')}
+              aria-label="Tighten spacing one step"
+            >
+              ↓ Tighten
+            </button>
+            <button
+              className="btn-secondary theme-density-button"
+              type="button"
+              onClick={() => onAdjustDensityStep('loosen')}
+              aria-label="Loosen spacing one step"
+            >
+              ↑ Loosen
+            </button>
+          </div>
+          <button className="btn-secondary" type="button" onClick={onResetOverrides}>
+            Reset to Preset
+          </button>
+        </div>
       </div>
 
       <div className="theme-preset-grid">
