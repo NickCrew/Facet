@@ -24,10 +24,11 @@ export function VectorBar({
           onClick={() => onSelect('all')}
           type="button"
           aria-pressed={selectedVector === 'all'}
+          title="All vectors (0)"
         >
           All
         </button>
-        {vectors.map((vector) => (
+        {vectors.map((vector, index) => (
           <button
             className={`vector-pill ${selectedVector === vector.id ? 'active' : ''}`}
             style={{ ['--vector-color' as string]: vector.color }}
@@ -35,6 +36,7 @@ export function VectorBar({
             onClick={() => onSelect(vector.id)}
             type="button"
             aria-pressed={selectedVector === vector.id}
+            title={index < 9 ? `${vector.label} (${index + 1})` : vector.label}
           >
             <Target size={14} />
             {vector.label}

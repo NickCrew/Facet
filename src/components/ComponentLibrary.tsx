@@ -1,7 +1,14 @@
-import { useMemo, useRef, useState } from 'react'
-import { Plus, X } from 'lucide-react'
-import type { PriorityByVector, ResumeData, Role, VectorSelection } from '../types'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { ChevronRight, Plus, X } from 'lucide-react'
+import type {
+  PriorityByVector,
+  ResumeData,
+  Role,
+  SkillGroupVectorConfig,
+  VectorSelection,
+} from '../types'
 import { getPriorityForVector } from '../engine/assembler'
+import { hasCustomVectorOrder } from '../utils/bulletOrder'
 import { componentKeys } from '../utils/componentKeys'
 import { reorderById } from '../utils/reorderById'
 import { defaultVectorsForSelection } from '../utils/vectorPriority'
@@ -12,6 +19,13 @@ import { SkillGroupList } from './SkillGroupList'
 import { VectorPriorityEditor } from './VectorPriorityEditor'
 
 type AddComponentType = 'target_line' | 'profile' | 'skill_group' | 'project' | 'bullet'
+type LibrarySectionId =
+  | 'header'
+  | 'target-lines'
+  | 'profiles'
+  | 'skill-groups'
+  | 'roles-bullets'
+  | 'projects'
 
 interface AddComponentPayload {
   text?: string
@@ -29,6 +43,8 @@ interface ComponentLibraryProps {
   includedByKey: Record<string, boolean>
   variantByKey: Record<string, string>
   bulletOrderByRole: Record<string, string[]>
+  activeVectorBulletOrderByRole: Record<string, string[]>
+  defaultBulletOrderByRole: Record<string, string[]>
   onToggleComponent: (componentKey: string, vectors: PriorityByVector) => void
   onSetVariant: (componentKey: string, variant: string | null) => void
   onUpdateTargetLine: (id: string, text: string) => void
@@ -38,12 +54,18 @@ interface ComponentLibraryProps {
   onUpdateProject: (id: string, field: 'name' | 'url' | 'text', value: string) => void
   onUpdateProjectVectors: (id: string, vectors: PriorityByVector) => void
   onUpdateSkillGroup: (id: string, field: 'label' | 'content', value: string) => void
+  onUpdateSkillGroupVectors: (id: string, vectors: Record<string, SkillGroupVectorConfig>) => void
   onReorderSkillGroups: (order: string[]) => void
   onUpdateBullet: (roleId: string, bulletId: string, text: string) => void
   onUpdateBulletVectors: (roleId: string, bulletId: string, vectors: PriorityByVector) => void
   onToggleBullet: (roleId: string, bulletId: string, vectors: PriorityByVector) => void
   onReorderBullets: (roleId: string, order: string[]) => void
+  onResetRoleBulletOrder: (roleId: string) => void
   onAddComponent: (type: AddComponentType, payload: AddComponentPayload) => void
+  onUpdateMetaField: (field: 'name' | 'email' | 'phone' | 'location', value: string) => void
+  onUpdateMetaLink: (index: number, field: 'label' | 'url', value: string) => void
+  onAddMetaLink: () => void
+  onRemoveMetaLink: (index: number) => void
 }
 
 function requiresVectorPriority(type: AddComponentType): boolean {
@@ -56,6 +78,8 @@ export function ComponentLibrary({
   includedByKey,
   variantByKey,
   bulletOrderByRole,
+  activeVectorBulletOrderByRole,
+  defaultBulletOrderByRole,
   onToggleComponent,
   onSetVariant,
   onUpdateTargetLine,
@@ -65,17 +89,31 @@ export function ComponentLibrary({
   onUpdateProject,
   onUpdateProjectVectors,
   onUpdateSkillGroup,
+  onUpdateSkillGroupVectors,
   onReorderSkillGroups,
   onUpdateBullet,
   onUpdateBulletVectors,
   onToggleBullet,
   onReorderBullets,
+  onResetRoleBulletOrder,
   onAddComponent,
+  onUpdateMetaField,
+  onUpdateMetaLink,
+  onAddMetaLink,
+  onRemoveMetaLink,
 }: ComponentLibraryProps) {
   const [addOpen, setAddOpen] = useState(false)
   const [addType, setAddType] = useState<AddComponentType>('bullet')
   const [payload, setPayload] = useState<AddComponentPayload>({})
   const [addError, setAddError] = useState<string | null>(null)
+  const [openSections, setOpenSections] = useState<Record<LibrarySectionId, boolean>>({
+    header: true,
+    'target-lines': true,
+    profiles: false,
+    'skill-groups': false,
+    'roles-bullets': true,
+    projects: false,
+  })
   const modalRef = useRef<HTMLDivElement>(null)
 
   const roleChoices = useMemo(() => data.roles.map((role) => ({ id: role.id, label: role.company })), [data.roles])
@@ -129,6 +167,48 @@ export function ComponentLibrary({
     setAddOpen(false)
   }
 
+  const toggleSection = (sectionId: LibrarySectionId) => {
+    setOpenSections((current) => ({
+      ...current,
+      [sectionId]: !current[sectionId],
+    }))
+  }
+
+  const renderSection = (sectionId: LibrarySectionId, title: string, content: ReactNode) => {
+    const expanded = openSections[sectionId]
+    const panelId = `library-section-${sectionId}`
+    const buttonId = `${panelId}-toggle`
+
+    return (
+      <section className="library-section" key={sectionId}>
+        <h3 className="section-header">
+          <button
+            id={buttonId}
+            className={`library-section-toggle ${expanded ? 'expanded' : ''}`}
+            type="button"
+            aria-expanded={expanded}
+            aria-controls={panelId}
+            onClick={() => toggleSection(sectionId)}
+          >
+            <ChevronRight size={14} />
+            <span>{title}</span>
+          </button>
+        </h3>
+        <div
+          className={`library-section-collapse ${expanded ? 'expanded' : ''}`}
+          role="region"
+          id={panelId}
+          aria-labelledby={buttonId}
+          aria-hidden={!expanded}
+        >
+          <div className="library-section-panel">
+            {content}
+          </div>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <aside className="library-panel">
       <div className="library-panel-header">
@@ -156,8 +236,82 @@ export function ComponentLibrary({
         </button>
       </div>
 
-      <div className="library-section">
-        <h3 className="section-header">Target Lines</h3>
+      {renderSection(
+        'header',
+        'Header',
+        <div className="library-grid">
+          <label className="field-label">
+            Name
+            <input
+              className="component-input compact"
+              value={data.meta.name}
+              onChange={(event) => onUpdateMetaField('name', event.target.value)}
+            />
+          </label>
+          <label className="field-label">
+            Location
+            <input
+              className="component-input compact"
+              value={data.meta.location}
+              onChange={(event) => onUpdateMetaField('location', event.target.value)}
+            />
+          </label>
+          <label className="field-label">
+            Email
+            <input
+              className="component-input compact"
+              value={data.meta.email}
+              onChange={(event) => onUpdateMetaField('email', event.target.value)}
+            />
+          </label>
+          <label className="field-label">
+            Phone
+            <input
+              className="component-input compact"
+              value={data.meta.phone}
+              onChange={(event) => onUpdateMetaField('phone', event.target.value)}
+            />
+          </label>
+          {data.meta.links.map((link, index) => (
+            <div className="header-link-row" key={`meta-link-${index}`}>
+              <label className="field-label">
+                Link label (optional)
+                <input
+                  className="component-input compact"
+                  placeholder="GitHub"
+                  value={link.label ?? ''}
+                  onChange={(event) => onUpdateMetaLink(index, 'label', event.target.value)}
+                />
+              </label>
+              <label className="field-label">
+                Link URL
+                <input
+                  className="component-input compact"
+                  placeholder="github.com/username"
+                  value={link.url}
+                  onChange={(event) => onUpdateMetaLink(index, 'url', event.target.value)}
+                />
+              </label>
+              <button
+                className="btn-ghost"
+                type="button"
+                onClick={() => onRemoveMetaLink(index)}
+                aria-label={`Remove link ${index + 1}`}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          <button className="btn-secondary" type="button" onClick={onAddMetaLink}>
+            <Plus size={16} />
+            Add Link
+          </button>
+        </div>,
+      )}
+
+      {renderSection(
+        'target-lines',
+        'Target Lines',
         <div className="library-grid">
           {data.target_lines.map((line) => (
             <ComponentCard
@@ -176,11 +330,12 @@ export function ComponentLibrary({
               onVectorsChange={(vectors) => onUpdateTargetLineVectors(line.id, vectors)}
             />
           ))}
-        </div>
-      </div>
+        </div>,
+      )}
 
-      <div className="library-section">
-        <h3 className="section-header">Profiles</h3>
+      {renderSection(
+        'profiles',
+        'Profiles',
         <div className="library-grid">
           {data.profiles.map((profile) => (
             <ComponentCard
@@ -199,20 +354,24 @@ export function ComponentLibrary({
               onVectorsChange={(vectors) => onUpdateProfileVectors(profile.id, vectors)}
             />
           ))}
-        </div>
-      </div>
+        </div>,
+      )}
 
-      <div className="library-section">
-        <h3 className="section-header">Skill Groups</h3>
+      {renderSection(
+        'skill-groups',
+        'Skill Groups',
         <SkillGroupList
           skillGroups={data.skill_groups}
+          vectorDefs={data.vectors}
           onReorder={onReorderSkillGroups}
           onUpdate={(skillGroupId, field, value) => onUpdateSkillGroup(skillGroupId, field, value)}
-        />
-      </div>
+          onUpdateVectors={(skillGroupId, vectors) => onUpdateSkillGroupVectors(skillGroupId, vectors)}
+        />,
+      )}
 
-      <div className="library-section">
-        <h3 className="section-header">Roles & Bullets</h3>
+      {renderSection(
+        'roles-bullets',
+        'Roles & Bullets',
         <div className="library-grid role-grid">
           {data.roles.map((role) => {
             const orderedRole: Role = {
@@ -239,6 +398,22 @@ export function ComponentLibrary({
                 role={orderedRole}
                 vectorDefs={data.vectors}
                 selectedVector={selectedVector}
+                customOrderLabel={
+                  hasCustomVectorOrder(selectedVector, orderedRole.id, {
+                    all: defaultBulletOrderByRole,
+                    [selectedVector]: activeVectorBulletOrderByRole,
+                  })
+                    ? `Custom order for ${
+                        data.vectors.find((vector) => vector.id === selectedVector)?.label ?? selectedVector
+                      }`
+                    : undefined
+                }
+                canResetOrder={
+                  selectedVector === 'all'
+                    ? Boolean(defaultBulletOrderByRole[orderedRole.id])
+                    : Boolean(activeVectorBulletOrderByRole[orderedRole.id])
+                }
+                onResetOrder={() => onResetRoleBulletOrder(orderedRole.id)}
                 includedByBulletId={includedByBulletId}
                 variantByBulletId={variantByBulletId}
                 onToggleBullet={(bulletId) => {
@@ -259,11 +434,12 @@ export function ComponentLibrary({
               />
             )
           })}
-        </div>
-      </div>
+        </div>,
+      )}
 
-      <div className="library-section">
-        <h3 className="section-header">Projects</h3>
+      {renderSection(
+        'projects',
+        'Projects',
         <div className="library-grid">
           {data.projects.map((project) => (
             <article className="component-card" key={project.id}>
@@ -336,8 +512,8 @@ export function ComponentLibrary({
               ) : null}
             </article>
           ))}
-        </div>
-      </div>
+        </div>,
+      )}
 
       {addOpen ? (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="add-component-title">
