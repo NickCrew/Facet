@@ -1,5 +1,6 @@
 import type { AssembledResume } from '../types'
 import { toTemplateResumeData } from '../templates/types'
+import { toLinkDisplayText, toLinkHref } from './linkFormatting'
 
 const escapePipes = (value: string): string => value.replace(/\|/g, '\\|')
 
@@ -13,7 +14,11 @@ export const renderResumeAsMarkdown = (resume: AssembledResume): string => {
     templateResume.header.location,
     templateResume.header.email,
     templateResume.header.phone,
-    ...templateResume.header.links.map((link) => `[${link.label}](${link.url.startsWith('http') ? link.url : `https://${link.url}`})`),
+    ...templateResume.header.links.map((link) => {
+      const text = toLinkDisplayText(link)
+      const href = toLinkHref(link.url)
+      return text && href ? `[${text}](${href})` : ''
+    }),
   ].filter((part) => part.trim().length > 0)
   lines.push(escapePipes(contactParts.join(' | ')))
 
@@ -58,7 +63,7 @@ export const renderResumeAsMarkdown = (resume: AssembledResume): string => {
     lines.push('## Projects')
     for (const project of templateResume.projects) {
       if (project.url) {
-        const url = project.url.startsWith('http') ? project.url : `https://${project.url}`
+        const url = toLinkHref(project.url)
         lines.push(`- [${project.name}](${url}): ${project.text}`)
       } else {
         lines.push(`- **${project.name}:** ${project.text}`)

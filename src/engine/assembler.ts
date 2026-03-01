@@ -226,6 +226,52 @@ const skillGroupSortOrder = (
   return typeof defaultOrder === 'number' ? defaultOrder : Number.MAX_SAFE_INTEGER
 }
 
+interface ResolvedSkillGroupConfig {
+  include: boolean
+  order: number
+  content: string
+}
+
+const resolveSkillGroupConfig = (
+  group: ResumeData['skill_groups'][number],
+  selectedVector: VectorSelection,
+): ResolvedSkillGroupConfig => {
+  const vectorConfigs = group.vectors ?? {}
+
+  if (selectedVector === 'all') {
+    const includedConfigs = Object.values(vectorConfigs).filter((config) => config.priority !== 'exclude')
+    if (includedConfigs.length > 0) {
+      const minOrder = Math.min(...includedConfigs.map((config) => config.order))
+      return {
+        include: true,
+        order: Number.isFinite(minOrder) ? minOrder : Number.MAX_SAFE_INTEGER,
+        content: group.content,
+      }
+    }
+
+    return {
+      include: true,
+      order: skillGroupSortOrder(group.order ?? {}, 'all'),
+      content: group.content,
+    }
+  }
+
+  const explicitConfig = vectorConfigs[selectedVector]
+  if (explicitConfig) {
+    return {
+      include: explicitConfig.priority !== 'exclude',
+      order: explicitConfig.order,
+      content: explicitConfig.content ?? group.content,
+    }
+  }
+
+  return {
+    include: true,
+    order: skillGroupSortOrder(group.order ?? {}, selectedVector),
+    content: group.content,
+  }
+}
+
 export const assembleResume = (
   data: ResumeData,
   options: AssemblyOptions = {},
@@ -286,19 +332,19 @@ export const assembleResume = (
     .map((group, index) => ({
       id: group.id,
       label: group.label,
-      content: group.content,
+      config: resolveSkillGroupConfig(group, selectedVector),
       sourceIndex: index,
-      sortOrder: skillGroupSortOrder(group.order, selectedVector),
     }))
+    .filter((group) => group.config.include)
     .sort((left, right) => {
-      const orderDelta = left.sortOrder - right.sortOrder
+      const orderDelta = left.config.order - right.config.order
       if (orderDelta !== 0) {
         return orderDelta
       }
 
       return left.sourceIndex - right.sourceIndex
     })
-    .map(({ id, label, content }) => ({ id, label, content }))
+    .map(({ id, label, config }) => ({ id, label, content: config.content }))
 
   const roles = data.roles
     .map((role) => {
@@ -391,7 +437,9 @@ export const assembleResume = (
     resume: budgeted.resume,
     targetPages: budgeted.targetPages,
     estimatedPages: budgeted.estimatedPages,
+    estimatedPageUsage: budgeted.estimatedPageUsage,
     mustOnlyEstimatedPages: budgeted.mustOnlyEstimatedPages,
+    mustOnlyEstimatedPageUsage: budgeted.mustOnlyEstimatedPageUsage,
     trimmedBulletIds: budgeted.trimmedBulletIds,
     warnings: budgeted.warnings,
   }
