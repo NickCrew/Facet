@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { Copy, Download, FileDown, FileJson, Settings2, Upload } from 'lucide-react'
 import './index.css'
 import type {
@@ -34,8 +34,6 @@ import {
 import { useFocusTrap } from './utils/useFocusTrap'
 import { defaultVectorsForSelection } from './utils/vectorPriority'
 import {
-  THEME_PRESETS,
-  THEME_PRESET_IDS,
   normalizeThemeState,
   resolveTheme,
 } from './themes/theme'
@@ -214,11 +212,6 @@ function App() {
   )
   const themeState = useMemo(() => normalizeThemeState(data.theme), [data.theme])
   const resolvedTheme = useMemo(() => resolveTheme(themeState), [themeState])
-  const activeThemeLabel = useMemo(() => {
-    const preset = THEME_PRESETS[themeState.preset]
-    const isModified = Boolean(themeState.overrides && Object.keys(themeState.overrides).length > 0)
-    return isModified ? `${preset.name} (modified)` : preset.name
-  }, [themeState])
   const overridesForVector = useMemo(
     () => manualOverrides[vectorKey] ?? {},
     [manualOverrides, vectorKey],
@@ -763,6 +756,71 @@ function App() {
     }
   }
 
+  // Global keyboard shortcuts
+  const handleGlobalKeyDown = useCallback(
+    (event: globalThis.KeyboardEvent) => {
+      // Skip shortcuts when typing in inputs/textareas
+      const target = event.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
+        // Only allow Escape to blur out of inputs
+        if (event.key === 'Escape') {
+          target.blur()
+        }
+        return
+      }
+
+      // Cmd/Ctrl shortcuts
+      if (event.metaKey || event.ctrlKey) {
+        switch (event.key) {
+          case 'e':
+            event.preventDefault()
+            setImportExportMode('export')
+            return
+          case 'i':
+            event.preventDefault()
+            setImportExportMode('import')
+            return
+          case 'p':
+            event.preventDefault()
+            onDownloadPdf()
+            return
+        }
+      }
+
+      // Number keys 1-9 for vector switching (no modifier)
+      if (event.key >= '1' && event.key <= '9' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        const index = Number.parseInt(event.key, 10) - 1
+        if (index < data.vectors.length) {
+          setSelectedVector(data.vectors[index].id)
+        }
+        return
+      }
+
+      // 0 for "all" vectors
+      if (event.key === '0' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        setSelectedVector('all')
+        return
+      }
+
+      // Escape to close modals/panels
+      if (event.key === 'Escape') {
+        if (importExportMode) {
+          setImportExportMode(null)
+        } else if (jdModalOpen) {
+          setJdModalOpen(false)
+        } else if (themePanelOpen) {
+          setThemePanelOpen(false)
+        }
+      }
+    },
+    [data.vectors, importExportMode, jdModalOpen, onDownloadPdf, setSelectedVector, themePanelOpen],
+  )
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [handleGlobalKeyDown])
+
   return (
     <div className="app-shell">
       <header className="top-bar">
@@ -770,36 +828,7 @@ function App() {
           <FacetWordmark />
           <p className="top-bar-tagline">Same diamond. Different face.</p>
         </div>
-        <div className="top-bar-actions">
-          <div className="theme-controls">
-            <label className="theme-picker" htmlFor="theme-preset">
-              Theme
-            </label>
-            <select
-              id="theme-preset"
-              className="component-input compact theme-select"
-              value={themeState.preset}
-              onChange={(event) => setThemePreset(event.target.value as ResumeThemePresetId)}
-              aria-label="Theme preset"
-            >
-              {THEME_PRESET_IDS.map((presetId) => (
-                <option key={presetId} value={presetId}>
-                  {THEME_PRESETS[presetId].name}
-                </option>
-              ))}
-            </select>
-            <span className="theme-status">{activeThemeLabel}</span>
-            <button
-              className={`btn-secondary ${themePanelOpen ? 'selected' : ''}`}
-              type="button"
-              onClick={() => setThemePanelOpen((current) => !current)}
-              aria-expanded={themePanelOpen}
-              aria-controls="theme-overrides-panel"
-            >
-              <Settings2 size={16} />
-              Theme Tokens
-            </button>
-          </div>
+        <div className="top-bar-center">
           <div className="variant-controls">
             <select
               className="component-input compact"
@@ -839,30 +868,41 @@ function App() {
               Delete Variant
             </button>
           </div>
-          <button className="btn-secondary" type="button" onClick={() => setImportExportMode('import')}>
+        </div>
+        <div className="top-bar-actions">
+          <button
+            className={`btn-ghost ${themePanelOpen ? 'selected' : ''}`}
+            type="button"
+            onClick={() => setThemePanelOpen((current) => !current)}
+            aria-expanded={themePanelOpen}
+            aria-controls="theme-overrides-panel"
+            title="Theme editor"
+          >
+            <Settings2 size={16} />
+          </button>
+          <button className="btn-secondary" type="button" onClick={() => setImportExportMode('import')} title="Import config (⌘I)">
             <Upload size={16} />
             Import
           </button>
           <button className="btn-secondary" type="button" onClick={() => setJdModalOpen(true)}>
             Analyze JD
           </button>
-          <button className="btn-secondary" type="button" onClick={() => setImportExportMode('export')}>
+          <button className="btn-secondary" type="button" onClick={() => setImportExportMode('export')} title="Export config (⌘E)">
             <FileJson size={16} />
             Export
           </button>
-          <button className="btn-secondary" type="button" onClick={onCopyText}>
+          <button className="btn-ghost" type="button" onClick={onCopyText} title="Copy as plain text">
             <Copy size={16} />
-            Copy Text
           </button>
-          <button className="btn-secondary" type="button" onClick={onCopyMarkdown}>
+          <button className="btn-ghost" type="button" onClick={onCopyMarkdown} title="Copy as Markdown">
             <FileDown size={16} />
-            Copy Markdown
           </button>
           <button
             className="btn-primary"
             type="button"
             onClick={onDownloadPdf}
             disabled={pdfRenderPending || Boolean(pdfRenderError)}
+            title="Download PDF (⌘P)"
           >
             <Download size={16} />
             Download PDF
@@ -901,11 +941,31 @@ function App() {
       {!data.vectors.length ? (
         <main className="empty-state-wrap">
           <div className="empty-state">
-            <h2>No vectors yet.</h2>
-            <p>Import a YAML config or start adding components to build your resume library.</p>
+            <div className="empty-state-wireframe" aria-hidden="true">
+              <div className="wireframe-panel">
+                <div className="wireframe-line" style={{ width: '60%' }} />
+                <div className="wireframe-line" style={{ width: '80%' }} />
+                <div className="wireframe-line" style={{ width: '45%' }} />
+              </div>
+              <div className="wireframe-divider" />
+              <div className="wireframe-panel">
+                <div className="wireframe-line" style={{ width: '40%' }} />
+                <div className="wireframe-line" style={{ width: '90%' }} />
+                <div className="wireframe-line" style={{ width: '70%' }} />
+                <div className="wireframe-line" style={{ width: '85%' }} />
+              </div>
+            </div>
+            <h2>No vectors defined.</h2>
+            <p>
+              Vectors are positioning angles for your resume — like &ldquo;Backend Engineering&rdquo; or
+              &ldquo;Engineering Leadership.&rdquo; Import a config, load sample data, or create your first vector.
+            </p>
             <div className="empty-actions">
               <button className="btn-primary" type="button" onClick={() => setImportExportMode('import')}>
-                Import YAML
+                Import Config
+              </button>
+              <button className="btn-secondary" type="button" onClick={() => useResumeStore.getState().resetToDefaults()}>
+                Load Sample Data
               </button>
               <button className="btn-secondary" type="button" onClick={onAddVector}>
                 Start from Scratch

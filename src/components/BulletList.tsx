@@ -25,6 +25,9 @@ interface BulletListProps {
   role: Role
   vectorDefs: VectorDef[]
   selectedVector: VectorSelection
+  customOrderLabel?: string
+  canResetOrder: boolean
+  onResetOrder: () => void
   includedByBulletId: Record<string, boolean>
   variantByBulletId: Record<string, string | undefined>
   onToggleBullet: (bulletId: string) => void
@@ -131,6 +134,9 @@ export function BulletList({
   role,
   vectorDefs,
   selectedVector,
+  customOrderLabel,
+  canResetOrder,
+  onResetOrder,
   includedByBulletId,
   variantByBulletId,
   onToggleBullet,
@@ -177,10 +183,23 @@ export function BulletList({
   return (
     <section className="role-block">
       <header className="role-header">
-        <h3>
-          {role.company} <span>{role.title}</span>
-        </h3>
-        <p>{role.dates}</p>
+        <div className="role-header-main">
+          <h3>
+            {role.company} <span>{role.title}</span>
+          </h3>
+          {customOrderLabel ? <span className="custom-order-badge">{customOrderLabel}</span> : null}
+        </div>
+        <div className="role-header-actions">
+          <p>{role.dates}</p>
+          <button
+            type="button"
+            className="btn-ghost"
+            disabled={!canResetOrder}
+            onClick={onResetOrder}
+          >
+            Reset Order
+          </button>
+        </div>
       </header>
 
       <p className="sr-only" aria-live="polite" aria-atomic="true">

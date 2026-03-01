@@ -5,17 +5,19 @@ import { exportResumeConfig, importResumeConfig } from '../engine/serializer'
 import { useFocusTrap } from '../utils/useFocusTrap'
 
 type Format = 'yaml' | 'json'
+type ImportMode = 'replace' | 'merge'
 
 interface ImportExportProps {
   open: boolean
   mode: 'import' | 'export'
   data: ResumeData
   onClose: () => void
-  onImport: (data: ResumeData) => void
+  onImport: (data: ResumeData, importMode: ImportMode, warnings: string[]) => void
 }
 
 export function ImportExport({ open, mode, data, onClose, onImport }: ImportExportProps) {
-  const [format, setFormat] = useState<Format>('yaml')
+  const [format, setFormat] = useState<Format>('json')
+  const [importMode, setImportMode] = useState<ImportMode>('replace')
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const modalRef = useRef<HTMLDivElement>(null)
@@ -34,7 +36,7 @@ export function ImportExport({ open, mode, data, onClose, onImport }: ImportExpo
   const handleImport = () => {
     try {
       const parsed = importResumeConfig(input, format)
-      onImport(parsed.data)
+      onImport(parsed.data, importMode, parsed.warnings)
       setInput('')
       setError(null)
       onClose()
@@ -112,6 +114,24 @@ export function ImportExport({ open, mode, data, onClose, onImport }: ImportExpo
 
         {mode === 'import' ? (
           <>
+            <div className="format-toggle">
+              <button
+                className={`btn-secondary ${importMode === 'replace' ? 'selected' : ''}`}
+                type="button"
+                onClick={() => setImportMode('replace')}
+                aria-pressed={importMode === 'replace'}
+              >
+                Replace All
+              </button>
+              <button
+                className={`btn-secondary ${importMode === 'merge' ? 'selected' : ''}`}
+                type="button"
+                onClick={() => setImportMode('merge')}
+                aria-pressed={importMode === 'merge'}
+              >
+                Merge
+              </button>
+            </div>
             <input
               ref={fileInputRef}
               type="file"
@@ -136,7 +156,7 @@ export function ImportExport({ open, mode, data, onClose, onImport }: ImportExpo
             {error ? <p className="error-text">{error}</p> : null}
             <button type="button" className="btn-primary" onClick={handleImport}>
               <Upload size={16} />
-              Import {format.toUpperCase()}
+              Import {format.toUpperCase()} ({importMode === 'replace' ? 'Replace All' : 'Merge'})
             </button>
           </>
         ) : (

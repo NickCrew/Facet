@@ -17,21 +17,32 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { GripVertical } from 'lucide-react'
 import { useState } from 'react'
-import type { SkillGroup } from '../types'
+import type { ComponentPriority, SkillGroup, SkillGroupVectorConfig, VectorDef } from '../types'
+import { ensureSkillGroupVectors } from '../utils/skillGroupVectors'
 
 interface SkillGroupListProps {
   skillGroups: SkillGroup[]
+  vectorDefs: VectorDef[]
   onReorder: (nextOrder: string[]) => void
   onUpdate: (skillGroupId: string, field: 'label' | 'content', value: string) => void
+  onUpdateVectors: (skillGroupId: string, vectors: Record<string, SkillGroupVectorConfig>) => void
 }
 
 interface SortableSkillGroupCardProps {
   skillGroup: SkillGroup
+  vectorDefs: VectorDef[]
   onUpdate: (field: 'label' | 'content', value: string) => void
+  onUpdateVectors: (vectors: Record<string, SkillGroupVectorConfig>) => void
 }
 
-function SortableSkillGroupCard({ skillGroup, onUpdate }: SortableSkillGroupCardProps) {
+function SortableSkillGroupCard({
+  skillGroup,
+  vectorDefs,
+  onUpdate,
+  onUpdateVectors,
+}: SortableSkillGroupCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: skillGroup.id })
+  const normalizedVectors = ensureSkillGroupVectors(skillGroup, vectorDefs)
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -62,15 +73,92 @@ function SortableSkillGroupCard({ skillGroup, onUpdate }: SortableSkillGroupCard
       />
       <textarea
         className="component-input"
-        aria-label="Skill group content"
+        aria-label="Default skill group content"
         value={skillGroup.content}
         onChange={(event) => onUpdate('content', event.target.value)}
       />
+      <div className="skill-vector-grid">
+        {vectorDefs.map((vector) => {
+          const config = normalizedVectors[vector.id]
+          return (
+            <div className="skill-vector-card" key={vector.id}>
+              <div className="skill-vector-heading">
+                <span className="vector-dot" style={{ ['--vector-color' as string]: vector.color }} />
+                <strong>{vector.label}</strong>
+              </div>
+              <label className="field-label">
+                Priority
+                <select
+                  className="component-input compact"
+                  value={config.priority}
+                  onChange={(event) => {
+                    const nextPriority = event.target.value as ComponentPriority
+                    onUpdateVectors({
+                      ...normalizedVectors,
+                      [vector.id]: {
+                        ...config,
+                        priority: nextPriority,
+                      },
+                    })
+                  }}
+                >
+                  <option value="must">must</option>
+                  <option value="strong">strong</option>
+                  <option value="optional">optional</option>
+                  <option value="exclude">exclude</option>
+                </select>
+              </label>
+              <label className="field-label">
+                Order
+                <input
+                  className="component-input compact"
+                  type="number"
+                  min={1}
+                  value={config.order}
+                  onChange={(event) => {
+                    const nextOrder = Math.max(1, Number.parseInt(event.target.value || '1', 10) || 1)
+                    onUpdateVectors({
+                      ...normalizedVectors,
+                      [vector.id]: {
+                        ...config,
+                        order: nextOrder,
+                      },
+                    })
+                  }}
+                />
+              </label>
+              <label className="field-label">
+                Vector Content Override
+                <textarea
+                  className="component-input"
+                  placeholder={skillGroup.content}
+                  value={config.content ?? ''}
+                  onChange={(event) =>
+                    onUpdateVectors({
+                      ...normalizedVectors,
+                      [vector.id]: {
+                        ...config,
+                        content: event.target.value.trim().length > 0 ? event.target.value : undefined,
+                      },
+                    })
+                  }
+                />
+              </label>
+            </div>
+          )
+        })}
+      </div>
     </article>
   )
 }
 
-export function SkillGroupList({ skillGroups, onReorder, onUpdate }: SkillGroupListProps) {
+export function SkillGroupList({
+  skillGroups,
+  vectorDefs,
+  onReorder,
+  onUpdate,
+  onUpdateVectors,
+}: SkillGroupListProps) {
   const skillIds = skillGroups.map((skill) => skill.id)
   const [announcement, setAnnouncement] = useState('')
   const sensors = useSensors(
@@ -123,7 +211,9 @@ export function SkillGroupList({ skillGroups, onReorder, onUpdate }: SkillGroupL
               <SortableSkillGroupCard
                 key={skillGroup.id}
                 skillGroup={skillGroup}
+                vectorDefs={vectorDefs}
                 onUpdate={(field, value) => onUpdate(skillGroup.id, field, value)}
+                onUpdateVectors={(vectors) => onUpdateVectors(skillGroup.id, vectors)}
               />
             ))}
           </div>
