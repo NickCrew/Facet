@@ -52,4 +52,30 @@ describe('uiStore', () => {
     expect(next.manualOverrides.platform['bullet:r2:b4']).toBe(true)
     expect(next.bulletOrders.platform.r2).toEqual(['b4'])
   })
+
+  it('resets one role order for the active vector without touching other roles', () => {
+    const state = useUiStore.getState()
+    state.setRoleBulletOrder('platform', 'r1', ['b1', 'b2'])
+    state.setRoleBulletOrder('platform', 'r2', ['b3'])
+
+    state.resetRoleBulletOrder('platform', 'r1')
+
+    const next = useUiStore.getState()
+    expect(next.bulletOrders.platform.r1).toBeUndefined()
+    expect(next.bulletOrders.platform.r2).toEqual(['b3'])
+  })
+
+  it('can clear all overrides when resetting from All view', () => {
+    const state = useUiStore.getState()
+    state.setOverride('backend', 'bullet:r1:b1', false)
+    state.setVariantOverride('platform', 'bullet:r2:b1', 'default')
+    state.setRoleBulletOrder('platform', 'r2', ['b3'])
+
+    state.resetAllOverrides()
+
+    const next = useUiStore.getState()
+    expect(next.manualOverrides).toEqual({})
+    expect(next.variantOverrides).toEqual({})
+    expect(next.bulletOrders).toEqual({})
+  })
 })
