@@ -2,6 +2,9 @@ import type { ResumeData } from '../types'
 
 export const defaultResumeData: ResumeData = {
   version: 1,
+  theme: {
+    preset: 'ferguson-v12',
+  },
   meta: {
     name: 'Jane Smith',
     email: 'jane@example.com',
@@ -46,13 +49,21 @@ export const defaultResumeData: ResumeData = {
       id: 'languages',
       label: 'Languages',
       content: 'Go, Python, TypeScript, SQL, Rust',
-      order: { backend: 1, platform: 2, default: 1 },
+      vectors: {
+        backend: { priority: 'strong', order: 1 },
+        platform: { priority: 'strong', order: 2 },
+        leadership: { priority: 'optional', order: 2 },
+      },
     },
     {
       id: 'infrastructure',
       label: 'Infrastructure',
       content: 'AWS, Kubernetes, Terraform, Docker, Linux',
-      order: { backend: 2, platform: 1, default: 2 },
+      vectors: {
+        backend: { priority: 'strong', order: 2 },
+        platform: { priority: 'must', order: 1 },
+        leadership: { priority: 'optional', order: 1 },
+      },
     },
   ],
   roles: [
@@ -121,4 +132,5 @@ export const defaultResumeData: ResumeData = {
       year: '2018',
     },
   ],
+  saved_variants: [],
 }

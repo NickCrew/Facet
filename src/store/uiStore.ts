@@ -13,7 +13,7 @@ type VectorVariantOverrides = Record<VectorKey, VariantMap>
 type RoleOrder = Record<string, string[]>
 type VectorBulletOrders = Record<VectorKey, RoleOrder>
 
-interface UiState {
+export interface UiState {
   selectedVector: VectorSelection
   panelRatio: number
   manualOverrides: VectorOverrides
@@ -21,6 +21,7 @@ interface UiState {
   bulletOrders: VectorBulletOrders
   setSelectedVector: (vector: VectorSelection) => void
   setPanelRatio: (ratio: number) => void
+  resetAllOverrides: () => void
   setOverride: (vector: VectorKey, componentKey: string, included: boolean | null) => void
   setVariantOverride: (
     vector: VectorKey,
@@ -29,6 +30,7 @@ interface UiState {
   ) => void
   resetOverridesForVector: (vector: VectorKey) => void
   setRoleBulletOrder: (vector: VectorKey, roleId: string, order: string[]) => void
+  resetRoleBulletOrder: (vector: VectorKey, roleId: string) => void
 }
 
 export const toVectorKey = (selectedVector: VectorSelection): VectorKey => selectedVector
@@ -43,6 +45,12 @@ export const useUiStore = create<UiState>()(
       bulletOrders: {},
       setSelectedVector: (vector) => set({ selectedVector: vector }),
       setPanelRatio: (ratio) => set({ panelRatio: Math.min(0.7, Math.max(0.3, ratio)) }),
+      resetAllOverrides: () =>
+        set({
+          manualOverrides: {},
+          variantOverrides: {},
+          bulletOrders: {},
+        }),
       setOverride: (vector, componentKey, included) =>
         set((state) => {
           const current = state.manualOverrides[vector] ?? {}
@@ -115,6 +123,22 @@ export const useUiStore = create<UiState>()(
             },
           },
         })),
+      resetRoleBulletOrder: (vector, roleId) =>
+        set((state) => {
+          const currentForVector = state.bulletOrders[vector] ?? {}
+          if (!(roleId in currentForVector)) {
+            return state
+          }
+
+          const nextForVector = { ...currentForVector }
+          delete nextForVector[roleId]
+          return {
+            bulletOrders: {
+              ...state.bulletOrders,
+              [vector]: nextForVector,
+            },
+          }
+        }),
     }),
     {
       name: 'vector-resume-ui',

@@ -19,7 +19,9 @@ export interface PageBudgetResult {
   resume: AssembledResume
   targetPages: number
   estimatedPages: number
+  estimatedPageUsage: number
   mustOnlyEstimatedPages: number
+  mustOnlyEstimatedPageUsage: number
   trimmedBulletIds: string[]
   warnings: EngineWarning[]
 }
@@ -151,13 +153,19 @@ export const estimateResumeLines = (resume: AssembledResume): number => {
   return Math.max(1, lines)
 }
 
-export const estimateResumePages = (
+export const estimateResumePageUsage = (
   resume: AssembledResume,
   linesPerPage = DEFAULT_LINES_PER_PAGE,
 ): number => {
   const safeLinesPerPage = Math.max(1, linesPerPage)
-  return Math.max(1, Math.ceil(estimateResumeLines(resume) / safeLinesPerPage))
+  const pages = estimateResumeLines(resume) / safeLinesPerPage
+  return Math.max(1, Number(pages.toFixed(2)))
 }
+
+export const estimateResumePages = (
+  resume: AssembledResume,
+  linesPerPage = DEFAULT_LINES_PER_PAGE,
+): number => Math.ceil(estimateResumePageUsage(resume, linesPerPage))
 
 export const applyPageBudget = (
   resume: AssembledResume,
@@ -171,36 +179,39 @@ export const applyPageBudget = (
   const workingResume = cloneAssembledResume(resume)
   const trimmedBulletIds: string[] = []
 
-  let estimatedPages = estimateResumePages(workingResume, linesPerPage)
-  const mustOnlyEstimatedPages = estimateResumePages(buildMustOnlySnapshot(workingResume), linesPerPage)
+  let estimatedPageUsage = estimateResumePageUsage(workingResume, linesPerPage)
+  let estimatedPages = Math.ceil(estimatedPageUsage)
+  const mustOnlyEstimatedPageUsage = estimateResumePageUsage(buildMustOnlySnapshot(workingResume), linesPerPage)
+  const mustOnlyEstimatedPages = Math.ceil(mustOnlyEstimatedPageUsage)
 
   if (mustOnlyEstimatedPages > targetPages) {
     warnings.push({
       code: 'must_over_budget',
-      message: `Must-priority content alone is estimated at ${mustOnlyEstimatedPages} pages (target: ${targetPages}).`,
+      message: `Must-priority content alone is estimated at ${mustOnlyEstimatedPageUsage.toFixed(2)} pages (target: ${targetPages}).`,
     })
   }
 
-  if (shouldTrim && estimatedPages > targetPages) {
+  if (shouldTrim && estimatedPageUsage > targetPages) {
     const trimOrder: Array<Extract<IncludedPriority, 'optional' | 'strong'>> = ['optional', 'strong']
 
     for (const trimPriority of trimOrder) {
-      while (estimatedPages > targetPages) {
+      while (estimatedPageUsage > targetPages) {
         const removedId = removeOldestBulletByPriority(workingResume, trimPriority)
         if (!removedId) {
           break
         }
 
         trimmedBulletIds.push(removedId)
-        estimatedPages = estimateResumePages(workingResume, linesPerPage)
+        estimatedPageUsage = estimateResumePageUsage(workingResume, linesPerPage)
+        estimatedPages = Math.ceil(estimatedPageUsage)
       }
     }
   }
 
-  if (estimatedPages > targetPages) {
+  if (estimatedPageUsage > targetPages) {
     warnings.push({
       code: 'over_budget_after_trim',
-      message: `Resume is still estimated at ${estimatedPages} pages after trimming (target: ${targetPages}).`,
+      message: `Resume is still estimated at ${estimatedPageUsage.toFixed(2)} pages after trimming (target: ${targetPages}).`,
     })
   }
 
@@ -208,7 +219,9 @@ export const applyPageBudget = (
     resume: workingResume,
     targetPages,
     estimatedPages,
+    estimatedPageUsage,
     mustOnlyEstimatedPages,
+    mustOnlyEstimatedPageUsage,
     trimmedBulletIds,
     warnings,
   }

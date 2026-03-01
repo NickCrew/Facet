@@ -1,5 +1,6 @@
 import type { AssembledResume } from '../types'
 import { toTemplateResumeData } from '../templates/types'
+import { toLinkDisplayText } from './linkFormatting'
 
 const section = (label: string): string => `${label.toUpperCase()}\n${'-'.repeat(label.length)}`
 
@@ -13,7 +14,7 @@ export const renderResumeAsText = (resume: AssembledResume): string => {
     templateResume.header.location,
     templateResume.header.email,
     templateResume.header.phone,
-    ...templateResume.header.links.map((link) => `${link.label}: ${link.url}`),
+    ...templateResume.header.links.map((link) => toLinkDisplayText(link)),
   ].filter((part) => part.trim().length > 0)
   lines.push(contactParts.join(' | '))
 
