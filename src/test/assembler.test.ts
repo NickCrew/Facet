@@ -149,6 +149,37 @@ describe('assembleResume', () => {
     expect(outputBullets[0]?.id).toBe(reversed[0])
   })
 
+  it('routes skill groups by vector priority, order, and content override', () => {
+    const data = clone(defaultResumeData)
+    data.skill_groups = [
+      {
+        id: 'languages',
+        label: 'Languages',
+        content: 'Go, Python',
+        vectors: {
+          backend: { priority: 'strong', order: 2 },
+          platform: { priority: 'strong', order: 1, content: 'TypeScript, Go, Python' },
+        },
+      },
+      {
+        id: 'tooling',
+        label: 'Tooling',
+        content: 'Terraform, Docker',
+        vectors: {
+          backend: { priority: 'must', order: 1 },
+          platform: { priority: 'exclude', order: 2 },
+        },
+      },
+    ]
+
+    const backend = assembleResume(data, { selectedVector: 'backend' })
+    expect(backend.resume.skillGroups.map((group) => group.id)).toEqual(['tooling', 'languages'])
+
+    const platform = assembleResume(data, { selectedVector: 'platform' })
+    expect(platform.resume.skillGroups.map((group) => group.id)).toEqual(['languages'])
+    expect(platform.resume.skillGroups[0]?.content).toContain('TypeScript')
+  })
+
   it('exposes stable component key order for overrides', () => {
     expect(buildComponentKeys('bullet', 'b1', 'r1')).toEqual([
       'role:r1:bullet:b1',
