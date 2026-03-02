@@ -16,6 +16,7 @@ import { useFocusTrap } from '../utils/useFocusTrap'
 import { BulletList } from './BulletList'
 import { ComponentCard } from './ComponentCard'
 import { SkillGroupList } from './SkillGroupList'
+import { ProjectList } from './ProjectList'
 import { VectorPriorityEditor } from './VectorPriorityEditor'
 
 type AddComponentType = 'target_line' | 'profile' | 'skill_group' | 'project' | 'bullet'
@@ -53,6 +54,7 @@ interface ComponentLibraryProps {
   onUpdateProfileVectors: (id: string, vectors: PriorityByVector) => void
   onUpdateProject: (id: string, field: 'name' | 'url' | 'text', value: string) => void
   onUpdateProjectVectors: (id: string, vectors: PriorityByVector) => void
+  onReorderProjects: (order: string[]) => void
   onUpdateSkillGroup: (id: string, field: 'label' | 'content', value: string) => void
   onUpdateSkillGroupVectors: (id: string, vectors: Record<string, SkillGroupVectorConfig>) => void
   onReorderSkillGroups: (order: string[]) => void
@@ -88,6 +90,7 @@ export function ComponentLibrary({
   onUpdateProfileVectors,
   onUpdateProject,
   onUpdateProjectVectors,
+  onReorderProjects,
   onUpdateSkillGroup,
   onUpdateSkillGroupVectors,
   onReorderSkillGroups,
@@ -440,79 +443,18 @@ export function ComponentLibrary({
       {renderSection(
         'projects',
         'Projects',
-        <div className="library-grid">
-          {data.projects.map((project) => (
-            <article className="component-card" key={project.id}>
-              <header className="component-card-header">
-                <h4>{project.id}</h4>
-                <button
-                  type="button"
-                  className="btn-ghost"
-                  aria-pressed={
-                    includedByKey[componentKeys.project(project.id)] ??
-                    getPriorityForVector(project.vectors, selectedVector) !== 'exclude'
-                  }
-                  onClick={() => onToggleComponent(componentKeys.project(project.id), project.vectors)}
-                >
-                  {includedByKey[componentKeys.project(project.id)] ??
-                  getPriorityForVector(project.vectors, selectedVector) !== 'exclude'
-                    ? 'Included'
-                    : 'Excluded'}
-                </button>
-              </header>
-              <input
-                className="component-input compact"
-                aria-label="Project name"
-                value={project.name}
-                onChange={(event) => onUpdateProject(project.id, 'name', event.target.value)}
-              />
-              <input
-                className="component-input compact"
-                aria-label="Project URL"
-                value={project.url ?? ''}
-                placeholder="URL"
-                onChange={(event) => onUpdateProject(project.id, 'url', event.target.value)}
-              />
-              <textarea
-                className="component-input"
-                aria-label="Project description"
-                value={project.text}
-                onChange={(event) => onUpdateProject(project.id, 'text', event.target.value)}
-              />
-              <VectorPriorityEditor
-                vectors={project.vectors}
-                vectorDefs={data.vectors}
-                onChange={(vectors) => onUpdateProjectVectors(project.id, vectors)}
-              />
-              {project.variants && Object.keys(project.variants).length > 0 ? (
-                <label className="field-label variant-control">
-                  Variant
-                  <select
-                    className="component-input compact"
-                    value={variantByKey[componentKeys.project(project.id)] ?? 'auto'}
-                    onChange={(event) =>
-                      onSetVariant(
-                        componentKeys.project(project.id),
-                        event.target.value === 'auto' ? null : event.target.value,
-                      )
-                    }
-                  >
-                    <option value="auto">Auto</option>
-                    <option value="default">Default</option>
-                    {Object.keys(project.variants).map((variantId) => {
-                      const vector = data.vectors.find((item) => item.id === variantId)
-                      return (
-                        <option key={variantId} value={variantId}>
-                          {vector?.label ?? variantId}
-                        </option>
-                      )
-                    })}
-                  </select>
-                </label>
-              ) : null}
-            </article>
-          ))}
-        </div>,
+        <ProjectList
+          projects={data.projects}
+          vectorDefs={data.vectors}
+          selectedVector={selectedVector}
+          includedByKey={includedByKey}
+          variantByKey={variantByKey}
+          onReorder={onReorderProjects}
+          onUpdate={onUpdateProject}
+          onUpdateVectors={onUpdateProjectVectors}
+          onToggleIncluded={(id, vectors) => onToggleComponent(componentKeys.project(id), vectors)}
+          onSetVariant={(id, variant) => onSetVariant(componentKeys.project(id), variant)}
+        />,
       )}
 
       {addOpen ? (

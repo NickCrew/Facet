@@ -19,6 +19,7 @@ export interface UiState {
   manualOverrides: VectorOverrides
   variantOverrides: VectorVariantOverrides
   bulletOrders: VectorBulletOrders
+  appearance: 'light' | 'dark' | 'system'
   setSelectedVector: (vector: VectorSelection) => void
   setPanelRatio: (ratio: number) => void
   resetAllOverrides: () => void
@@ -31,6 +32,7 @@ export interface UiState {
   resetOverridesForVector: (vector: VectorKey) => void
   setRoleBulletOrder: (vector: VectorKey, roleId: string, order: string[]) => void
   resetRoleBulletOrder: (vector: VectorKey, roleId: string) => void
+  setAppearance: (appearance: 'light' | 'dark' | 'system') => void
 }
 
 export const toVectorKey = (selectedVector: VectorSelection): VectorKey => selectedVector
@@ -43,8 +45,10 @@ export const useUiStore = create<UiState>()(
       manualOverrides: {},
       variantOverrides: {},
       bulletOrders: {},
+      appearance: 'system',
       setSelectedVector: (vector) => set({ selectedVector: vector }),
       setPanelRatio: (ratio) => set({ panelRatio: Math.min(0.7, Math.max(0.3, ratio)) }),
+      setAppearance: (appearance) => set({ appearance }),
       resetAllOverrides: () =>
         set({
           manualOverrides: {},
@@ -141,6 +145,7 @@ export const useUiStore = create<UiState>()(
         }),
     }),
     {
+      // ⚠️ Keep in sync with index.html inline theme script
       name: 'vector-resume-ui',
       version: 3,
       storage: createJSONStorage(resolveStorage),

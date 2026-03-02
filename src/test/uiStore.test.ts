@@ -13,10 +13,23 @@ beforeEach(() => {
     manualOverrides: {},
     variantOverrides: {},
     bulletOrders: {},
+    appearance: 'system',
   })
 })
 
 describe('uiStore', () => {
+  it('defaults to system appearance', () => {
+    expect(useUiStore.getState().appearance).toBe('system')
+  })
+
+  it('updates appearance', () => {
+    useUiStore.getState().setAppearance('light')
+    expect(useUiStore.getState().appearance).toBe('light')
+
+    useUiStore.getState().setAppearance('dark')
+    expect(useUiStore.getState().appearance).toBe('dark')
+  })
+
   it('clamps panel ratio to configured bounds', () => {
     useUiStore.getState().setPanelRatio(0.1)
     expect(useUiStore.getState().panelRatio).toBe(0.3)

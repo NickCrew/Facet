@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <link
@@ -14,6 +14,19 @@
       rel="stylesheet"
     />
     <title>Facet</title>
+    <script>
+      // ⚠️ Keep in sync with src/store/uiStore.ts persist key and state shape
+      try {
+        const stored = JSON.parse(localStorage.getItem('vector-resume-ui') || '{}');
+        const appearance = stored?.state?.appearance || 'system';
+        const theme = appearance === 'system'
+          ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : appearance;
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) {
+        console.warn('Theme init failed:', e);
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
