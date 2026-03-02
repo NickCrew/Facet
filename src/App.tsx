@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { Copy, Download, FileDown, FileJson, Settings2, Upload } from 'lucide-react'
+import { Copy, Download, FileDown, FileJson, Monitor, Moon, ScanSearch, Settings2, Sun, Upload } from 'lucide-react'
 import './index.css'
 import type {
   PriorityByVector,
@@ -13,6 +13,7 @@ import { renderResumeAsMarkdown } from './utils/markdownRenderer'
 import { useResumeStore } from './store/resumeStore'
 import { toVectorKey, useUiStore } from './store/uiStore'
 import { componentKeys } from './utils/componentKeys'
+import { UndoRedoControls } from './components/UndoRedoControls'
 import { VectorBar } from './components/VectorBar'
 import { ComponentLibrary } from './components/ComponentLibrary'
 import { PdfPreview } from './components/PdfPreview'
@@ -33,13 +34,11 @@ import {
 } from './utils/skillGroupVectors'
 import { useFocusTrap } from './utils/useFocusTrap'
 import { defaultVectorsForSelection } from './utils/vectorPriority'
-import {
-  normalizeThemeState,
-  resolveTheme,
-} from './themes/theme'
+import { normalizeThemeState, resolveTheme } from './themes/theme'
 import { ThemeEditorPanel } from './components/ThemeEditorPanel'
 import { usePdfPreview } from './hooks/usePdfPreview'
 import { VariantSaveCanceledError, useSavedVariants } from './hooks/useSavedVariants'
+import { createId, sanitizeEndpointUrl, slugify } from './utils/idUtils'
 
 const vectorFallbackColors = ['#2563EB', '#0D9488', '#7C3AED', '#EA580C', '#4F46E5', '#0891B2']
 
@@ -87,23 +86,6 @@ const themeDensityKeys: ThemeDensityKey[] = [
   'marginRight',
 ]
 
-function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
-
-function createId(prefix: string) {
-  const uuid = globalThis.crypto?.randomUUID?.()
-  if (uuid) {
-    return `${prefix}-${uuid}`
-  }
-
-  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
-}
-
 interface JdSuggestionSelection {
   applyPrimaryVector: boolean
   applyTargetLine: boolean
@@ -145,7 +127,7 @@ function FacetWordmark() {
 }
 
 function App() {
-  const { data, setData } = useResumeStore()
+  const { data, setData, undo, redo } = useResumeStore()
   const {
     selectedVector,
     setSelectedVector,
@@ -160,6 +142,8 @@ function App() {
     bulletOrders,
     setRoleBulletOrder,
     resetRoleBulletOrder,
+    appearance,
+    setAppearance,
   } = useUiStore()
 
   const [draggingSplit, setDraggingSplit] = useState(false)
@@ -181,24 +165,22 @@ function App() {
   const noticeTimeoutRef = useRef<number | null>(null)
   const jdModalRef = useRef<HTMLDivElement>(null)
   const jdAnalysisEndpointRaw = (import.meta.env.VITE_ANTHROPIC_PROXY_URL as string | undefined) ?? ''
-  const jdAnalysisEndpoint = useMemo(() => {
-    if (!jdAnalysisEndpointRaw) {
-      return ''
+  const jdAnalysisEndpoint = useMemo(() => sanitizeEndpointUrl(jdAnalysisEndpointRaw), [jdAnalysisEndpointRaw])
+
+  useEffect(() => {
+    const root = document.documentElement
+    if (appearance === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+      const updateTheme = (event: MediaQueryListEvent | { matches: boolean }) => {
+        root.setAttribute('data-theme', event.matches ? 'dark' : 'light')
+      }
+      updateTheme(mediaQuery)
+      mediaQuery.addEventListener('change', updateTheme)
+      return () => mediaQuery.removeEventListener('change', updateTheme)
     }
 
-    try {
-      const url = new URL(jdAnalysisEndpointRaw)
-      if (url.username || url.password) {
-        return ''
-      }
-      if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-        return ''
-      }
-      return url.toString()
-    } catch {
-      return ''
-    }
-  }, [jdAnalysisEndpointRaw])
+    root.setAttribute('data-theme', appearance)
+  }, [appearance])
 
   const vectorKey = toVectorKey(selectedVector)
   const bulletTextById = useMemo(
@@ -771,6 +753,16 @@ function App() {
 
       // Cmd/Ctrl shortcuts
       if (event.metaKey || event.ctrlKey) {
+        if (event.key === 'z') {
+          event.preventDefault()
+          if (event.shiftKey) {
+            redo()
+          } else {
+            undo()
+          }
+          return
+        }
+
         switch (event.key) {
           case 'e':
             event.preventDefault()
@@ -813,7 +805,7 @@ function App() {
         }
       }
     },
-    [data.vectors, importExportMode, jdModalOpen, onDownloadPdf, setSelectedVector, themePanelOpen],
+    [data.vectors, importExportMode, jdModalOpen, onDownloadPdf, redo, setSelectedVector, themePanelOpen, undo],
   )
 
   useEffect(() => {
@@ -870,6 +862,22 @@ function App() {
           </div>
         </div>
         <div className="top-bar-actions">
+          <UndoRedoControls />
+          <button
+            className="btn-ghost"
+            type="button"
+            onClick={() => {
+              if (appearance === 'system') setAppearance('light')
+              else if (appearance === 'light') setAppearance('dark')
+              else setAppearance('system')
+            }}
+            aria-label={`Appearance: ${appearance}. Switch to ${
+              appearance === 'system' ? 'light' : appearance === 'light' ? 'dark' : 'system'
+            }.`}
+            title={`Appearance: ${appearance}`}
+          >
+            {appearance === 'system' ? <Monitor size={16} /> : appearance === 'light' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
           <button
             className={`btn-ghost ${themePanelOpen ? 'selected' : ''}`}
             type="button"
@@ -882,14 +890,15 @@ function App() {
           </button>
           <button className="btn-secondary" type="button" onClick={() => setImportExportMode('import')} title="Import config (⌘I)">
             <Upload size={16} />
-            Import
+            <span className="btn-label">Import</span>
           </button>
-          <button className="btn-secondary" type="button" onClick={() => setJdModalOpen(true)}>
-            Analyze JD
+          <button className="btn-secondary" type="button" onClick={() => setJdModalOpen(true)} title="Analyze job description">
+            <ScanSearch size={16} />
+            <span className="btn-label">Analyze JD</span>
           </button>
           <button className="btn-secondary" type="button" onClick={() => setImportExportMode('export')} title="Export config (⌘E)">
             <FileJson size={16} />
-            Export
+            <span className="btn-label">Export</span>
           </button>
           <button className="btn-ghost" type="button" onClick={onCopyText} title="Copy as plain text">
             <Copy size={16} />
@@ -905,7 +914,7 @@ function App() {
             title="Download PDF (⌘P)"
           >
             <Download size={16} />
-            Download PDF
+            <span className="btn-label">Download PDF</span>
           </button>
         </div>
       </header>
@@ -1119,6 +1128,12 @@ function App() {
                     ),
                   }
                 })
+              }
+              onReorderProjects={(order) =>
+                updateData((current) => ({
+                  ...current,
+                  projects: reorderById(current.projects, order),
+                }))
               }
               onUpdateBullet={(roleId, bulletId, text) =>
                 updateData((current) => ({
