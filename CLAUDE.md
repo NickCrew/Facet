@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Vector Resume is a strategic resume assembly tool for senior engineers. Users define their career as a library of tagged, prioritized **components** and define **vectors** (positioning angles like "Backend Engineering", "Security Platform"). The app assembles the optimal resume for each angle, respecting page budgets.
+Facet is a strategic resume assembly tool for senior engineers. Users define their career as a library of tagged, prioritized **components** and define **vectors** (positioning angles like "Backend Engineering", "Security Platform"). The app assembles the optimal resume for each angle, respecting page budgets.
 
 ## Commands
 
@@ -19,7 +19,18 @@ npm run lint         # ESLint
 
 Tests use Vitest with jsdom. No separate vitest config file — configuration is inline via Vite. Test files live in `src/test/`.
 
-## Architecture
+## Tools
+
+### CLI
+
+- Use `committer` to commit your changes. To stage hunks, use the `--patch` option. If `committer` is not available, fails, or lacks capabilities, escalate to the user; do not work around with other git commands.
+- Use `trash` to delete files. This moves the files to `~/.Trash` where it is recoverable in case of emergency Never delete with `rm`.
+- Use `tx` to manage local processes in a dedicated tmux window. 
+
+### MCP
+
+- Use the **backlog.md** MCP server for task tracking. The `backlog/` folder e is never tracked in git.
+
 
 ### Data Flow
 

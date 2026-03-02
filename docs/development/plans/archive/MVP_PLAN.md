@@ -1,4 +1,4 @@
-# Vector Resume — Product Specification
+# Facet — Product Specification
 
 ## One-Liner
 Strategic resume assembly tool that lets senior engineers define their career once and generate targeted resumes by positioning angle.
@@ -416,7 +416,7 @@ vector-resume/
 ---
 
 ## Name Options
-- **Vector Resume** (working title)
+- **Facet** (working title)
 - **Reforge** (resume + forge)
 - **Assemble** 
 - **Modular CV**

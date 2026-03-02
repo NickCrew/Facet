@@ -1,4 +1,4 @@
-# Vector Resume v0.2 — Feature Specs
+# Facet v0.2 — Feature Specs
 
 Six features to take the MVP from demo to daily-use tool. These build on the existing React + Vite app with the component library, vector priority system, and live preview already working.
 

@@ -1,4 +1,4 @@
-# Vector Resume v0.2 — Theme System Spec
+# Facet v0.2 — Theme System Spec
 
 ## Overview
 
