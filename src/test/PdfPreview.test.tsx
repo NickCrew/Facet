@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 afterEach(cleanup)
 import { PdfPreview } from '../components/PdfPreview'
@@ -12,12 +12,26 @@ describe('PdfPreview', () => {
     expect(screen.getByText('PDF preview will appear here.')).toBeTruthy()
   })
 
-  it('renders iframe with blob URL when provided', () => {
+  it('renders buffer iframe with blob URL when first provided', () => {
     render(<PdfPreview blobUrl="blob:http://localhost/abc123" loading={false} error={null} />)
     const iframe = document.querySelector('iframe')
     expect(iframe).toBeTruthy()
     expect(iframe?.getAttribute('src')).toBe('blob:http://localhost/abc123')
-    expect(iframe?.getAttribute('title')).toBe('Resume PDF preview')
+    expect(iframe?.getAttribute('title')).toBe('Resume PDF preview (loading)')
+  })
+
+  it('promotes buffer to display after load', () => {
+    render(<PdfPreview blobUrl="blob:http://localhost/abc123" loading={false} error={null} />)
+    const buffer = document.querySelector('iframe')
+    expect(buffer).toBeTruthy()
+
+    act(() => {
+      fireEvent.load(buffer!)
+    })
+
+    const display = document.querySelector('iframe')
+    expect(display?.getAttribute('title')).toBe('Resume PDF preview')
+    expect(display?.getAttribute('src')).toBe('blob:http://localhost/abc123')
   })
 
   it('does not render placeholder when blob URL is present', () => {
@@ -58,5 +72,15 @@ describe('PdfPreview', () => {
     const { container } = render(<PdfPreview blobUrl={null} loading={false} error={null} />)
     const shell = container.querySelector('.pdf-preview-shell')
     expect(shell?.getAttribute('aria-live')).toBe('polite')
+  })
+
+  it('shows placeholder again when blobUrl becomes null', () => {
+    const { rerender } = render(<PdfPreview blobUrl="blob:http://localhost/abc123" loading={false} error={null} />)
+    const buffer = document.querySelector('iframe')
+    act(() => { fireEvent.load(buffer!) })
+
+    rerender(<PdfPreview blobUrl={null} loading={false} error={null} />)
+    expect(screen.getByText('PDF preview will appear here.')).toBeTruthy()
+    expect(document.querySelector('iframe')).toBeNull()
   })
 })
