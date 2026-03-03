@@ -379,6 +379,7 @@ function assertResumeDataShape(value: unknown): asserts value is ResumeData {
     assertString(record.company, `roles[${roleIndex}].company`)
     assertString(record.title, `roles[${roleIndex}].title`)
     assertString(record.dates, `roles[${roleIndex}].dates`)
+    assertOptionalString(record.location, `roles[${roleIndex}].location`)
     assertOptionalString(record.subtitle, `roles[${roleIndex}].subtitle`)
 
     const bullets = assertArray(record.bullets, `roles[${roleIndex}].bullets`)

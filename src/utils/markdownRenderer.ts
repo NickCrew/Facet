@@ -47,7 +47,8 @@ export const renderResumeAsMarkdown = (resume: AssembledResume): string => {
     for (const role of templateResume.roles) {
       lines.push('')
       lines.push(`### ${role.company} | ${role.title}`)
-      lines.push(`*${role.dates}*`)
+      const locationDates = [role.location, role.dates].filter(Boolean).join(' | ')
+      lines.push(`*${locationDates}*`)
       if (role.subtitle) {
         lines.push(`_${role.subtitle}_`)
       }

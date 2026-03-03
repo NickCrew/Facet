@@ -147,6 +147,7 @@ export interface RoleComponent {
   company: string
   title: string
   dates: string
+  location?: string | null
   subtitle?: string | null
   bullets: RoleBulletComponent[]
 }
@@ -233,6 +234,7 @@ export interface AssembledRole {
   company: string
   title: string
   dates: string
+  location?: string | null
   subtitle?: string | null
   bullets: AssembledRoleBullet[]
 }

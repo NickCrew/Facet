@@ -125,14 +125,21 @@
     )[#role.subtitle]
   ]
 
+  #let location-dates = {
+    let parts = ()
+    if role.location != none and role.location != "" { parts.push(role.location) }
+    if role.dates != "" { parts.push(role.dates) }
+    parts.join(" | ")
+  }
+
   #if theme.datesAlignment == "inline" [
     #text(
       style: if theme.roleTitleItalic { "italic" } else { "normal" },
       size: to-pt(theme.sizeRoleTitle),
       fill: to-color(theme.roleTitleColor),
     )[#role.title]
-    #if role.dates != "" [
-      #text(size: to-pt(theme.sizeSmall), fill: to-color(theme.datesColor))[#role.dates]
+    #if location-dates != "" [
+      #text(size: to-pt(theme.sizeSmall), fill: to-color(theme.datesColor))[#location-dates]
     ]
   ] else [
     #grid(
@@ -146,7 +153,7 @@
         )[#role.title]
       ],
       [
-        #text(size: to-pt(theme.sizeSmall), fill: to-color(theme.datesColor))[#role.dates]
+        #text(size: to-pt(theme.sizeSmall), fill: to-color(theme.datesColor))[#location-dates]
       ],
     )
   ]

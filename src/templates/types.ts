@@ -10,6 +10,7 @@ export interface TemplateSkillGroup {
 export interface TemplateRole {
   company: string
   title: string
+  location?: string
   subtitle?: string
   dates: string
   bullets: string[]
@@ -60,6 +61,7 @@ export const toTemplateResumeData = (resume: AssembledResume): TemplateResumeDat
   roles: resume.roles.map((role) => ({
     company: role.company,
     title: role.title,
+    location: role.location ?? undefined,
     subtitle: role.subtitle ?? undefined,
     dates: role.dates,
     bullets: role.bullets.map((bullet) => bullet.text),

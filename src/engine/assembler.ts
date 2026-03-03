@@ -392,6 +392,7 @@ export const assembleResume = (
         company: role.company,
         title: role.title,
         dates: role.dates,
+        location: role.location,
         subtitle: role.subtitle,
         bullets: orderedBullets,
       }
