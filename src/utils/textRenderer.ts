@@ -41,7 +41,8 @@ export const renderResumeAsText = (resume: AssembledResume): string => {
     lines.push('')
     lines.push(section('Experience'))
     for (const role of templateResume.roles) {
-      lines.push(`${role.company} | ${role.title} (${role.dates})`)
+      const locationDates = [role.location, role.dates].filter(Boolean).join(' | ')
+      lines.push(`${role.company} | ${role.title} (${locationDates})`)
       if (role.subtitle) {
         lines.push(role.subtitle)
       }
