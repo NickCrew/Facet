@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { AssembledResume, ResumeTheme } from '../types'
-import { renderResumeAsPdf } from '../utils/typstRenderer'
+import { toDataPayload, toThemePayload } from '../utils/typstRenderer'
+import { getThemeFontFiles } from '../themes/theme'
 
 interface UsePdfPreviewArgs {
   resume: AssembledResume
@@ -27,6 +28,57 @@ export function usePdfPreview({ resume, theme, debounceMs = DEFAULT_DEBOUNCE_MS 
 
   const previewUrlRef = useRef<string | null>(null)
   const renderGenerationRef = useRef(0)
+  const workerRef = useRef<Worker | null>(null)
+
+  useEffect(() => {
+    // Initialize worker
+    workerRef.current = new Worker(new URL('../engine/pdf.worker.ts', import.meta.url), {
+      type: 'module'
+    })
+
+    workerRef.current.onmessage = (event) => {
+      const { id, type, bytes, pageCount: nextPageCount, error: workerError } = event.data
+      
+      if (id !== renderGenerationRef.current) {
+        return
+      }
+
+      if (type === 'success') {
+        const blob = new Blob([bytes], { type: 'application/pdf' })
+        const nextUrl = URL.createObjectURL(blob)
+        const previousUrl = previewUrlRef.current
+        previewUrlRef.current = nextUrl
+
+        setPreviewBlobUrl(nextUrl)
+        setCachedPdfBlob(blob)
+        setPageCount(nextPageCount)
+        setPending(false)
+
+        if (previousUrl) {
+          URL.revokeObjectURL(previousUrl)
+        }
+      } else {
+        if (previewUrlRef.current) {
+          URL.revokeObjectURL(previewUrlRef.current)
+          previewUrlRef.current = null
+        }
+        setPreviewBlobUrl(null)
+        setCachedPdfBlob(null)
+        setPageCount(null)
+        setError(workerError || 'Unable to render PDF preview.')
+        setPending(false)
+      }
+    }
+
+    return () => {
+      workerRef.current?.terminate()
+      workerRef.current = null
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current)
+        previewUrlRef.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     const generation = renderGenerationRef.current + 1
@@ -36,50 +88,26 @@ export function usePdfPreview({ resume, theme, debounceMs = DEFAULT_DEBOUNCE_MS 
     setError(null)
 
     const timer = window.setTimeout(() => {
-      ;(async () => {
-        try {
-          const rendered = await renderResumeAsPdf(resume, theme)
-          if (renderGenerationRef.current !== generation) {
-            return
-          }
+      if (!workerRef.current) {
+        setPending(false)
+        return
+      }
 
-          const nextUrl = URL.createObjectURL(rendered.blob)
-          const previousUrl = previewUrlRef.current
-          previewUrlRef.current = nextUrl
+      const dataPayload = toDataPayload(resume)
+      const themePayload = toThemePayload(theme)
+      const fontFiles = getThemeFontFiles(theme)
 
-          setPreviewBlobUrl(nextUrl)
-          setCachedPdfBlob(rendered.blob)
-          setPageCount(rendered.pageCount)
-
-          if (previousUrl) {
-            URL.revokeObjectURL(previousUrl)
-          }
-        } catch {
-          if (renderGenerationRef.current !== generation) {
-            return
-          }
-
-          if (previewUrlRef.current) {
-            URL.revokeObjectURL(previewUrlRef.current)
-            previewUrlRef.current = null
-          }
-          setPreviewBlobUrl(null)
-          setCachedPdfBlob(null)
-          setPageCount(null)
-          setError('Unable to render PDF preview. Adjust content or try again.')
-        } finally {
-          if (renderGenerationRef.current === generation) {
-            setPending(false)
-          }
-        }
-      })()
+      workerRef.current.postMessage({
+        id: generation,
+        dataPayload,
+        themePayload,
+        fontFiles
+      })
     }, debounceMs)
 
     return () => {
       window.clearTimeout(timer)
-      if (renderGenerationRef.current === generation) {
-        renderGenerationRef.current = generation + 1
-      }
+      renderGenerationRef.current = generation + 1
     }
   }, [resume, theme, debounceMs])
 
@@ -102,3 +130,4 @@ export function usePdfPreview({ resume, theme, debounceMs = DEFAULT_DEBOUNCE_MS 
     error,
   }
 }
+

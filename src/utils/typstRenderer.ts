@@ -1,13 +1,10 @@
 import type { AssembledResume, ResumeTheme } from '../types'
 import { getThemeFontFiles, resolveThemeFontFamily } from '../themes/theme'
-import { TypstSnippet } from '@myriaddreamin/typst.ts/contrib/snippet'
-import compilerWasmUrl from '@myriaddreamin/typst-ts-web-compiler/wasm?url'
-import rendererWasmUrl from '@myriaddreamin/typst-ts-renderer/wasm?url'
 import { toLinkDisplayText, toLinkHref } from './linkFormatting'
 import resumeTemplate from '../templates/resume.typ?raw'
+import { getTypstSnippet, toPdfPageCount } from './typstRendererUtils'
 
 const PDF_MIME_TYPE = 'application/pdf'
-const PDF_PAGE_PATTERN = /\/Type\s*\/Page\b/g
 
 interface TypstRenderResult {
   blob: Blob
@@ -83,6 +80,7 @@ interface TypstDataPayload {
   skillGroups: Array<{ label: string; content: string }>
   roles: Array<{
     company: string
+    location: string | null
     subtitle: string | null
     title: string
     dates: string
@@ -91,9 +89,6 @@ interface TypstDataPayload {
   projects: Array<{ name: string; urlText: string | null; urlHref: string | null; text: string }>
   education: Array<{ school: string; location: string; degree: string; year: string }>
 }
-
-const fontBufferCache = new Map<string, Uint8Array>()
-const snippetByFontSignature = new Map<string, TypstSnippet>()
 
 const toRgbTuple = (value: string): [number, number, number] => {
   const normalized = value.replace(/^#/, '').trim()
@@ -105,80 +100,7 @@ const toRgbTuple = (value: string): [number, number, number] => {
   ]
 }
 
-const toPdfPageCount = (bytes: Uint8Array): number => {
-  const raw = new TextDecoder().decode(bytes)
-  const matches = raw.match(PDF_PAGE_PATTERN)
-  return Math.max(1, matches?.length ?? 1)
-}
-
-const loadFontBytes = async (path: string): Promise<Uint8Array> => {
-  const cached = fontBufferCache.get(path)
-  if (cached) {
-    return cached
-  }
-
-  const response = await fetch(path)
-  if (!response.ok) {
-    throw new Error(`Unable to load font file: ${path}`)
-  }
-
-  const bytes = new Uint8Array(await response.arrayBuffer())
-  fontBufferCache.set(path, bytes)
-  return bytes
-}
-
-const isVariableFont = (bytes: Uint8Array): boolean => {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  if (bytes.byteLength < 12) {
-    return false
-  }
-
-  const tableCount = view.getUint16(4, false)
-  let offset = 12
-  for (let index = 0; index < tableCount; index += 1) {
-    if (offset + 16 > bytes.byteLength) {
-      break
-    }
-    const tag = String.fromCharCode(
-      view.getUint8(offset),
-      view.getUint8(offset + 1),
-      view.getUint8(offset + 2),
-      view.getUint8(offset + 3),
-    )
-    if (tag === 'fvar') {
-      return true
-    }
-    offset += 16
-  }
-
-  return false
-}
-
-const getSnippetForTheme = async (theme: ResumeTheme): Promise<TypstSnippet> => {
-  const fontFiles = getThemeFontFiles(theme)
-  const signature = fontFiles.join('|') || '__no_theme_fonts__'
-  const cached = snippetByFontSignature.get(signature)
-  if (cached) {
-    return cached
-  }
-
-  const snippet = new TypstSnippet()
-  // Vite prebundling can strip wasm-pack's auto-importer. Provide explicit module URLs.
-  snippet.setCompilerInitOptions({ getModule: () => compilerWasmUrl })
-  snippet.setRendererInitOptions({ getModule: () => rendererWasmUrl })
-  if (fontFiles.length > 0) {
-    const buffers = await Promise.all(fontFiles.map((file) => loadFontBytes(file)))
-    const staticFontBuffers = buffers.filter((bytes) => !isVariableFont(bytes))
-    if (staticFontBuffers.length > 0) {
-      snippet.use(TypstSnippet.preloadFonts(staticFontBuffers))
-    }
-  }
-
-  snippetByFontSignature.set(signature, snippet)
-  return snippet
-}
-
-const toThemePayload = (theme: ResumeTheme): TypstThemePayload => ({
+export const toThemePayload = (theme: ResumeTheme): TypstThemePayload => ({
   ...theme,
   fontBody: resolveThemeFontFamily(theme.fontBody),
   fontHeading: resolveThemeFontFamily(theme.fontHeading),
@@ -194,7 +116,9 @@ const toThemePayload = (theme: ResumeTheme): TypstThemePayload => ({
   projectUrlColor: toRgbTuple(theme.projectUrlColor),
 })
 
-const toDataPayload = (resume: AssembledResume): TypstDataPayload => {
+
+
+export const toDataPayload = (resume: AssembledResume): TypstDataPayload => {
   const contactCore = [resume.header.location, resume.header.email, resume.header.phone]
     .map((item) => item.trim())
     .filter((item) => item.length > 0)
@@ -223,6 +147,7 @@ const toDataPayload = (resume: AssembledResume): TypstDataPayload => {
     })),
     roles: resume.roles.map((role) => ({
       company: role.company,
+      location: role.location ?? null,
       subtitle: role.subtitle ?? null,
       title: role.title,
       dates: role.dates,
@@ -247,7 +172,8 @@ export const renderResumeAsPdf = async (
   resume: AssembledResume,
   theme: ResumeTheme,
 ): Promise<TypstRenderResult> => {
-  const snippet = await getSnippetForTheme(theme)
+  const fontFiles = getThemeFontFiles(theme)
+  const snippet = await getTypstSnippet(fontFiles)
   const dataPayload = toDataPayload(resume)
   const themePayload = toThemePayload(theme)
 
@@ -273,3 +199,4 @@ export const renderResumeAsPdf = async (
     generatedAt: new Date().toISOString(),
   }
 }
+
