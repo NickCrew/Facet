@@ -63,7 +63,9 @@ const colorThemeKeys = new Set<keyof ResumeThemeOverrides>([
 type ThemeDensityKey =
   | 'sectionGapBefore'
   | 'sectionGapAfter'
+  | 'sectionRuleGap'
   | 'roleGap'
+  | 'roleHeaderGap'
   | 'roleLineGapAfter'
   | 'bulletGap'
   | 'paragraphGap'
@@ -78,7 +80,9 @@ type ThemeDensityKey =
 const themeDensityKeys: ThemeDensityKey[] = [
   'sectionGapBefore',
   'sectionGapAfter',
+  'sectionRuleGap',
   'roleGap',
+  'roleHeaderGap',
   'roleLineGapAfter',
   'bulletGap',
   'paragraphGap',

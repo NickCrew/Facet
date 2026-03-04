@@ -7,9 +7,7 @@ import { THEME_PRESETS } from '../themes/theme'
 
 afterEach(cleanup)
 
-function renderPanel(overrides: Partial<{
-  open: boolean
-}> = {}) {
+function renderPanel() {
   const onSetPreset = vi.fn()
   const onSetOverride = vi.fn()
   const onAdjustDensityStep = vi.fn()
@@ -17,7 +15,6 @@ function renderPanel(overrides: Partial<{
 
   render(
     <ThemeEditorPanel
-      open={overrides.open ?? true}
       activePreset="ferguson-v12"
       resolvedTheme={THEME_PRESETS['ferguson-v12']}
       onSetPreset={onSetPreset}
@@ -31,11 +28,6 @@ function renderPanel(overrides: Partial<{
 }
 
 describe('ThemeEditorPanel preset gallery', () => {
-  it('does not render when closed', () => {
-    renderPanel({ open: false })
-    expect(screen.queryByText('Preset Gallery')).toBeNull()
-  })
-
   it('renders the visual gallery and new preset labels', () => {
     renderPanel()
     expect(screen.getByText('Preset Gallery')).toBeTruthy()

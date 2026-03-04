@@ -39,6 +39,7 @@
   } else {
     to-pt((theme.lineHeight - 1) * theme.sizeBody)
   },
+  spacing: 0pt,
 )
 
 #align(align-mode(theme.nameAlignment))[
@@ -51,6 +52,7 @@
   )[#data.name]
 ]
 
+#v(2pt)
 #if data.contactLine != none and data.contactLine != "" [
   #align(align-mode(theme.contactAlignment))[
     #text(size: to-pt(theme.sizeContact), fill: to-color(theme.colorDim))[#data.contactLine]
@@ -99,6 +101,7 @@
   )[#section-title]
 
   #if rule-style and theme.sectionRuleWeight > 0 [
+    #v(to-pt(theme.sectionRuleGap))
     #line(
       length: 100%,
       stroke: to-pt(theme.sectionRuleWeight) + to-color(theme.colorRule),
@@ -117,12 +120,14 @@
     fill: to-color(theme.colorHeading),
   )[#role.company]
 
+  #v(to-pt(theme.roleHeaderGap))
   #if role.subtitle != none and role.subtitle != "" [
     #text(
       size: to-pt(theme.sizeSmall),
       style: if theme.subtitleItalic { "italic" } else { "normal" },
       fill: to-color(theme.subtitleColor),
     )[#role.subtitle]
+    #v(to-pt(theme.roleHeaderGap))
   ]
 
   #let location-dates = {
