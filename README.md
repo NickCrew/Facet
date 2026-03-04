@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/NickCrew/Facet/actions"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/NickCrew/Facet/ci.yml?branch=main&style=flat-square" /></a>
-  <a href="#license"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" /></a>
+  <a href="#license"><img alt="License" src="https://img.shields.io/badge/license-AGPL-blue?style=flat-square" /></a>
   <a href="#"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white" /></a>
   <a href="#"><img alt="React 19" src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" /></a>
   <a href="#"><img alt="Vite" src="https://img.shields.io/badge/Vite-7-646CFF?style=flat-square&logo=vite&logoColor=white" /></a>
@@ -49,8 +49,9 @@ The result is a resume that is always structurally sound, strategically targeted
 
 ## Screenshot
 
-<!-- Replace with an actual screenshot or GIF -->
-> _Screenshot coming soon_
+<p align="center">
+  <img src="docs/assets/facet-screenshot.png" alt="Facet application screenshot" width="720" />
+</p>
 
 ## Getting Started
 
@@ -58,7 +59,7 @@ The result is a resume that is always structurally sound, strategically targeted
 
 - [Node.js](https://nodejs.org/) 18+
 - `npm` (included with Node.js)
-- [just](https://github.com/casey/just) (**optional** command runner for convenience)
+- [Just](https://github.com/casey/just) (**optional** command runner for convenience)
 
 ```bash
 # macOS
@@ -68,7 +69,7 @@ brew install just
 cargo install just
 ```
 
-_For details and other platforms — see https://github.com/casey/just#installation_
+_For details and other platforms — see [https://github.com/casey/just#installation](https://github.com/casey/just#installation)_
 
 ### Installation
 
@@ -161,7 +162,11 @@ just ci   # runs typecheck + lint + test in one shot
 
 ## License
 
-[MIT](LICENSE)
+[AGPL](LICENSE)
+
+Facet - Vector-based modular resume assembly
+Copyright (C) 2026 Nicholas Crew Ferguson
+
 
 ## Links
 
