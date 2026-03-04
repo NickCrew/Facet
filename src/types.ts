@@ -41,7 +41,9 @@ export interface ResumeTheme {
   bulletGap: number
   sectionGapBefore: number
   sectionGapAfter: number
+  sectionRuleGap: number
   roleGap: number
+  roleHeaderGap: number
   roleLineGapAfter: number
   paragraphGap: number
   contactGapAfter: number

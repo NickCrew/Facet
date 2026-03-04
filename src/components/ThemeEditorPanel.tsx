@@ -11,7 +11,6 @@ import {
 } from '../themes/theme'
 
 interface ThemeEditorPanelProps {
-  open: boolean
   activePreset: ResumeThemePresetId
   resolvedTheme: ResumeTheme
   onSetPreset: (preset: ResumeThemePresetId) => void
@@ -43,7 +42,9 @@ type NumericThemeKey =
   | 'bulletGap'
   | 'sectionGapBefore'
   | 'sectionGapAfter'
+  | 'sectionRuleGap'
   | 'roleGap'
+  | 'roleHeaderGap'
   | 'roleLineGapAfter'
   | 'paragraphGap'
   | 'contactGapAfter'
@@ -103,7 +104,9 @@ const NUMBER_FIELDS: NumericFieldConfig[] = [
   { key: 'projectUrlSize', label: 'Project URL Size (pt)', step: 0.5, min: 6, max: 12 },
   { key: 'sectionGapBefore', label: 'Section Gap Before (pt)', step: 0.5, min: 0, max: 24 },
   { key: 'sectionGapAfter', label: 'Section Gap After (pt)', step: 0.5, min: 0, max: 12 },
+  { key: 'sectionRuleGap', label: 'Section Rule Gap (pt)', step: 0.5, min: 0, max: 8 },
   { key: 'roleGap', label: 'Role Gap Before (pt)', step: 0.5, min: 0, max: 18 },
+  { key: 'roleHeaderGap', label: 'Role Header Gap (pt)', step: 0.5, min: 0, max: 8 },
   { key: 'roleLineGapAfter', label: 'Role Line Gap After (pt)', step: 0.5, min: 0, max: 12 },
   { key: 'bulletGap', label: 'Bullet Gap (pt)', step: 0.5, min: 0, max: 12 },
   { key: 'paragraphGap', label: 'Paragraph Gap (pt)', step: 0.5, min: 0, max: 12 },
@@ -172,7 +175,6 @@ const sectionUsesRule = (style: ResumeTheme['sectionHeaderStyle']): boolean =>
   style === 'caps-rule' || style === 'bold-rule'
 
 export function ThemeEditorPanel({
-  open,
   activePreset,
   resolvedTheme,
   onSetPreset,
@@ -270,7 +272,9 @@ export function ThemeEditorPanel({
         <div className="theme-grid">
           {renderNumberField('sectionGapBefore')}
           {renderNumberField('sectionGapAfter')}
+          {renderNumberField('sectionRuleGap')}
           {renderNumberField('roleGap')}
+          {renderNumberField('roleHeaderGap')}
           {renderNumberField('roleLineGapAfter')}
           {renderNumberField('bulletGap')}
           {renderNumberField('paragraphGap')}
@@ -414,10 +418,6 @@ export function ThemeEditorPanel({
         {renderNumberField('bulletHanging')}
       </div>
     )
-  }
-
-  if (!open) {
-    return null
   }
 
   const renderPresetGalleryCard = (presetId: ResumeThemePresetId) => {
