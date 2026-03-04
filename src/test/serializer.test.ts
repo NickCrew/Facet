@@ -146,7 +146,7 @@ education: []
     const parsed = importResumeConfig(exportResumeConfig(source, 'json'), 'json')
     expect(parsed.data.theme?.preset).toBe('clean-modern')
     expect(parsed.data.theme?.overrides).toEqual({
-      fontBody: 'Helvetica',
+      fontBody: 'Libre Franklin',
       marginLeft: 0.9,
       colorSection: '0a0a0a',
     })

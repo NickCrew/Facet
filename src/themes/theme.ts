@@ -141,6 +141,12 @@ const FONT_FAMILY_ALIASES: Record<string, string> = {
   georgia: 'PT Serif',
   cambria: 'PT Serif',
   'times new roman': 'Source Serif 4',
+  avenir: 'Nunito Sans',
+  'avenir next': 'Nunito Sans',
+  helvetica: 'Libre Franklin',
+  'helvetica neue': 'Libre Franklin',
+  palatino: 'Lora',
+  'palatino linotype': 'Lora',
 }
 
 const normalizeThemeFontFamilyValue = (value: string): string => {
@@ -613,8 +619,11 @@ export const THEME_PRESET_IDS = Object.keys(THEME_PRESETS) as ResumeThemePresetI
 export const THEME_FONT_OPTIONS = [
   'Inter',
   'DM Sans',
+  'Nunito Sans',
+  'Libre Franklin',
   'Source Serif 4',
   'PT Serif',
+  'Lora',
   'IBM Plex Sans',
   'IBM Plex Serif',
   'Newsreader',
@@ -663,6 +672,24 @@ export const THEME_FONT_FILES: Record<string, string[]> = {
     '/fonts/newsreader/Newsreader-Bold.ttf',
     '/fonts/newsreader/Newsreader-Italic.ttf',
     '/fonts/newsreader/Newsreader-BoldItalic.ttf',
+  ],
+  'Nunito Sans': [
+    '/fonts/nunito-sans/NunitoSans-Regular.ttf',
+    '/fonts/nunito-sans/NunitoSans-Bold.ttf',
+    '/fonts/nunito-sans/NunitoSans-Italic.ttf',
+    '/fonts/nunito-sans/NunitoSans-BoldItalic.ttf',
+  ],
+  'Libre Franklin': [
+    '/fonts/libre-franklin/LibreFranklin-Regular.ttf',
+    '/fonts/libre-franklin/LibreFranklin-Bold.ttf',
+    '/fonts/libre-franklin/LibreFranklin-Italic.ttf',
+    '/fonts/libre-franklin/LibreFranklin-BoldItalic.ttf',
+  ],
+  Lora: [
+    '/fonts/lora/Lora-Regular.ttf',
+    '/fonts/lora/Lora-Bold.ttf',
+    '/fonts/lora/Lora-Italic.ttf',
+    '/fonts/lora/Lora-BoldItalic.ttf',
   ],
   'DM Mono': ['/fonts/dm-mono/DMMono-Regular.ttf', '/fonts/dm-mono/DMMono-Italic.ttf'],
 }
