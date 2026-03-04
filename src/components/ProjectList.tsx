@@ -18,10 +18,10 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { Eye, EyeOff, GripVertical } from 'lucide-react'
 import { useState } from 'react'
-import type { PriorityByVector, ProjectComponent, VectorDef, VectorSelection } from '../types'
+import type { ComponentPriority, PriorityByVector, ProjectComponent, VectorDef, VectorSelection } from '../types'
 import { getPriorityForVector } from '../engine/assembler'
 import { componentKeys } from '../utils/componentKeys'
-import { VectorPriorityEditor } from './VectorPriorityEditor'
+import { resolveDisplayText } from '../utils/resolveDisplayText'
 
 interface ProjectListProps {
   projects: ProjectComponent[]
@@ -39,6 +39,7 @@ interface ProjectListProps {
 interface SortableProjectCardProps {
   project: ProjectComponent
   vectorDefs: VectorDef[]
+  selectedVector: VectorSelection
   included: boolean
   variant?: string
   onUpdate: (field: 'name' | 'url' | 'text', value: string) => void
@@ -47,9 +48,20 @@ interface SortableProjectCardProps {
   onSetVariant: (variant: string | null) => void
 }
 
+function cyclePriority(current: ComponentPriority): ComponentPriority {
+  switch (current) {
+    case 'must': return 'strong'
+    case 'strong': return 'optional'
+    case 'optional': return 'exclude'
+    case 'exclude': return 'must'
+    default: return 'must'
+  }
+}
+
 function SortableProjectCard({
   project,
   vectorDefs,
+  selectedVector,
   included,
   variant,
   onUpdate,
@@ -58,14 +70,43 @@ function SortableProjectCard({
   onSetVariant,
 }: SortableProjectCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: project.id })
+  const priority = getPriorityForVector(project.vectors, selectedVector)
+  const variantIds = project.variants ? Object.keys(project.variants) : []
+  const showVariantPicker = variantIds.length > 0
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   }
 
+  const handlePriorityCycle = () => {
+    if (selectedVector === 'all') return
+    const next = cyclePriority(priority)
+    const nextVectors = { ...project.vectors }
+    if (next === 'exclude') {
+      delete nextVectors[selectedVector]
+    } else {
+      nextVectors[selectedVector] = next
+    }
+    onUpdateVectors(nextVectors)
+  }
+
+  const handleMatrixDotClick = (vectorId: string) => {
+    const currentPriority = project.vectors[vectorId] ?? 'exclude'
+    const next = cyclePriority(currentPriority)
+    const nextVectors = { ...project.vectors }
+    if (next === 'exclude') {
+      delete nextVectors[vectorId]
+    } else {
+      nextVectors[vectorId] = next
+    }
+    onUpdateVectors(nextVectors)
+  }
+
   return (
-    <article className={`component-card ${included ? '' : 'dimmed'}`} ref={setNodeRef} style={style}>
+    <article className={`component-card bullet-card ${included ? '' : 'dimmed'}`} ref={setNodeRef} style={style}>
+      <div className={`priority-strip priority-${priority}`} />
+      
       <header className="component-card-header">
         <div className="bullet-title-row">
           <button
@@ -78,6 +119,16 @@ function SortableProjectCard({
             <GripVertical size={14} />
           </button>
           <h4>Project</h4>
+          {selectedVector !== 'all' && (
+            <button 
+              type="button" 
+              className={`priority-quick-toggle ${priority}`}
+              onClick={handlePriorityCycle}
+              title={`Priority for current vector: ${priority}. Click to cycle.`}
+            >
+              {priority}
+            </button>
+          )}
         </div>
         <div className="component-card-actions">
           <button
@@ -108,39 +159,55 @@ function SortableProjectCard({
       <textarea
         className="component-input"
         aria-label="Project description"
-        value={project.text}
+        value={resolveDisplayText(project.text, project.variants, variant, selectedVector).displayText}
         onChange={(event) => onUpdate('text', event.target.value)}
       />
-      <VectorPriorityEditor
-        vectors={project.vectors}
-        vectorDefs={vectorDefs}
-        onChange={onUpdateVectors}
-      />
-      {project.variants && Object.keys(project.variants).length > 0 ? (
-        <label className="field-label variant-control">
-          Variant
-          <select
-            className="component-input compact"
-            value={variant ?? 'auto'}
-            onChange={(event) =>
-              onSetVariant(
-                event.target.value === 'auto' ? null : event.target.value,
-              )
-            }
-          >
-            <option value="auto">Auto</option>
-            <option value="default">Default</option>
-            {Object.keys(project.variants).map((variantId) => {
-              const vector = vectorDefs.find((item) => item.id === variantId)
-              return (
-                <option key={variantId} value={variantId}>
-                  {vector?.label ?? variantId}
-                </option>
-              )
-            })}
-          </select>
-        </label>
-      ) : null}
+
+      <div className="bullet-footer-row">
+        {showVariantPicker ? (
+          <label className="field-label variant-control">
+            Variant
+            <select
+              className="component-input compact"
+              value={variant ?? 'auto'}
+              onChange={(event) =>
+                onSetVariant(
+                  event.target.value === 'auto' ? null : event.target.value,
+                )
+              }
+            >
+              <option value="auto">Auto</option>
+              <option value="default">Default</option>
+              {variantIds.map((variantId) => {
+                const vector = vectorDefs.find((item) => item.id === variantId)
+                return (
+                  <option key={variantId} value={variantId}>
+                    {vector?.label ?? variantId}
+                  </option>
+                )
+              })}
+            </select>
+          </label>
+        ) : <div />}
+
+        <div className="vector-matrix">
+          {vectorDefs.map((vector, idx) => {
+            const p = project.vectors[vector.id] ?? 'exclude'
+            const isLastFew = idx >= vectorDefs.length - 2
+            return (
+              <button
+                key={vector.id}
+                type="button"
+                className={`matrix-dot priority-${p} ${isLastFew ? 'tooltip-left' : ''}`}
+                style={{ '--vector-color': vector.color } as any}
+                data-tooltip={`${vector.label}: ${p}`}
+                onClick={() => handleMatrixDotClick(vector.id)}
+                aria-label={`${vector.label} priority: ${p}`}
+              />
+            )
+          })}
+        </div>
+      </div>
     </article>
   )
 }
@@ -213,6 +280,7 @@ export function ProjectList({
                   key={project.id}
                   project={project}
                   vectorDefs={vectorDefs}
+                  selectedVector={selectedVector}
                   included={included}
                   variant={variantByKey[key]}
                   onUpdate={(field, value) => onUpdate(project.id, field, value)}

@@ -1,25 +1,50 @@
-import { useState, type CSSProperties } from 'react'
-import type { ResumeTheme, ResumeThemeOverrides, ResumeThemePresetId } from '../types'
+import { useState, type CSSProperties, useMemo } from 'react'
+import type { LucideIcon } from 'lucide-react'
+import {
+  Activity,
+  AlignJustify,
+  Heading,
+  Info,
+  Layout,
+  List,
+  Paintbrush,
+  Palette,
+  ShieldCheck,
+  AlertTriangle,
+  Sparkles,
+  Square,
+  Type,
+} from 'lucide-react'
+
+import type { ResumeTheme, ResumeThemeOverrides, ResumeThemePresetId, TemplateId } from '../types'
 import {
   THEME_BULLET_OPTIONS,
   THEME_DATES_ALIGNMENT_OPTIONS,
-  THEME_FONT_OPTIONS,
   THEME_PRESETS,
   THEME_PRESET_IDS,
   THEME_SECTION_HEADER_OPTIONS,
   THEME_TEXT_ALIGNMENT_OPTIONS,
+  THEME_TEMPLATE_OPTIONS,
 } from '../themes/theme'
+import { FontPicker } from './FontPicker'
+import { calculateDesignHealth } from '../utils/designHealth'
 
 interface ThemeEditorPanelProps {
   activePreset: ResumeThemePresetId
   resolvedTheme: ResumeTheme
+  showHeatmap: boolean
+  showDesignHealth: boolean
+  isOptimizingDensity: boolean
   onSetPreset: (preset: ResumeThemePresetId) => void
   onSetOverride: <K extends keyof ResumeThemeOverrides>(
     key: K,
     value: ResumeThemeOverrides[K],
   ) => void
   onAdjustDensityStep: (direction: 'tighten' | 'loosen') => void
+  onOptimizeDensity: (targetPages: number) => void
   onResetOverrides: () => void
+  onToggleHeatmap: (show: boolean) => void
+  onToggleDesignHealth: (show: boolean) => void
 }
 
 type NumericFieldConfig = {
@@ -60,6 +85,8 @@ type NumericThemeKey =
   | 'bulletIndent'
   | 'bulletHanging'
   | 'projectUrlSize'
+  | 'sidebarWidth'
+  | 'columnGap'
 
 type ColorThemeKey =
   | 'colorBody'
@@ -83,6 +110,7 @@ type BooleanThemeKey =
   | 'educationSchoolBold'
 
 type ThemeTabId =
+  | 'presets'
   | 'typography'
   | 'spacing'
   | 'margins'
@@ -90,6 +118,7 @@ type ThemeTabId =
   | 'section-style'
   | 'layout'
   | 'bullets'
+  | 'visual-aids'
 
 const NUMBER_FIELDS: NumericFieldConfig[] = [
   { key: 'sizeBody', label: 'Body Size (pt)', step: 0.5, min: 7, max: 14 },
@@ -146,14 +175,16 @@ const BOOLEAN_FIELDS: Array<{ key: BooleanThemeKey; label: string }> = [
   { key: 'educationSchoolBold', label: 'Education School Bold' },
 ]
 
-const THEME_TABS: Array<{ id: ThemeTabId; label: string }> = [
-  { id: 'typography', label: 'Typography' },
-  { id: 'spacing', label: 'Spacing' },
-  { id: 'margins', label: 'Margins' },
-  { id: 'colors', label: 'Colors' },
-  { id: 'section-style', label: 'Section Style' },
-  { id: 'layout', label: 'Layout' },
-  { id: 'bullets', label: 'Bullets' },
+const THEME_TABS: Array<{ id: ThemeTabId; label: string; icon: LucideIcon }> = [
+  { id: 'presets', label: 'Presets', icon: Palette },
+  { id: 'typography', label: 'Typography', icon: Type },
+  { id: 'spacing', label: 'Spacing', icon: AlignJustify },
+  { id: 'margins', label: 'Margins', icon: Square },
+  { id: 'colors', label: 'Colors', icon: Paintbrush },
+  { id: 'section-style', label: 'Section Style', icon: Heading },
+  { id: 'layout', label: 'Layout', icon: Layout },
+  { id: 'bullets', label: 'Bullets', icon: List },
+  { id: 'visual-aids', label: 'Visual Aids', icon: Activity },
 ]
 
 const NUMBER_FIELDS_BY_KEY = Object.fromEntries(
@@ -177,12 +208,19 @@ const sectionUsesRule = (style: ResumeTheme['sectionHeaderStyle']): boolean =>
 export function ThemeEditorPanel({
   activePreset,
   resolvedTheme,
+  showHeatmap,
+  showDesignHealth,
+  isOptimizingDensity,
   onSetPreset,
   onSetOverride,
   onAdjustDensityStep,
+  onOptimizeDensity,
   onResetOverrides,
+  onToggleHeatmap,
+  onToggleDesignHealth,
 }: ThemeEditorPanelProps) {
-  const [activeTab, setActiveTab] = useState<ThemeTabId>('typography')
+  const [activeTab, setActiveTab] = useState<ThemeTabId>('presets')
+  const health = useMemo(() => calculateDesignHealth(resolvedTheme), [resolvedTheme])
 
   const renderNumberField = (fieldKey: NumericThemeKey) => {
     const field = NUMBER_FIELDS_BY_KEY[fieldKey]
@@ -221,48 +259,147 @@ export function ThemeEditorPanel({
   )
 
   const renderTabContent = () => {
+    if (activeTab === 'presets') {
+      return (
+        <div className="theme-presets-tab">
+          <div className="theme-preset-grid">
+            {THEME_PRESET_IDS.map((presetId) => {
+              const preset = THEME_PRESETS[presetId]
+              const isActive = activePreset === presetId
+              return (
+                <button
+                  key={presetId}
+                  type="button"
+                  className={`theme-preset-card ${isActive ? 'active' : ''}`}
+                  onClick={() => onSetPreset(presetId)}
+                  aria-pressed={isActive}
+                >
+                  <span className="theme-preset-name">{preset.name}</span>
+                  <span className="theme-preset-sample">
+                    <span style={{ color: `#${preset.colorSection}` }}>Aa</span>
+                    <span style={{ color: `#${preset.colorBody}` }}>Body</span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="theme-gallery-header">
+            <h3>Theme Gallery</h3>
+            <p>Click a card to apply a theme.</p>
+          </div>
+          <div className="theme-gallery-strip" aria-label="Theme visual gallery">
+            {THEME_PRESET_IDS.map((presetId) => renderPresetGalleryCard(presetId))}
+          </div>
+        </div>
+      )
+    }
+
+    if (activeTab === 'visual-aids') {
+      return (
+        <div className="visual-aids-panel">
+          <div className="visual-aid-control">
+            <label className="field-label checkbox-label">
+              <input
+                type="checkbox"
+                checked={showHeatmap}
+                aria-describedby="heatmap-help"
+                onChange={(e) => onToggleHeatmap(e.target.checked)}
+              />
+              <Activity size={16} />
+              <span>Show Density Heatmap</span>
+            </label>
+            <p id="heatmap-help" className="field-help">Highlights sections based on vertical space consumption.</p>
+          </div>
+
+          <div className="visual-aid-control">
+            <label className="field-label checkbox-label">
+              <input
+                type="checkbox"
+                checked={showDesignHealth}
+                aria-describedby="health-help"
+                onChange={(e) => onToggleDesignHealth(e.target.checked)}
+              />
+              <ShieldCheck size={16} />
+              <span>Show Design Health Score</span>
+            </label>
+            <p id="health-help" className="field-help">Analyzes font sizes and margins for ATS and print safety.</p>
+          </div>
+
+          {showDesignHealth && (
+            <div className="design-health-report" aria-busy={isOptimizingDensity}>
+              <div className="health-score-header">
+                <span className="health-score-label">
+                  Health Score:{' '}
+                  <span
+                    className={`health-score-status ${health.score >= 90 ? 'good' : health.score >= 70 ? 'fair' : 'poor'}`}
+                  >
+                    {health.score >= 90 ? 'Good' : health.score >= 70 ? 'Fair' : 'Needs Work'}
+                  </span>
+                </span>
+                <span
+                  className={`health-score-value ${health.score >= 90 ? 'good' : health.score >= 70 ? 'fair' : 'poor'}`}
+                >
+                  {health.score}/100
+                </span>
+              </div>
+              <div
+                className="health-score-bar"
+                role="progressbar"
+                aria-valuenow={health.score}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Design health score"
+              >
+                <div
+                  className={`health-score-fill ${health.score >= 90 ? 'good' : health.score >= 70 ? 'fair' : 'poor'}`}
+                  style={{ width: `${health.score}%` }}
+                />
+              </div>
+
+              {health.issues.length > 0 ? (
+                <ul className="health-issues-list">
+                  {health.issues.map((issue, idx) => (
+                    <li key={idx} className={`health-issue-item type-${issue.type}`}>
+                      {issue.type === 'error' ? <AlertTriangle size={14} /> : <Info size={14} />}
+                      <span>{issue.message}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="health-success-msg">Your design looks ATS-safe and print-ready!</p>
+              )}
+            </div>
+          )}
+        </div>
+      )
+    }
+
     if (activeTab === 'typography') {
       return (
-        <div className="theme-grid">
-          <label className="field-label">
-            Body Font
-            <select
-              className="component-input compact"
-              value={resolvedTheme.fontBody}
-              onChange={(event) => onSetOverride('fontBody', event.target.value)}
-            >
-              {THEME_FONT_OPTIONS.map((font) => (
-                <option key={font} value={font}>
-                  {font}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="field-label">
-            Heading Font
-            <select
-              className="component-input compact"
-              value={resolvedTheme.fontHeading}
-              onChange={(event) => onSetOverride('fontHeading', event.target.value)}
-            >
-              {THEME_FONT_OPTIONS.map((font) => (
-                <option key={font} value={font}>
-                  {font}
-                </option>
-              ))}
-            </select>
-          </label>
-          {renderNumberField('sizeBody')}
-          {renderNumberField('sizeName')}
-          {renderNumberField('sizeSectionHeader')}
-          {renderNumberField('sizeCompanyName')}
-          {renderNumberField('sizeRoleTitle')}
-          {renderNumberField('sizeSmall')}
-          {renderNumberField('sizeContact')}
-          {renderNumberField('projectUrlSize')}
-          {renderNumberField('nameLetterSpacing')}
-          {renderNumberField('lineHeight')}
+        <div className="theme-grid typography-tab-grid">
+          <FontPicker
+            label="Body Font"
+            value={resolvedTheme.fontBody}
+            onChange={(font) => onSetOverride('fontBody', font)}
+          />
+          <FontPicker
+            label="Heading Font"
+            value={resolvedTheme.fontHeading}
+            onChange={(font) => onSetOverride('fontHeading', font)}
+          />
+          <div className="theme-grid">
+            {renderNumberField('sizeBody')}
+            {renderNumberField('sizeName')}
+            {renderNumberField('sizeSectionHeader')}
+            {renderNumberField('sizeCompanyName')}
+            {renderNumberField('sizeRoleTitle')}
+            {renderNumberField('sizeSmall')}
+            {renderNumberField('sizeContact')}
+            {renderNumberField('projectUrlSize')}
+            {renderNumberField('nameLetterSpacing')}
+            {renderNumberField('lineHeight')}
+          </div>
         </div>
       )
     }
@@ -270,6 +407,38 @@ export function ThemeEditorPanel({
     if (activeTab === 'spacing') {
       return (
         <div className="theme-grid">
+          <div className="smart-density-group">
+            <span className="field-label">Smart Density Optimizer</span>
+            <div className="btn-group">
+              <button
+                className="btn-secondary btn-sparkle"
+                type="button"
+                disabled={isOptimizingDensity}
+                onClick={() => onOptimizeDensity(1)}
+              >
+                {isOptimizingDensity ? 'Working...' : (
+                  <>
+                    <Sparkles size={14} />
+                    <span>Fit to 1 Page</span>
+                  </>
+                )}
+              </button>
+              <button
+                className="btn-secondary btn-sparkle"
+                type="button"
+                disabled={isOptimizingDensity}
+                onClick={() => onOptimizeDensity(2)}
+              >
+                {isOptimizingDensity ? 'Working...' : (
+                  <>
+                    <Sparkles size={14} />
+                    <span>Fit to 2 Pages</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <p className="field-help">Iterative search for the optimal balance of spacing and font size.</p>
+          </div>
           {renderNumberField('sectionGapBefore')}
           {renderNumberField('sectionGapAfter')}
           {renderNumberField('sectionRuleGap')}
@@ -342,6 +511,39 @@ export function ThemeEditorPanel({
     if (activeTab === 'layout') {
       return (
         <div className="theme-grid">
+          <label className="field-label">
+            Layout Template
+            <select
+              className="component-input compact"
+              value={resolvedTheme.templateId}
+              onChange={(event) =>
+                onSetOverride('templateId', event.target.value as TemplateId)
+              }
+            >
+              {THEME_TEMPLATE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option.charAt(0).toUpperCase() + option.slice(1)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {resolvedTheme.templateId === 'sidebar' && (
+            <>
+              {renderNumberField('sidebarWidth')}
+              <label className="field-label">
+                Sidebar Color
+                <input
+                  className="component-input compact"
+                  type="color"
+                  value={`#${resolvedTheme.sidebarColor || 'f8f9fa'}`}
+                  onChange={(event) => onSetOverride('sidebarColor', event.target.value.replace(/^#/, ''))}
+                />
+              </label>
+              {renderNumberField('columnGap')}
+            </>
+          )}
+
           <label className="field-label">
             Name Alignment
             <select
@@ -503,9 +705,9 @@ export function ThemeEditorPanel({
   }
 
   return (
-    <section className="theme-panel" id="theme-overrides-panel" aria-label="Theme token overrides">
+    <section className="theme-panel" id="theme-overrides-panel" aria-label="Theme editor">
       <div className="theme-panel-header">
-        <h2>Theme Overrides</h2>
+        <h2>Themes</h2>
         <div className="theme-panel-actions">
           <div className="theme-density-controls" aria-label="Spacing density controls">
             <span className="theme-density-label">Density</span>
@@ -527,39 +729,9 @@ export function ThemeEditorPanel({
             </button>
           </div>
           <button className="btn-secondary" type="button" onClick={onResetOverrides}>
-            Reset to Preset
+            Reset to Theme
           </button>
         </div>
-      </div>
-
-      <div className="theme-preset-grid">
-        {THEME_PRESET_IDS.map((presetId) => {
-          const preset = THEME_PRESETS[presetId]
-          const isActive = activePreset === presetId
-          return (
-            <button
-              key={presetId}
-              type="button"
-              className={`theme-preset-card ${isActive ? 'active' : ''}`}
-              onClick={() => onSetPreset(presetId)}
-              aria-pressed={isActive}
-            >
-              <span className="theme-preset-name">{preset.name}</span>
-              <span className="theme-preset-sample">
-                <span style={{ color: `#${preset.colorSection}` }}>Aa</span>
-                <span style={{ color: `#${preset.colorBody}` }}>Body</span>
-              </span>
-            </button>
-          )
-        })}
-      </div>
-
-      <div className="theme-gallery-header">
-        <h3>Preset Gallery</h3>
-        <p>Click a card to apply the full preset.</p>
-      </div>
-      <div className="theme-gallery-strip" aria-label="Preset visual gallery">
-        {THEME_PRESET_IDS.map((presetId) => renderPresetGalleryCard(presetId))}
       </div>
 
       <div className="theme-tab-row" role="tablist" aria-label="Theme token groups">
@@ -576,6 +748,7 @@ export function ThemeEditorPanel({
               className={`theme-tab ${isActive ? 'active' : ''}`}
               onClick={() => setActiveTab(tab.id)}
             >
+              <tab.icon size={12} />
               {tab.label}
             </button>
           )

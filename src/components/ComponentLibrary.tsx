@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChevronRight, Plus, X } from 'lucide-react'
+import { Search, ChevronRight, Plus, X, PlusCircle } from 'lucide-react'
 import type {
   PriorityByVector,
   ResumeData,
@@ -18,6 +18,7 @@ import { ComponentCard } from './ComponentCard'
 import { SkillGroupList } from './SkillGroupList'
 import { ProjectList } from './ProjectList'
 import { VectorPriorityEditor } from './VectorPriorityEditor'
+import { resolveDisplayText } from '../utils/resolveDisplayText'
 
 type AddComponentType = 'target_line' | 'profile' | 'skill_group' | 'project' | 'bullet'
 type LibrarySectionId =
@@ -66,6 +67,7 @@ interface ComponentLibraryProps {
   onResetRoleBulletOrder: (roleId: string) => void
   onReframeBullet: (roleId: string, bulletId: string) => void
   reframeLoadingId: string | null
+  aiEnabled: boolean
   onAddComponent: (type: AddComponentType, payload: AddComponentPayload) => void
   onUpdateMetaField: (field: 'name' | 'email' | 'phone' | 'location', value: string) => void
   onUpdateMetaLink: (index: number, field: 'label' | 'url', value: string) => void
@@ -75,6 +77,20 @@ interface ComponentLibraryProps {
 
 function requiresVectorPriority(type: AddComponentType): boolean {
   return type === 'target_line' || type === 'profile' || type === 'project' || type === 'bullet'
+}
+
+function useFilteredList<T>(
+  items: T[],
+  query: string,
+  getSearchableText: (item: T) => string[],
+): T[] {
+  return useMemo(() => {
+    if (!query) return items
+    const q = query.toLowerCase()
+    return items.filter((item) =>
+      getSearchableText(item).some((text) => text.toLowerCase().includes(q)),
+    )
+  }, [items, query])
 }
 
 export function ComponentLibrary({
@@ -105,12 +121,14 @@ export function ComponentLibrary({
   onResetRoleBulletOrder,
   onReframeBullet,
   reframeLoadingId,
+  aiEnabled,
   onAddComponent,
   onUpdateMetaField,
   onUpdateMetaLink,
   onAddMetaLink,
   onRemoveMetaLink,
 }: ComponentLibraryProps) {
+  const [searchQuery, setSearchQuery] = useState('')
   const [addOpen, setAddOpen] = useState(false)
   const [addType, setAddType] = useState<AddComponentType>('bullet')
   const [payload, setPayload] = useState<AddComponentPayload>({})
@@ -124,6 +142,48 @@ export function ComponentLibrary({
     projects: false,
   })
   const modalRef = useRef<HTMLDivElement>(null)
+
+  const filteredTargetLines = useFilteredList(data.target_lines, searchQuery, (line) => [
+    line.text,
+    line.id,
+  ])
+
+  const filteredProfiles = useFilteredList(data.profiles, searchQuery, (profile) => [
+    profile.text,
+    profile.id,
+  ])
+
+  const filteredSkillGroups = useFilteredList(data.skill_groups, searchQuery, (group) => [
+    group.label,
+    group.content,
+  ])
+
+  const filteredRoles = useMemo(() => {
+    if (!searchQuery) return data.roles
+    const q = searchQuery.toLowerCase()
+    return data.roles
+      .map((role) => {
+        const matchRole =
+          role.company.toLowerCase().includes(q) ||
+          role.title.toLowerCase().includes(q) ||
+          (role.subtitle?.toLowerCase().includes(q) ?? false) ||
+          (role.location?.toLowerCase().includes(q) ?? false)
+
+        const matchBullets = role.bullets.some((bullet) => bullet.text.toLowerCase().includes(q))
+
+        if (matchRole || matchBullets) {
+          return role
+        }
+        return null
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+  }, [data.roles, searchQuery])
+
+  const filteredProjects = useFilteredList(data.projects, searchQuery, (project) => [
+    project.name,
+    project.text,
+    project.url ?? '',
+  ])
 
   const roleChoices = useMemo(() => data.roles.map((role) => ({ id: role.id, label: role.company })), [data.roles])
   const defaultRoleId = roleChoices[0]?.id
@@ -183,26 +243,54 @@ export function ComponentLibrary({
     }))
   }
 
-  const renderSection = (sectionId: LibrarySectionId, title: string, content: ReactNode) => {
-    const expanded = openSections[sectionId]
+  const renderSection = (
+    sectionId: LibrarySectionId,
+    title: string,
+    content: ReactNode,
+    options: {
+      summary?: string
+      onAdd?: () => void
+      isEmpty?: boolean
+    } = {},
+  ) => {
+    const { summary, onAdd, isEmpty } = options
+    const hasActiveSearch = searchQuery.length > 0
+    const expanded = (hasActiveSearch && !isEmpty) || openSections[sectionId]
     const panelId = `library-section-${sectionId}`
     const buttonId = `${panelId}-toggle`
 
     return (
       <section className="library-section" key={sectionId}>
-        <h3 className="section-header">
-          <button
-            id={buttonId}
-            className={`library-section-toggle ${expanded ? 'expanded' : ''}`}
-            type="button"
-            aria-expanded={expanded}
-            aria-controls={panelId}
-            onClick={() => toggleSection(sectionId)}
-          >
-            <ChevronRight size={14} />
-            <span>{title}</span>
-          </button>
-        </h3>
+        <div className="section-header-wrapper">
+          <h3 className="section-header">
+            <button
+              id={buttonId}
+              className={`library-section-toggle ${expanded ? 'expanded' : ''}`}
+              type="button"
+              aria-expanded={expanded}
+              aria-controls={panelId}
+              onClick={() => toggleSection(sectionId)}
+            >
+              <ChevronRight size={14} />
+              <span className="section-title-text">{title}</span>
+              {summary && <span className="section-summary-pill">{summary}</span>}
+            </button>
+          </h3>
+          {onAdd && (
+            <button
+              className="btn-ghost btn-icon-only section-add-btn"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onAdd()
+              }}
+              aria-label={`Add to ${title}`}
+              title={`Add to ${title}`}
+            >
+              <PlusCircle size={16} />
+            </button>
+          )}
+        </div>
         <div
           className={`library-section-collapse ${expanded ? 'expanded' : ''}`}
           role="region"
@@ -211,7 +299,11 @@ export function ComponentLibrary({
           aria-hidden={!expanded}
         >
           <div className="library-section-panel">
-            {content}
+            {isEmpty ? (
+              <p className="section-empty-state">No matching {title.toLowerCase()}.</p>
+            ) : (
+              content
+            )}
           </div>
         </div>
       </section>
@@ -243,6 +335,30 @@ export function ComponentLibrary({
           <Plus size={16} />
           Add Component
         </button>
+      </div>
+
+      <div className="library-search" role="search">
+        <div className="search-input-wrapper">
+          <Search size={14} className="search-icon" />
+          <input
+            type="text"
+            className="search-input"
+            placeholder="Search bullets, roles, skills..."
+            aria-label="Search components"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button
+              className="search-clear"
+              type="button"
+              onClick={() => setSearchQuery('')}
+              aria-label="Clear search"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       {renderSection(
@@ -316,13 +432,14 @@ export function ComponentLibrary({
             Add Link
           </button>
         </div>,
+        { summary: `${data.meta.links.length + 4} fields` },
       )}
 
       {renderSection(
         'target-lines',
         'Target Lines',
         <div className="library-grid">
-          {data.target_lines.map((line) => (
+          {filteredTargetLines.map((line) => (
             <ComponentCard
               key={line.id}
               title={line.id}
@@ -340,17 +457,25 @@ export function ComponentLibrary({
             />
           ))}
         </div>,
+        {
+          summary: `${filteredTargetLines.length} items`,
+          onAdd: () => {
+            setAddType('target_line')
+            setAddOpen(true)
+          },
+          isEmpty: searchQuery ? filteredTargetLines.length === 0 : false,
+        },
       )}
 
       {renderSection(
         'profiles',
         'Profiles',
         <div className="library-grid">
-          {data.profiles.map((profile) => (
+          {filteredProfiles.map((profile) => (
             <ComponentCard
               key={profile.id}
               title={profile.id}
-              body={profile.text}
+              body={resolveDisplayText(profile.text, profile.variants, variantByKey[componentKeys.profile(profile.id)], selectedVector).displayText}
               vectors={profile.vectors}
               vectorDefs={data.vectors}
               selectedVector={selectedVector}
@@ -364,25 +489,44 @@ export function ComponentLibrary({
             />
           ))}
         </div>,
+        {
+          summary: `${filteredProfiles.length} items`,
+          onAdd: () => {
+            setAddType('profile')
+            setAddOpen(true)
+          },
+          isEmpty: searchQuery ? filteredProfiles.length === 0 : false,
+        },
       )}
 
       {renderSection(
         'skill-groups',
         'Skill Groups',
         <SkillGroupList
-          skillGroups={data.skill_groups}
+          skillGroups={filteredSkillGroups}
           vectorDefs={data.vectors}
+          selectedVector={selectedVector}
+          includedByKey={includedByKey}
           onReorder={onReorderSkillGroups}
           onUpdate={(skillGroupId, field, value) => onUpdateSkillGroup(skillGroupId, field, value)}
           onUpdateVectors={(skillGroupId, vectors) => onUpdateSkillGroupVectors(skillGroupId, vectors)}
+          onToggleIncluded={(skillGroupId) => onToggleComponent(skillGroupId, {})}
         />,
+        {
+          summary: `${filteredSkillGroups.length} groups`,
+          onAdd: () => {
+            setAddType('skill_group')
+            setAddOpen(true)
+          },
+          isEmpty: searchQuery ? filteredSkillGroups.length === 0 : false,
+        },
       )}
 
       {renderSection(
         'roles-bullets',
         'Roles & Bullets',
         <div className="library-grid role-grid">
-          {data.roles.map((role) => {
+          {filteredRoles.map((role) => {
             const orderedRole: Role = {
               ...role,
               bullets: reorderById(role.bullets, bulletOrderByRole[role.id]),
@@ -443,17 +587,26 @@ export function ComponentLibrary({
                 }
                 onReframe={(bulletId) => onReframeBullet(orderedRole.id, bulletId)}
                 reframeLoadingId={reframeLoadingId}
+                aiEnabled={aiEnabled}
               />
             )
           })}
         </div>,
+        {
+          summary: `${filteredRoles.length} roles`,
+          onAdd: () => {
+            setAddType('bullet')
+            setAddOpen(true)
+          },
+          isEmpty: searchQuery ? filteredRoles.length === 0 : false,
+        },
       )}
 
       {renderSection(
         'projects',
         'Projects',
         <ProjectList
-          projects={data.projects}
+          projects={filteredProjects}
           vectorDefs={data.vectors}
           selectedVector={selectedVector}
           includedByKey={includedByKey}
@@ -464,6 +617,14 @@ export function ComponentLibrary({
           onToggleIncluded={(id, vectors) => onToggleComponent(componentKeys.project(id), vectors)}
           onSetVariant={(id, variant) => onSetVariant(componentKeys.project(id), variant)}
         />,
+        {
+          summary: `${filteredProjects.length} projects`,
+          onAdd: () => {
+            setAddType('project')
+            setAddOpen(true)
+          },
+          isEmpty: searchQuery ? filteredProjects.length === 0 : false,
+        },
       )}
 
       {addOpen ? (

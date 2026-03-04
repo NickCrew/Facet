@@ -15,11 +15,11 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { ChevronRight, Eye, EyeOff, GripVertical, Plus, Sparkles, X } from 'lucide-react'
+import { ChevronRight, Eye, EyeOff, GripVertical, Sparkles, X } from 'lucide-react'
 import { useState } from 'react'
-import type { PriorityByVector, Role, TextVariantMap, VectorDef, VectorSelection } from '../types'
+import type { ComponentPriority, PriorityByVector, Role, TextVariantMap, VectorDef, VectorSelection } from '../types'
 import { getPriorityForVector } from '../engine/assembler'
-import { VectorPriorityEditor } from './VectorPriorityEditor'
+import { resolveDisplayText } from '../utils/resolveDisplayText'
 
 interface BulletListProps {
   role: Role
@@ -38,13 +38,14 @@ interface BulletListProps {
   onUpdateRole: (field: 'company' | 'title' | 'dates' | 'location' | 'subtitle', value: string | null) => void
   onReframe: (bulletId: string) => void
   reframeLoadingId: string | null
+  aiEnabled: boolean
 }
 
 interface SortableBulletProps {
   id: string
   text: string
   vectors: PriorityByVector
-  priority: string
+  priority: ComponentPriority
   included: boolean
   variants?: TextVariantMap
   selectedVariant?: string
@@ -56,6 +57,17 @@ interface SortableBulletProps {
   onVectorsChange: (vectors: PriorityByVector) => void
   onReframe: () => void
   isLoading: boolean
+  aiEnabled: boolean
+}
+
+function cyclePriority(current: ComponentPriority): ComponentPriority {
+  switch (current) {
+    case 'must': return 'strong'
+    case 'strong': return 'optional'
+    case 'optional': return 'exclude'
+    case 'exclude': return 'must'
+    default: return 'must'
+  }
 }
 
 function SortableBullet({
@@ -74,6 +86,7 @@ function SortableBullet({
   onVectorsChange,
   onReframe,
   isLoading,
+  aiEnabled,
 }: SortableBulletProps) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id })
   const variantEntries = Object.entries(variants ?? {})
@@ -84,8 +97,34 @@ function SortableBullet({
     transition,
   }
 
+  const handlePriorityCycle = () => {
+    if (selectedVector === 'all') return
+    const next = cyclePriority(priority)
+    const nextVectors = { ...vectors }
+    if (next === 'exclude') {
+      delete nextVectors[selectedVector]
+    } else {
+      nextVectors[selectedVector] = next
+    }
+    onVectorsChange(nextVectors)
+  }
+
+  const handleMatrixDotClick = (vectorId: string) => {
+    const currentPriority = vectors[vectorId] ?? 'exclude'
+    const next = cyclePriority(currentPriority)
+    const nextVectors = { ...vectors }
+    if (next === 'exclude') {
+      delete nextVectors[vectorId]
+    } else {
+      nextVectors[vectorId] = next
+    }
+    onVectorsChange(nextVectors)
+  }
+
   return (
     <article className={`component-card bullet-card ${included ? '' : 'dimmed'}`} ref={setNodeRef} style={style}>
+      <div className={`priority-strip priority-${priority}`} />
+      
       <header className="component-card-header">
         <div className="bullet-title-row">
           <button
@@ -98,10 +137,19 @@ function SortableBullet({
             <GripVertical size={14} />
           </button>
           <h4>Bullet</h4>
+          {selectedVector !== 'all' && (
+            <button 
+              type="button" 
+              className={`priority-quick-toggle ${priority}`}
+              onClick={handlePriorityCycle}
+              title={`Priority for current vector: ${priority}. Click to cycle.`}
+            >
+              {priority}
+            </button>
+          )}
         </div>
         <div className="component-card-actions">
-          <span className={`priority-badge priority-${priority}`}>{priority}</span>
-          {selectedVector !== 'all' && (
+          {aiEnabled && selectedVector !== 'all' && (
             <button
               type="button"
               className="btn-ghost"
@@ -110,10 +158,10 @@ function SortableBullet({
               title="AI Reframe for Vector"
               aria-busy={isLoading}
             >
-              <Sparkles size={14} className={isLoading ? 'animate-pulse' : ''} />
-              <span aria-live="polite">
+              <span className="btn-label">
                 {isLoading ? 'Reframing...' : 'Reframe'}
               </span>
+              <Sparkles size={14} className={isLoading ? 'animate-pulse' : ''} />
             </button>
           )}
           <button type="button" className="btn-ghost" aria-pressed={included} onClick={onToggle}>
@@ -128,28 +176,48 @@ function SortableBullet({
         aria-label="Bullet text"
         onChange={(event) => onChangeText(event.target.value)}
       />
-      {showVariantPicker ? (
-        <label className="field-label variant-control">
-          Variant
-          <select
-            className="component-input compact"
-            value={selectedVariant ?? 'auto'}
-            onChange={(event) => onVariantChange(event.target.value === 'auto' ? null : event.target.value)}
-          >
-            <option value="auto">Auto</option>
-            <option value="default">Default</option>
-            {variantEntries.map(([variantId]) => {
-              const vector = vectorDefs.find((item) => item.id === variantId)
-              return (
-                <option key={variantId} value={variantId}>
-                  {vector?.label ?? variantId}
-                </option>
-              )
-            })}
-          </select>
-        </label>
-      ) : null}
-      <VectorPriorityEditor vectors={vectors} vectorDefs={vectorDefs} onChange={onVectorsChange} />
+      
+      <div className="bullet-footer-row">
+        {showVariantPicker ? (
+          <label className="field-label variant-control">
+            Variant
+            <select
+              className="component-input compact"
+              value={selectedVariant ?? 'auto'}
+              onChange={(event) => onVariantChange(event.target.value === 'auto' ? null : event.target.value)}
+            >
+              <option value="auto">Auto</option>
+              <option value="default">Default</option>
+              {variantEntries.map(([variantId]) => {
+                const vector = vectorDefs.find((item) => item.id === variantId)
+                return (
+                  <option key={variantId} value={variantId}>
+                    {vector?.label ?? variantId}
+                  </option>
+                )
+              })}
+            </select>
+          </label>
+        ) : <div />}
+
+        <div className="vector-matrix">
+          {vectorDefs.map((vector, idx) => {
+            const p = vectors[vector.id] ?? 'exclude'
+            const isLastFew = idx >= vectorDefs.length - 2
+            return (
+              <button
+                key={vector.id}
+                type="button"
+                className={`matrix-dot priority-${p} ${isLastFew ? 'tooltip-left' : ''}`}
+                style={{ '--vector-color': vector.color } as any}
+                data-tooltip={`${vector.label}: ${p}`}
+                onClick={() => handleMatrixDotClick(vector.id)}
+                aria-label={`${vector.label} priority: ${p}`}
+              />
+            )
+          })}
+        </div>
+      </div>
     </article>
   )
 }
@@ -171,6 +239,7 @@ export function BulletList({
   onUpdateRole,
   onReframe,
   reframeLoadingId,
+  aiEnabled,
 }: BulletListProps) {
   const bulletIds = role.bullets.map((bullet) => bullet.id)
   const [expanded, setExpanded] = useState(true)
@@ -274,8 +343,7 @@ export function BulletList({
                 className="btn-ghost btn-add-optional"
                 onClick={() => onUpdateRole('location', '')}
               >
-                <Plus size={12} />
-                Location
+                <span>+ Location</span>
               </button>
             )}
             {role.subtitle != null ? (
@@ -303,8 +371,7 @@ export function BulletList({
                 className="btn-ghost btn-add-optional"
                 onClick={() => onUpdateRole('subtitle', '')}
               >
-                <Plus size={12} />
-                Subtitle
+                <span>+ Subtitle</span>
               </button>
             )}
           </div>
@@ -345,7 +412,7 @@ export function BulletList({
                   <SortableBullet
                     key={bullet.id}
                     id={bullet.id}
-                    text={bullet.text}
+                    text={resolveDisplayText(bullet.text, bullet.variants, variantByBulletId[bullet.id], selectedVector).displayText}
                     vectors={bullet.vectors}
                     priority={getPriorityForVector(bullet.vectors, selectedVector)}
                     included={includedByBulletId[bullet.id] ?? true}
@@ -359,23 +426,12 @@ export function BulletList({
                     onVectorsChange={(vectors) => onSetBulletVectors(bullet.id, vectors)}
                     onReframe={() => onReframe(bullet.id)}
                     isLoading={reframeLoadingId === bullet.id}
+                    aiEnabled={aiEnabled}
                   />
                 ))}
               </div>
             </SortableContext>
           </DndContext>
-
-          <div className="vector-badges">
-            {vectorDefs.map((vector) => (
-              <span
-                className="vector-badge"
-                key={vector.id}
-                style={{ ['--vector-color' as string]: vector.color }}
-              >
-                {vector.label}
-              </span>
-            ))}
-          </div>
         </div>
       </div>
     </section>

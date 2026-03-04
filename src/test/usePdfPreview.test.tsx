@@ -48,6 +48,7 @@ const createResume = (name: string): AssembledResume => ({
 const createTheme = (font = 'Inter'): ResumeTheme => ({
   id: 'ferguson-v12',
   name: 'Ferguson v1.2',
+  templateId: 'classic',
   fontBody: font,
   fontHeading: font,
   sizeBody: 9,

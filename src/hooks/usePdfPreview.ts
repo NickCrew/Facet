@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { AssembledResume, ResumeTheme } from '../types'
 import { toDataPayload, toThemePayload } from '../utils/typstRenderer'
 import { getThemeFontFiles } from '../themes/theme'
+import { TEMPLATES, DEFAULT_TEMPLATE_ID } from '../templates/registry'
 
 interface UsePdfPreviewArgs {
   resume: AssembledResume
@@ -96,12 +97,19 @@ export function usePdfPreview({ resume, theme, debounceMs = DEFAULT_DEBOUNCE_MS 
       const dataPayload = toDataPayload(resume)
       const themePayload = toThemePayload(theme)
       const fontFiles = getThemeFontFiles(theme)
+      
+      let template = TEMPLATES[theme.templateId]
+      if (!template) {
+        console.warn(`Template "${theme.templateId}" not found in registry. Falling back to "${DEFAULT_TEMPLATE_ID}".`)
+        template = TEMPLATES[DEFAULT_TEMPLATE_ID]
+      }
 
       workerRef.current.postMessage({
         id: generation,
         dataPayload,
         themePayload,
-        fontFiles
+        fontFiles,
+        templateContent: template.content,
       })
     }, debounceMs)
 
