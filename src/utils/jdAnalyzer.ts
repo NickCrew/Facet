@@ -35,12 +35,11 @@ const MAX_JD_WORDS = 1800
 const REQUEST_TIMEOUT_MS = 30_000
 class JsonExtractionError extends Error {}
 
-const callAnthropicProxy = async (
+const callLlmProxy = async (
   endpoint: string,
   systemPrompt: string,
   userPrompt: string,
   options: JdAnalysisRequestOptions = {},
-  extraBody: Record<string, unknown> = {},
 ): Promise<string> => {
   const normalizedEndpoint = normalizeEndpoint(endpoint)
   const timeoutController = new AbortController()
@@ -60,9 +59,11 @@ const callAnthropicProxy = async (
       signal: timeoutController.signal,
       body: JSON.stringify({
         model: MODEL_ID,
-        system_prompt: systemPrompt,
-        prompt: userPrompt,
-        ...extraBody,
+        max_tokens: 4096,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
       }),
     })
     if (response.status >= 300 && response.status < 400) {
@@ -70,7 +71,7 @@ const callAnthropicProxy = async (
     }
     if (!response.ok) {
       const errorBody = (await response.text()).trim().replace(/\s+/g, ' ').slice(0, 200)
-      throw new Error(`Anthropic API error (${response.status}): ${errorBody || 'Request failed.'}`)
+      throw new Error(`AI proxy error (${response.status}): ${errorBody || 'Request failed.'}`)
     }
 
     const payload = (await response.json()) as unknown
@@ -79,7 +80,16 @@ const callAnthropicProxy = async (
     }
 
     const payloadRecord = payload as Record<string, unknown>
-    
+
+    // OpenAI chat completions format: { choices: [{ message: { content: "..." } }] }
+    if (Array.isArray(payloadRecord.choices)) {
+      const firstChoice = payloadRecord.choices[0] as Record<string, unknown> | undefined
+      const message = firstChoice?.message as Record<string, unknown> | undefined
+      if (message && typeof message.content === 'string') {
+        return message.content
+      }
+    }
+
     // Check for nested analysis property (Format 1)
     if (payloadRecord.analysis && typeof payloadRecord.analysis === 'object') {
       return JSON.stringify(payloadRecord.analysis)
@@ -132,7 +142,7 @@ Target Vector: "${vectorLabel}"
 
 Respond in JSON only.`
 
-  const rawResponse = await callAnthropicProxy(endpoint, systemPrompt, userPrompt, options)
+  const rawResponse = await callLlmProxy(endpoint, systemPrompt, userPrompt, options)
   
   try {
     const parsed = JSON.parse(extractJsonBlock(rawResponse)) as Partial<ReframedBulletResult>
@@ -400,10 +410,7 @@ export const analyzeJobDescription = async (
   const contextJson = JSON.stringify(contextObject)
   const userPrompt = `Job description:\n${preparedJd.content}\n\nCandidate data:\n${contextJson}\n\nRespond in JSON only.`
 
-  const rawText = await callAnthropicProxy(endpoint, systemPrompt, userPrompt, options, {
-    job_description: preparedJd.content,
-    resume_data: contextObject,
-  })
+  const rawText = await callLlmProxy(endpoint, systemPrompt, userPrompt, options)
   return parseJdAnalysisResponseWithKnownBullets(rawText, data)
 }
 
