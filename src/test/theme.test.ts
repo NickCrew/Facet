@@ -127,9 +127,44 @@ describe('theme helpers', () => {
     expect(result).toBeUndefined()
   })
 
-  it('rejects invalid datesAlignment values', () => {
+  it('normalizes string overrides (trim, truncate, reject empty)', () => {
+    // 90 char string
+    const longString = 'a'.repeat(90)
+    const resultLong = sanitizeThemeOverrides(
+      { fontBody: `  ${longString}  ` },
+      'ferguson-v12',
+    )
+    expect(resultLong?.fontBody).toHaveLength(80)
+    expect(resultLong?.fontBody).not.toContain(' ')
+
+    const resultEmpty = sanitizeThemeOverrides(
+      { fontBody: '   ' },
+      'ferguson-v12',
+    )
+    expect(resultEmpty).toBeUndefined()
+  })
+
+  it('accepts valid enum-style overrides', () => {
     const result = sanitizeThemeOverrides(
-      { datesAlignment: 'stacked' as never },
+      {
+        sectionHeaderStyle: 'bold-only',
+        datesAlignment: 'inline',
+        nameAlignment: 'left',
+        bulletChar: '▸',
+      },
+      'ferguson-v12',
+    )
+    expect(result).toEqual({
+      sectionHeaderStyle: 'bold-only',
+      datesAlignment: 'inline',
+      nameAlignment: 'left',
+      bulletChar: '▸',
+    })
+  })
+
+  it('rejects 3-char hex colors', () => {
+    const result = sanitizeThemeOverrides(
+      { colorBody: '#abc' },
       'ferguson-v12',
     )
     expect(result).toBeUndefined()
@@ -152,12 +187,45 @@ describe('theme helpers', () => {
   })
 
   it('clamps out-of-range number overrides', () => {
-    const result = sanitizeThemeOverrides(
+    const resultMax = sanitizeThemeOverrides(
       { sizeBody: 100 },
       'ferguson-v12',
     )
     // sizeBody max is 14, preset default is 9
-    expect(result).toEqual({ sizeBody: 14 })
+    expect(resultMax).toEqual({ sizeBody: 14 })
+
+    const resultMin = sanitizeThemeOverrides(
+      { sizeBody: 1 },
+      'ferguson-v12',
+    )
+    // sizeBody min is 7
+    expect(resultMin).toEqual({ sizeBody: 7 })
+  })
+
+  it('accepts boolean overrides for boolean keys', () => {
+    // ferguson-v12 defaults nameBold to true
+    const result = sanitizeThemeOverrides(
+      { nameBold: false },
+      'ferguson-v12',
+    )
+    expect(result).toEqual({ nameBold: false })
+  })
+
+  it('rejects non-boolean values for boolean keys', () => {
+    const result = sanitizeThemeOverrides(
+      { nameBold: 'yes' as never },
+      'ferguson-v12',
+    )
+    expect(result).toBeUndefined()
+  })
+
+  it('ensures legacy override aliases do not overwrite existing canonical keys', () => {
+    const result = sanitizeThemeOverrides(
+      { sectionGap: 20, sectionGapBefore: 8 } as any,
+      'ferguson-v12',
+    )
+    // ferguson-v12 default for sectionGapBefore is 14
+    expect(result).toEqual({ sectionGapBefore: 8 })
   })
 
   it('strips undefined/null override values', () => {

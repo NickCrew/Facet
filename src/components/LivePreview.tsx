@@ -1,18 +1,26 @@
-import type { CSSProperties } from 'react'
+import { useMemo, type CSSProperties } from 'react'
 import type { AssembledResume, ResumeTheme } from '../types'
 import { toLinkDisplayText, toLinkHref } from '../utils/linkFormatting'
+import { pointsToPixels, inchesToPixels, toHexColor, US_LETTER_HEIGHT_PX } from '../utils/unitConversions'
 
 interface LivePreviewProps {
   assembled: AssembledResume
   theme: ResumeTheme
+  showHeatmap?: boolean
 }
 
-const pointsToPixels = (value: number): string => `${(value * 1.333).toFixed(2)}px`
-const inchesToPixels = (value: number): string => `${(value * 96).toFixed(2)}px`
-const toHexColor = (value: string): string => (value.startsWith('#') ? value : `#${value}`)
+export const buildPreviewVars = (theme: ResumeTheme): CSSProperties => {
+  /**
+   * Sync leading with Typst:
+   * Typst: leading = if lineHeight <= 1 { 0pt } else { (lineHeight - 1) * sizeBody }
+   * CSS: line-height = (sizeBody + leading) / sizeBody
+   *
+   * Note: Sub-1 lineHeight values floor to 1.0 (leading 0pt) to match Typst template logic.
+   */
+  const leading = theme.lineHeight <= 1 ? 0 : (theme.lineHeight - 1) * theme.sizeBody
+  const cssLineHeight = (theme.sizeBody + leading) / theme.sizeBody
 
-const buildPreviewVars = (theme: ResumeTheme): CSSProperties =>
-  ({
+  return {
     '--preview-font-body': theme.fontBody,
     '--preview-font-heading': theme.fontHeading,
     '--preview-size-body': pointsToPixels(theme.sizeBody),
@@ -23,11 +31,13 @@ const buildPreviewVars = (theme: ResumeTheme): CSSProperties =>
     '--preview-size-small': pointsToPixels(theme.sizeSmall),
     '--preview-size-contact': pointsToPixels(theme.sizeContact),
     '--preview-size-project-url': pointsToPixels(theme.projectUrlSize),
-    '--preview-line-height': theme.lineHeight.toString(),
+    '--preview-line-height': cssLineHeight.toFixed(3),
     '--preview-bullet-gap': pointsToPixels(theme.bulletGap),
     '--preview-section-gap-before': pointsToPixels(theme.sectionGapBefore),
     '--preview-section-gap-after': pointsToPixels(theme.sectionGapAfter),
+    '--preview-section-rule-gap': pointsToPixels(theme.sectionRuleGap),
     '--preview-role-gap': pointsToPixels(theme.roleGap),
+    '--preview-role-header-gap': pointsToPixels(theme.roleHeaderGap),
     '--preview-role-line-gap-after': pointsToPixels(theme.roleLineGapAfter),
     '--preview-paragraph-gap': pointsToPixels(theme.paragraphGap),
     '--preview-contact-gap-after': pointsToPixels(theme.contactGapAfter),
@@ -62,10 +72,16 @@ const buildPreviewVars = (theme: ResumeTheme): CSSProperties =>
     '--preview-competency-label-weight': theme.competencyLabelBold ? '700' : '400',
     '--preview-project-name-weight': theme.projectNameBold ? '700' : '400',
     '--preview-education-school-weight': theme.educationSchoolBold ? '700' : '400',
-  }) as CSSProperties
 
-export function LivePreview({ assembled, theme }: LivePreviewProps) {
-  const previewStyle = buildPreviewVars(theme)
+    // Template-specific tokens
+    '--preview-sidebar-width': theme.sidebarWidth ? inchesToPixels(theme.sidebarWidth) : '2.2in',
+    '--preview-sidebar-color': theme.sidebarColor ? toHexColor(theme.sidebarColor) : '#f8f9fa',
+    '--preview-column-gap': theme.columnGap ? pointsToPixels(theme.columnGap) : '24px',
+  } as CSSProperties
+}
+
+export function LivePreview({ assembled, theme, showHeatmap }: LivePreviewProps) {
+  const previewStyle = useMemo(() => buildPreviewVars(theme), [theme])
   const isNoBulletTheme = theme.bulletChar === 'none'
 
   const contactParts = [assembled.header.email, assembled.header.phone, assembled.header.location]
@@ -78,11 +94,172 @@ export function LivePreview({ assembled, theme }: LivePreviewProps) {
     }))
     .filter((link) => link.href.length > 0 && link.text.length > 0)
 
+  const renderContent = () => {
+    return (
+      <>
+        {assembled.targetLine ? (
+          <p className="target-line">{assembled.targetLine.text}</p>
+        ) : null}
+
+        {assembled.profile ? (
+          <section className="resume-section">
+            <p className="profile-text">{assembled.profile.text}</p>
+          </section>
+        ) : null}
+
+        {assembled.skillGroups.length > 0 && theme.templateId !== 'sidebar' ? (
+          <section className="resume-section">
+            <h2>{formatSectionLabel(theme.sectionHeaderStyle, 'SKILLS')}</h2>
+            <div className="skills-grid">
+              {assembled.skillGroups.map((group) => (
+                <div key={group.id} className="skill-group">
+                  <strong>{group.label}:</strong> {group.content}
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {assembled.roles.length > 0 ? (
+          <section className="resume-section">
+            <h2>{formatSectionLabel(theme.sectionHeaderStyle, 'EXPERIENCE')}</h2>
+            {assembled.roles.map((role) => (
+              <div key={role.id} className="role-entry">
+                <div className="role-header">
+                  <div className="role-header-main">
+                    <span className="company-name">{role.company}</span>
+                    {role.dates && (
+                      <span className="role-dates">{role.dates}</span>
+                    )}
+                  </div>
+                  <div className="role-header-sub">
+                    <span className="role-title">{role.title}</span>
+                    {role.location && (
+                      <span className="role-location">{role.location}</span>
+                    )}
+                  </div>
+                </div>
+                {role.subtitle && <p className="role-subtitle">{role.subtitle}</p>}
+                <ul className={`bullet-list ${isNoBulletTheme ? 'no-bullets' : ''}`}>
+                  {role.bullets.map((bullet) => (
+                    <li key={bullet.id}>{bullet.text}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </section>
+        ) : null}
+
+        {assembled.projects.length > 0 ? (
+          <section className="resume-section">
+            <h2>{formatSectionLabel(theme.sectionHeaderStyle, 'PROJECTS')}</h2>
+            {assembled.projects.map((project) => (
+              <div key={project.id} className="project-entry">
+                <div className="project-header">
+                  <span className="project-name">{project.name}</span>
+                  {project.url && (
+                    <span className="project-url">({project.url})</span>
+                  )}
+                </div>
+                <p className="project-text">{project.text}</p>
+              </div>
+            ))}
+          </section>
+        ) : null}
+
+        {assembled.education.length > 0 && theme.templateId !== 'sidebar' ? (
+          <section className="resume-section">
+            <h2>{formatSectionLabel(theme.sectionHeaderStyle, 'EDUCATION')}</h2>
+            <ul className="education-list">
+              {assembled.education.map((item) => (
+                <li key={`${item.school}-${item.degree}`} className="education-row">
+                  <strong>{item.school}</strong>, {item.location} - {item.degree}{item.year ? ` (${item.year})` : ''}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+      </>
+    )
+  }
+
+  if (theme.templateId === 'sidebar') {
+    return (
+      <div
+        className={`preview-shell section-style-${theme.sectionHeaderStyle} dates-alignment-${
+          theme.datesAlignment
+        } template-sidebar ${showHeatmap ? 'show-heatmap' : ''}`}
+        style={previewStyle}
+      >
+        <div className="preview-paper sidebar-layout">
+          <aside className="preview-sidebar">
+            <header className="resume-header">
+              <h1>{assembled.header.name}</h1>
+              <div className="resume-contact-block">
+                {contactParts.map((part, idx) => (
+                  <p key={idx} className="resume-contact">{part}</p>
+                ))}
+                {linkParts.map((link) => (
+                  <p key={link.href} className="resume-contact">
+                    <a href={link.href} target="_blank" rel="noreferrer">
+                      {link.text}
+                    </a>
+                  </p>
+                ))}
+              </div>
+            </header>
+
+            {assembled.skillGroups.length > 0 && (
+              <section className="resume-section">
+                <h2>{formatSectionLabel(theme.sectionHeaderStyle, 'SKILLS')}</h2>
+                <div className="skills-sidebar">
+                  {assembled.skillGroups.map((group) => (
+                    <div key={group.id} className="skill-group">
+                      <strong>{group.label}:</strong> {group.content}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {assembled.education.length > 0 && (
+              <section className="resume-section">
+                <h2>{formatSectionLabel(theme.sectionHeaderStyle, 'EDUCATION')}</h2>
+                <ul className="education-list-sidebar">
+                  {assembled.education.map((item) => (
+                    <li key={`${item.school}-${item.degree}`} className="education-row">
+                      <strong>{item.school}</strong><br />
+                      {item.degree}{item.year ? ` (${item.year})` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </aside>
+          <main className="preview-main">
+            {renderContent()}
+          </main>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
-      className={`preview-shell section-style-${theme.sectionHeaderStyle} dates-alignment-${theme.datesAlignment}`}
+      className={`preview-shell section-style-${theme.sectionHeaderStyle} dates-alignment-${
+        theme.datesAlignment
+      } template-${theme.templateId} ${showHeatmap ? 'show-heatmap' : ''}`}
       style={previewStyle}
     >
+      {[...Array(3)].map((_, i) => (
+        <div
+          key={i}
+          className="preview-page-guide"
+          style={{ top: `calc(var(--space-6) + ${US_LETTER_HEIGHT_PX * (i + 1)}px)` }}
+          data-page={i + 2}
+          aria-hidden="true"
+        />
+      ))}
       <article className="preview-paper">
         <header className="resume-header">
           <h1>{assembled.header.name}</h1>
@@ -90,9 +267,9 @@ export function LivePreview({ assembled, theme }: LivePreviewProps) {
             {contactParts.length ? <p className="resume-contact">{contactParts.join(' | ')}</p> : null}
             {linkParts.length ? (
               <p className="resume-contact">
-                {linkParts.map((link, index) => (
-                  <span key={`${link.href}-${index}`}>
-                    {index > 0 ? ' | ' : null}
+                {linkParts.map((link, idx) => (
+                  <span key={link.href}>
+                    {idx > 0 ? ' | ' : ''}
                     <a href={link.href} target="_blank" rel="noreferrer">
                       {link.text}
                     </a>
@@ -101,85 +278,16 @@ export function LivePreview({ assembled, theme }: LivePreviewProps) {
               </p>
             ) : null}
           </div>
-          {assembled.targetLine ? <p className="target-line">{assembled.targetLine.text}</p> : null}
         </header>
-
-        {assembled.profile ? (
-          <section>
-            <h2>Profile</h2>
-            <p>{assembled.profile.text}</p>
-          </section>
-        ) : null}
-
-        {assembled.skillGroups.length ? (
-          <section>
-            <h2>Skills</h2>
-            <ul className="plain-list">
-              {assembled.skillGroups.map((skillGroup) => (
-                <li key={skillGroup.label} className="preview-competency-row">
-                  <strong>{skillGroup.label}: </strong>
-                  {skillGroup.content}
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-
-        {assembled.roles.length ? (
-          <section>
-            <h2>Experience</h2>
-            <div className="role-preview-list">
-              {assembled.roles.map((role) => (
-                <article key={`${role.company}-${role.title}-${role.dates}`}>
-                  <header className="role-preview-header">
-                    <div className="role-company-line">
-                      <strong>{role.company}</strong>
-                      {role.dates.trim().length > 0 ? <span>{role.dates}</span> : null}
-                    </div>
-                    <p className="role-title-line">{role.title}</p>
-                  </header>
-                  {role.subtitle ? <p className="role-subtitle-line">{role.subtitle}</p> : null}
-                  <ul className={isNoBulletTheme ? 'plain-list no-bullets' : 'preview-bullet-list'}>
-                    {role.bullets.map((bullet, index) => (
-                      <li key={`${role.company}-bullet-${index}`} className="preview-bullet-item">
-                        {bullet.text}
-                      </li>
-                    ))}
-                  </ul>
-                </article>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {assembled.projects.length ? (
-          <section>
-            <h2>Projects</h2>
-            <ul className="plain-list">
-              {assembled.projects.map((project) => (
-                <li key={project.name} className="project-preview-row">
-                  <strong>{project.name}</strong>
-                  {project.url ? <span className="project-preview-url"> ({project.url})</span> : null}
-                  <span>: {project.text}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-
-        {assembled.education.length ? (
-          <section>
-            <h2>Education</h2>
-            <ul className="plain-list">
-              {assembled.education.map((item) => (
-                <li key={`${item.school}-${item.year}`} className="education-preview-row">
-                  <strong>{item.school}</strong>, {item.location} - {item.degree} ({item.year})
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
+        {renderContent()}
       </article>
     </div>
   )
+}
+
+function formatSectionLabel(style: ResumeTheme['sectionHeaderStyle'], defaultLabel: string): string {
+  if (style === 'caps-rule') {
+    return defaultLabel.toUpperCase()
+  }
+  return defaultLabel.charAt(0).toUpperCase() + defaultLabel.slice(1).toLowerCase()
 }

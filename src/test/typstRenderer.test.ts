@@ -64,6 +64,7 @@ const loadRenderer = () => import('../utils/typstRenderer')
 const createTheme = (): ResumeTheme => ({
   id: 'ferguson-v12',
   name: 'Ferguson v1.2',
+  templateId: 'classic',
   fontBody: 'Unknown Font',
   fontHeading: 'Unknown Font',
   sizeBody: 9,

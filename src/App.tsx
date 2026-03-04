@@ -1338,6 +1338,7 @@ function App() {
               onResetRoleBulletOrder={(roleId) => resetRoleBulletOrder(vectorKey, roleId)}
               onReframeBullet={onReframeBullet}
               reframeLoadingId={reframeLoadingId}
+              aiEnabled={!!jdAnalysisEndpoint}
               onAddComponent={onAddComponent}
             />
               </div>

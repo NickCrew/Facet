@@ -9,9 +9,15 @@ export interface UiState {
   selectedVector: VectorSelection
   panelRatio: number
   appearance: 'light' | 'dark' | 'system'
+  viewMode: 'pdf' | 'live'
+  showHeatmap: boolean
+  showDesignHealth: boolean
   setSelectedVector: (vector: VectorSelection) => void
   setPanelRatio: (ratio: number) => void
   setAppearance: (appearance: 'light' | 'dark' | 'system') => void
+  setViewMode: (mode: 'pdf' | 'live') => void
+  setShowHeatmap: (show: boolean) => void
+  setShowDesignHealth: (show: boolean) => void
 }
 
 export const toVectorKey = (selectedVector: VectorSelection): VectorKey => selectedVector
@@ -22,9 +28,15 @@ export const useUiStore = create<UiState>()(
       selectedVector: 'all',
       panelRatio: 0.45,
       appearance: 'system',
+      viewMode: 'pdf',
+      showHeatmap: false,
+      showDesignHealth: false,
       setSelectedVector: (vector) => set({ selectedVector: vector }),
       setPanelRatio: (ratio) => set({ panelRatio: Math.min(0.7, Math.max(0.3, ratio)) }),
       setAppearance: (appearance) => set({ appearance }),
+      setViewMode: (mode) => set({ viewMode: mode }),
+      setShowHeatmap: (show) => set({ showHeatmap: show }),
+      setShowDesignHealth: (show) => set({ showDesignHealth: show }),
     }),
     {
       // ⚠️ Keep in sync with index.html inline theme script

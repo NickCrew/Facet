@@ -1,14 +1,16 @@
-import resumeTemplate from '../templates/resume.typ?raw'
 import { getTypstSnippet, toPdfPageCount } from '../utils/typstRendererUtils'
 
 self.onmessage = async (event) => {
-  const { id, fontFiles, dataPayload, themePayload } = event.data
+  const { id, fontFiles, dataPayload, themePayload, templateContent } = event.data
 
   try {
+    if (!templateContent) {
+      throw new Error(`Missing templateContent in worker message (id: ${id})`)
+    }
     const snippet = await getTypstSnippet(fontFiles)
     
     const pdfBytes = await snippet.pdf({
-      mainContent: resumeTemplate,
+      mainContent: templateContent,
       inputs: {
         data: JSON.stringify(dataPayload),
         theme: JSON.stringify(themePayload),
