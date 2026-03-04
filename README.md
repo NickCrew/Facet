@@ -1,12 +1,14 @@
 <p align="center">
-  <h1 align="center">Facet</h1>
-  <p align="center">
-    <strong>One career library. Countless angles.</strong>
-  </p>
+  <img src="docs/assets/facet-banner.png" alt="Facet — Same Diamond, Different Face" width="100%" />
 </p>
 
 <p align="center">
-  <a href="#"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/OWNER/facet/ci.yml?branch=main&style=flat-square" /></a>
+  <strong>Strategic resume assembly for senior engineers.</strong><br />
+  One career library. Countless angles.
+</p>
+
+<p align="center">
+  <a href="https://github.com/NickCrew/Facet/actions"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/NickCrew/Facet/ci.yml?branch=main&style=flat-square" /></a>
   <a href="#license"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" /></a>
   <a href="#"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white" /></a>
   <a href="#"><img alt="React 19" src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" /></a>
@@ -71,7 +73,7 @@ _For details and other platforms — see https://github.com/casey/just#installat
 ### Installation
 
 ```bash
-git clone https://github.com/OWNER/facet.git
+git clone https://github.com/NickCrew/Facet.git
 cd facet
 just install
 ```
