@@ -30,7 +30,7 @@ describe('jdAnalyzer', () => {
       
       vi.mocked(fetch).mockResolvedValue({
         ok: true,
-        json: async () => ({ content: [{ type: 'text', text: JSON.stringify(mockResponse) }] })
+        json: async () => ({ choices: [{ message: { content: JSON.stringify(mockResponse) } }] })
       } as Response)
 
       const result = await reframeBulletForVector('Original text', 'Vector 1', mockEndpoint)
@@ -65,7 +65,7 @@ describe('jdAnalyzer', () => {
       } as Response)
 
       await expect(reframeBulletForVector('Original text', 'Vector 1', mockEndpoint))
-        .rejects.toThrow('Anthropic API error (500)')
+        .rejects.toThrow('AI proxy error (500)')
     })
   })
 
@@ -81,7 +81,7 @@ describe('jdAnalyzer', () => {
 
       vi.mocked(fetch).mockResolvedValue({
         ok: true,
-        json: async () => mockResult
+        json: async () => ({ choices: [{ message: { content: JSON.stringify(mockResult) } }] })
       } as Response)
 
       const result = await analyzeJobDescription(
