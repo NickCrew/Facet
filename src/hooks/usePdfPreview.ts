@@ -85,10 +85,10 @@ export function usePdfPreview({ resume, theme, debounceMs = DEFAULT_DEBOUNCE_MS 
     const generation = renderGenerationRef.current + 1
     renderGenerationRef.current = generation
 
-    setPending(true)
-    setError(null)
-
     const timer = window.setTimeout(() => {
+      setPending(true)
+      setError(null)
+
       if (!workerRef.current) {
         setPending(false)
         return

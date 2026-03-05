@@ -43,7 +43,7 @@ export const useUiStore = create<UiState>()(
       name: 'vector-resume-ui',
       version: 4,
       storage: createJSONStorage(resolveStorage),
-      migrate: (persistedState: any, _version: number) => {
+      migrate: (persistedState: unknown) => {
         // We're versioning purely to force cleanup of old override data
         // that moved to resumeStore, but we want to keep current UI preferences
         // if they are compatible.

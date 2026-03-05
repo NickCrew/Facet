@@ -7,6 +7,7 @@ import {
   resolveThemeFontFamily,
   sanitizeThemeOverrides,
 } from '../themes/theme'
+import type { ResumeThemeOverrides } from '../types'
 
 describe('theme helpers', () => {
   it('defaults to ferguson v1.2 when theme is missing', () => {
@@ -221,7 +222,7 @@ describe('theme helpers', () => {
 
   it('ensures legacy override aliases do not overwrite existing canonical keys', () => {
     const result = sanitizeThemeOverrides(
-      { sectionGap: 20, sectionGapBefore: 8 } as any,
+      { sectionGap: 20, sectionGapBefore: 8 } as unknown as ResumeThemeOverrides,
       'ferguson-v12',
     )
     // ferguson-v12 default for sectionGapBefore is 14

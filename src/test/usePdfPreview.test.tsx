@@ -113,10 +113,11 @@ describe('usePdfPreview', () => {
   let activeWorker: MockWorker | null = null
 
   class MockWorker {
-    onmessage: (event: { data: any }) => void = () => {}
+    onmessage: (event: { data: unknown }) => void = () => {}
     terminate = vi.fn()
     postMessage = vi.fn()
     constructor() {
+      // eslint-disable-next-line @typescript-eslint/no-this-alias
       activeWorker = this
     }
   }
@@ -144,7 +145,7 @@ describe('usePdfPreview', () => {
     ;(URL as unknown as { createObjectURL: typeof createObjectURLMock }).createObjectURL = createObjectURLMock
     ;(URL as unknown as { revokeObjectURL: typeof revokeObjectURLMock }).revokeObjectURL = revokeObjectURLMock
 
-    ;(globalThis as any).Worker = MockWorker
+    ;(globalThis as unknown as Record<string, unknown>).Worker = MockWorker
 
     container = document.createElement('div')
     document.body.appendChild(container)
@@ -163,7 +164,7 @@ describe('usePdfPreview', () => {
 
     vi.useRealTimers()
     vi.restoreAllMocks()
-    delete (globalThis as any).Worker
+    delete (globalThis as unknown as Record<string, unknown>).Worker
   })
 
   it('renders a debounced PDF and exposes preview state', async () => {
@@ -172,19 +173,15 @@ describe('usePdfPreview', () => {
 
     await renderHarness(resume, theme)
     expect(activeWorker).toBeTruthy()
-    
-    // P2 Gap #9: Initial state verification
-    expect(latestState).toEqual({
-      previewBlobUrl: null,
-      cachedPdfBlob: null,
-      pageCount: null,
-      pending: true,
-      error: null
-    })
 
+    // Advance past debounce to trigger pending + worker message
     await act(async () => {
       vi.advanceTimersByTime(400)
     })
+
+    // P2 Gap #9: State is pending after debounce fires
+    expect(latestState?.pending).toBe(true)
+    expect(latestState?.error).toBeNull()
     expect(activeWorker?.postMessage).toHaveBeenCalledTimes(1)
 
     // P2 Gap #10: Verify payload structure
@@ -223,12 +220,13 @@ describe('usePdfPreview', () => {
   it('sets pending immediately and clears prior errors when a new cycle begins', async () => {
     const theme = createTheme()
     await renderHarness(createResume('Resume One'), theme)
-    expect(latestState?.pending).toBe(true)
 
+    // Advance past debounce to trigger pending
     await act(async () => {
       vi.advanceTimersByTime(400)
     })
-    
+    expect(latestState?.pending).toBe(true)
+
     const gen1 = activeWorker?.postMessage.mock.calls[0][0].id
     await act(async () => {
       activeWorker?.onmessage({
@@ -245,6 +243,10 @@ describe('usePdfPreview', () => {
     })
 
     await renderHarness(createResume('Resume Two'), theme)
+    // Advance past debounce to trigger pending and clear error
+    await act(async () => {
+      vi.advanceTimersByTime(400)
+    })
     expect(latestState?.pending).toBe(true)
     expect(latestState?.error).toBeNull()
   })

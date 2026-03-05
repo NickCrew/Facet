@@ -47,8 +47,8 @@ describe('toTemplateResumeData', () => {
     
     // Check that role bullets are just strings, no id or priority
     expect(result.roles[0].bullets[0]).toBe('Text')
-    expect((result.roles[0].bullets[0] as any).id).toBeUndefined()
-    expect((result.roles[0].bullets[0] as any).priority).toBeUndefined()
+    expect((result.roles[0].bullets[0] as unknown as Record<string, unknown>).id).toBeUndefined()
+    expect((result.roles[0].bullets[0] as unknown as Record<string, unknown>).priority).toBeUndefined()
   })
 
   it('handles optional profile and targetLine correctly', () => {

@@ -40,6 +40,7 @@ interface ResumeState {
   resetRoleBulletOrder: (vectorId: VectorId | 'all', roleId: string) => void
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration handles raw persisted state with unknown shape
 export function resumeMigration(persistedState: any, version: number, legacyUiData: string | null = legacyUiStoreSnapshot) {
   if (version < 2 && !persistedState.data._overridesMigrated) {
     // Attempt to recover positioning overrides from the old uiStore location

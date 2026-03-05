@@ -199,7 +199,7 @@ function SortableProjectCard({
                 key={vector.id}
                 type="button"
                 className={`matrix-dot priority-${p} ${isLastFew ? 'tooltip-left' : ''}`}
-                style={{ '--vector-color': vector.color } as any}
+                style={{ '--vector-color': vector.color } as React.CSSProperties}
                 data-tooltip={`${vector.label}: ${p}`}
                 onClick={() => handleMatrixDotClick(vector.id)}
                 aria-label={`${vector.label} priority: ${p}`}

@@ -9,6 +9,7 @@ interface LivePreviewProps {
   showHeatmap?: boolean
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- used by tests
 export const buildPreviewVars = (theme: ResumeTheme): CSSProperties => {
   /**
    * Sync leading with Typst:

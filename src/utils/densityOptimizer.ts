@@ -31,9 +31,9 @@ export async function findOptimalDensity(
 
     const currentOverrides: ResumeThemeOverrides = {}
     for (const key of THEME_DENSITY_KEYS) {
-      const baseValue = (baseTheme as any)[key]
+      const baseValue = baseTheme[key as keyof ResumeTheme]
       if (typeof baseValue === 'number') {
-        ;(currentOverrides as any)[key] = Number((baseValue * currentMultiplier).toFixed(3))
+        ;(currentOverrides as Record<string, number>)[key] = Number((baseValue * currentMultiplier).toFixed(3))
       }
     }
 
