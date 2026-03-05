@@ -97,7 +97,17 @@
       #set align(left)
       #grid(
         columns: (1fr, auto),
-        [#text(weight: "bold", size: to-pt(theme.sizeCompanyName))[#role.company]],
+        [
+          #text(weight: "bold", size: to-pt(theme.sizeCompanyName))[#role.company]
+          #if role.subtitle != none and role.subtitle != "" [
+            #text(size: to-pt(theme.sizeSmall))[ ]
+            #text(
+              style: if theme.subtitleItalic { "italic" } else { "normal" },
+              fill: to-color(theme.subtitleColor),
+              size: to-pt(theme.sizeSmall),
+            )[#role.subtitle]
+          ]
+        ],
         [#text(fill: to-color(theme.datesColor), size: to-pt(theme.sizeSmall))[#role.dates]]
       )
       #grid(
