@@ -129,6 +129,7 @@ export function LivePreview({ assembled, theme, showHeatmap }: LivePreviewProps)
                 <div className="role-header">
                   <div className="role-header-main">
                     <span className="company-name">{role.company}</span>
+                    {role.subtitle && <span className="role-subtitle">{role.subtitle}</span>}
                     {role.dates && (
                       <span className="role-dates">{role.dates}</span>
                     )}
@@ -140,7 +141,6 @@ export function LivePreview({ assembled, theme, showHeatmap }: LivePreviewProps)
                     )}
                   </div>
                 </div>
-                {role.subtitle && <p className="role-subtitle">{role.subtitle}</p>}
                 <ul className={`bullet-list ${isNoBulletTheme ? 'no-bullets' : ''}`}>
                   {role.bullets.map((bullet) => (
                     <li key={bullet.id}>{bullet.text}</li>

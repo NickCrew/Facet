@@ -131,7 +131,13 @@
           #block(width: 100%, breakable: true)[
             #grid(
               columns: (1fr, auto),
-              [#text(weight: if theme.companyBold { "bold" } else { "regular" }, size: to-pt(theme.sizeCompanyName), fill: to-color(theme.colorHeading))[#role.company]],
+              [
+              #text(weight: if theme.companyBold { "bold" } else { "regular" }, size: to-pt(theme.sizeCompanyName), fill: to-color(theme.colorHeading))[#role.company]
+              #if role.subtitle != none and role.subtitle != "" [
+                #text(size: to-pt(theme.sizeSmall))[ ]
+                #text(style: if theme.subtitleItalic { "italic" } else { "normal" }, fill: to-color(theme.subtitleColor), size: to-pt(theme.sizeSmall))[#role.subtitle]
+              ]
+            ],
               [#text(fill: to-color(theme.datesColor), size: to-pt(theme.sizeSmall))[#role.dates]]
             )
             #grid(
@@ -139,10 +145,6 @@
               [#text(style: if theme.roleTitleItalic { "italic" } else { "normal" }, size: to-pt(theme.sizeRoleTitle), fill: to-color(theme.roleTitleColor))[#role.title]],
               [#text(fill: to-color(theme.colorDim), size: to-pt(theme.sizeSmall))[#role.location]]
             )
-            #if role.subtitle != none [
-              #v(to-pt(theme.roleHeaderGap))
-              #text(style: if theme.subtitleItalic { "italic" } else { "normal" }, fill: to-color(theme.subtitleColor), size: to-pt(theme.sizeSmall))[#role.subtitle]
-            ]
             #v(to-pt(theme.roleLineGapAfter))
             #for bullet in role.bullets [
               #grid(
