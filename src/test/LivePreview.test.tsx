@@ -45,21 +45,21 @@ describe('LivePreview helpers', () => {
   })
 
   it('buildPreviewVars floors lineHeight <= 1', () => {
-    const varsLow = buildPreviewVars({ ...theme, lineHeight: 0.8, sizeBody: 10 }) as any
+    const varsLow = buildPreviewVars({ ...theme, lineHeight: 0.8, sizeBody: 10 }) as Record<string, string>
     expect(varsLow['--preview-line-height']).toBe('1.000')
 
-    const varsOne = buildPreviewVars({ ...theme, lineHeight: 1.0, sizeBody: 10 }) as any
+    const varsOne = buildPreviewVars({ ...theme, lineHeight: 1.0, sizeBody: 10 }) as Record<string, string>
     expect(varsOne['--preview-line-height']).toBe('1.000')
 
-    const varsNormal = buildPreviewVars({ ...theme, lineHeight: 1.5, sizeBody: 10 }) as any
+    const varsNormal = buildPreviewVars({ ...theme, lineHeight: 1.5, sizeBody: 10 }) as Record<string, string>
     expect(varsNormal['--preview-line-height']).toBe('1.500')
   })
 
   it('buildPreviewVars formats bulletChar correctly', () => {
-    const varsNone = buildPreviewVars({ ...theme, bulletChar: 'none' }) as any
+    const varsNone = buildPreviewVars({ ...theme, bulletChar: 'none' }) as Record<string, string>
     expect(varsNone['--preview-bullet-char']).toBe('""')
 
-    const varsBullet = buildPreviewVars({ ...theme, bulletChar: '•' }) as any
+    const varsBullet = buildPreviewVars({ ...theme, bulletChar: '•' }) as Record<string, string>
     expect(varsBullet['--preview-bullet-char']).toBe('"•"')
   })
 })

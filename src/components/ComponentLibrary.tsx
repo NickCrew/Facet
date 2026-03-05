@@ -90,7 +90,7 @@ function useFilteredList<T>(
     return items.filter((item) =>
       getSearchableText(item).some((text) => text.toLowerCase().includes(q)),
     )
-  }, [items, query])
+  }, [items, query, getSearchableText])
 }
 
 export function ComponentLibrary({

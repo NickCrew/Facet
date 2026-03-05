@@ -413,7 +413,7 @@ function App() {
       })
 
       showNotice('success', `Optimized density to fit ${targetPages} page(s) (${result.iterations} steps)`)
-    } catch (error) {
+    } catch {
       showNotice('error', 'Density optimization failed')
     } finally {
       setIsOptimizingDensity(false)

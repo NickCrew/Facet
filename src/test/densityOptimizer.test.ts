@@ -15,7 +15,7 @@ describe('densityOptimizer', () => {
   it('converges toward target page count', async () => {
     vi.mocked(renderResumeAsPdf).mockImplementation(async (_resume, theme) => {
       // Simulate: multiplier < 0.9 fits in 1 page, else 2
-      const isTight = (theme as any).sectionGapBefore < 13
+      const isTight = theme.sectionGapBefore < 13
       return {
         pageCount: isTight ? 1 : 2,
         bytes: new Uint8Array(),
@@ -29,7 +29,7 @@ describe('densityOptimizer', () => {
     expect(result.finalPageCount).toBe(1)
     expect(result.iterations).toBeGreaterThan(0)
     // ferguson-v12 sectionGapBefore is 14. 14 * 0.9 = 12.6 (< 13)
-    expect((result.overrides as any).sectionGapBefore).toBeLessThan(13)
+    expect(result.overrides.sectionGapBefore).toBeLessThan(13)
   })
 
   it('updates bestOverrides only when content fits', async () => {
@@ -73,7 +73,7 @@ describe('densityOptimizer', () => {
     })
 
     const result = await findOptimalDensity(resume, theme, 1, 1)
-    const val = (result.overrides as any).sectionGapBefore
+    const val = result.overrides.sectionGapBefore
     const valStr = val.toString()
     if (valStr.includes('.')) {
       const decimals = valStr.split('.')[1]
@@ -89,6 +89,7 @@ describe('densityOptimizer', () => {
       generatedAt: '',
     })
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- deliberately testing invalid input
     const weirdTheme = { ...theme, sectionGapBefore: 'not-a-number' as any }
     const result = await findOptimalDensity(resume, weirdTheme, 1, 1)
     expect(result.overrides.sectionGapBefore).toBeUndefined()

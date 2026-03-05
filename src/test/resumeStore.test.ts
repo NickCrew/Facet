@@ -145,6 +145,7 @@ describe('resumeStore', () => {
 
   it('resumeMigration renames saved_variants to presets (v2→v3)', () => {
     // Simulate real v2 persisted data: has saved_variants, no presets field
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { presets: _drop, ...dataWithoutPresets } = defaultResumeData
     const persistedState = {
       data: {

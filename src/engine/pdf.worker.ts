@@ -24,14 +24,14 @@ self.onmessage = async (event) => {
     const bytes = new Uint8Array(pdfBytes)
     
     // Transfer the bytes to the main thread for performance
-    ;(self as any).postMessage({
+    ;(self as unknown as Worker).postMessage({
       id,
       type: 'success',
       bytes,
       pageCount: toPdfPageCount(bytes),
     }, [bytes.buffer])
   } catch (error) {
-    ;(self as any).postMessage({
+    ;(self as unknown as Worker).postMessage({
       id,
       type: 'error',
       error: error instanceof Error ? error.message : String(error),
