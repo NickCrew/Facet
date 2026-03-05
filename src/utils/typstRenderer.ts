@@ -163,7 +163,7 @@ export const toDataPayload = (resume: AssembledResume): TypstDataPayload => {
       school: entry.school,
       location: entry.location,
       degree: entry.degree,
-      year: entry.year,
+      year: entry.year ?? null,
     })),
   }
 }
