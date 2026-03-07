@@ -1,8 +1,11 @@
-import { Eye, EyeOff } from 'lucide-react'
-import type { ComponentPriority, PriorityByVector, TextVariantMap, VectorDef, VectorSelection } from '../types'
+import { Eye, EyeOff, Check, X, Wand2 } from 'lucide-react'
+import { memo, useCallback, useRef } from 'react'
+import type { ComponentPriority, PriorityByVector, TextVariantMap, VectorDef, VectorSelection, ComponentSuggestion } from '../types'
 import { getPriorityForVector } from '../engine/assembler'
+import { highlightVariables } from '../utils/variableHighlighting'
 
 interface ComponentCardProps {
+  id: string
   title: string
   body: string
   vectors: PriorityByVector
@@ -11,10 +14,13 @@ interface ComponentCardProps {
   included: boolean
   variants?: TextVariantMap
   selectedVariant?: string
-  onToggleIncluded: () => void
-  onVariantChange?: (variant: string | null) => void
-  onBodyChange: (value: string) => void
-  onVectorsChange?: (nextVectors: PriorityByVector) => void
+  onToggleIncluded: (id: string, vectors: PriorityByVector) => void
+  onVariantChange?: (id: string, variant: string | null) => void
+  onBodyChange: (id: string, value: string) => void
+  onVectorsChange?: (id: string, nextVectors: PriorityByVector) => void
+  suggestion?: ComponentSuggestion
+  onAcceptSuggestion?: (id: string, suggestion: ComponentSuggestion) => void
+  onIgnoreSuggestion?: (id: string) => void
 }
 
 function cyclePriority(current: ComponentPriority): ComponentPriority {
@@ -27,7 +33,8 @@ function cyclePriority(current: ComponentPriority): ComponentPriority {
   }
 }
 
-export function ComponentCard({
+export const ComponentCard = memo(function ComponentCard({
+  id,
   title,
   body,
   vectors,
@@ -40,10 +47,15 @@ export function ComponentCard({
   onVariantChange,
   onBodyChange,
   onVectorsChange,
+  suggestion,
+  onAcceptSuggestion,
+  onIgnoreSuggestion,
 }: ComponentCardProps) {
   const priority = getPriorityForVector(vectors, selectedVector)
   const variantEntries = Object.entries(variants ?? {})
   const showVariantPicker = variantEntries.length > 0 && onVariantChange
+  const hasVariables = body.includes('{{')
+  const overlayRef = useRef<HTMLDivElement>(null)
 
   const handlePriorityCycle = () => {
     if (selectedVector === 'all' || !onVectorsChange) return
@@ -54,7 +66,7 @@ export function ComponentCard({
     } else {
       nextVectors[selectedVector] = next
     }
-    onVectorsChange(nextVectors)
+    onVectorsChange(id, nextVectors)
   }
 
   const handleMatrixDotClick = (vectorId: string) => {
@@ -67,11 +79,25 @@ export function ComponentCard({
     } else {
       nextVectors[vectorId] = next
     }
-    onVectorsChange(nextVectors)
+    onVectorsChange(id, nextVectors)
   }
 
+  const handleToggle = useCallback(() => {
+    onToggleIncluded(id, vectors)
+  }, [id, vectors, onToggleIncluded])
+
+  const handleBodyChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    onBodyChange(id, e.target.value)
+  }, [id, onBodyChange])
+
+  const handleVariantChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (onVariantChange) {
+      onVariantChange(id, e.target.value === 'auto' ? null : e.target.value)
+    }
+  }, [id, onVariantChange])
+
   return (
-    <article className={`component-card ${included ? '' : 'dimmed'}`}>
+    <article className={`component-card ${included ? '' : 'dimmed'} ${suggestion ? 'has-suggestion' : ''}`}>
       <div className={`priority-strip priority-${priority}`} />
       
       <header className="component-card-header">
@@ -89,19 +115,32 @@ export function ComponentCard({
           )}
         </div>
         <div className="component-card-actions">
-          <button type="button" className="btn-ghost" aria-pressed={included} onClick={onToggleIncluded}>
+          <button type="button" className="btn-ghost" aria-pressed={included} onClick={handleToggle}>
             {included ? <Eye size={14} /> : <EyeOff size={14} />}
             {included ? 'Included' : 'Excluded'}
           </button>
         </div>
       </header>
 
-      <textarea
-        aria-label={title}
-        value={body}
-        onChange={(event) => onBodyChange(event.target.value)}
-        className="component-input"
-      />
+      <div className="component-input-wrapper">
+        <textarea
+          aria-label={title}
+          value={body}
+          onChange={handleBodyChange}
+          className={`component-input ${hasVariables ? 'with-variables' : ''}`}
+          onScroll={hasVariables ? (e) => {
+            if (overlayRef.current) {
+              overlayRef.current.scrollTop = e.currentTarget.scrollTop
+              overlayRef.current.scrollLeft = e.currentTarget.scrollLeft
+            }
+          } : undefined}
+        />
+        {hasVariables && (
+          <div className="variable-preview" ref={overlayRef} aria-hidden="true">
+            {highlightVariables(body)}
+          </div>
+        )}
+      </div>
 
       <div className="bullet-footer-row">
         {showVariantPicker ? (
@@ -110,7 +149,7 @@ export function ComponentCard({
             <select
               className="component-input compact"
               value={selectedVariant ?? 'auto'}
-              onChange={(event) => onVariantChange(event.target.value === 'auto' ? null : event.target.value)}
+              onChange={handleVariantChange}
             >
               <option value="auto">Auto</option>
               <option value="default">Default</option>
@@ -146,6 +185,37 @@ export function ComponentCard({
           </div>
         )}
       </div>
+
+      {suggestion && (
+        <div className="suggestion-overlay">
+          <div className="suggestion-badge">
+            <Wand2 size={12} /> AI Recommendation
+          </div>
+          <p className="suggestion-reason">{suggestion.reason}</p>
+          <div className="suggestion-action-row">
+            <div className={`suggestion-preview priority-${suggestion.recommendedPriority}`}>
+              Change to {suggestion.recommendedPriority}
+            </div>
+            <div className="suggestion-buttons">
+              <button 
+                className="btn-secondary btn-xs" 
+                onClick={() => onIgnoreSuggestion?.(id)}
+                title="Ignore suggestion"
+              >
+                <X size={12} />
+              </button>
+              <button 
+                className="btn-primary btn-xs" 
+                onClick={() => onAcceptSuggestion?.(id, suggestion)}
+                title="Accept suggestion"
+              >
+                <Check size={12} />
+                Accept
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </article>
   )
-}
+})

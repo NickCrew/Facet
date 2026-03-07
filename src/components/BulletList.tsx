@@ -11,15 +11,16 @@ import {
   SortableContext,
   arrayMove,
   sortableKeyboardCoordinates,
-  useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
-import { ChevronRight, Eye, EyeOff, GripVertical, Sparkles, X } from 'lucide-react'
-import { useState } from 'react'
-import type { ComponentPriority, PriorityByVector, Role, TextVariantMap, VectorDef, VectorSelection } from '../types'
+import { ChevronRight, Eye, EyeOff, GripVertical, Sparkles, X, Check, Wand2 } from 'lucide-react'
+import { useState, memo, useMemo, useCallback, useRef } from 'react'
+import type { ComponentPriority, PriorityByVector, Role, TextVariantMap, VectorDef, VectorSelection, ComponentSuggestion } from '../types'
 import { getPriorityForVector } from '../engine/assembler'
 import { resolveDisplayText } from '../utils/resolveDisplayText'
+import { componentKeys } from '../utils/componentKeys'
+import { useSortableItem } from '../hooks/useSortableItem'
+import { highlightVariables } from '../utils/variableHighlighting'
 
 interface BulletListProps {
   role: Role
@@ -27,22 +28,27 @@ interface BulletListProps {
   selectedVector: VectorSelection
   customOrderLabel?: string
   canResetOrder: boolean
-  onResetOrder: () => void
-  includedByBulletId: Record<string, boolean>
-  variantByBulletId: Record<string, string | undefined>
-  onToggleBullet: (bulletId: string) => void
-  onReorder: (nextOrder: string[]) => void
-  onChangeBulletText: (bulletId: string, text: string) => void
-  onSetBulletVariant: (bulletId: string, variant: string | null) => void
-  onSetBulletVectors: (bulletId: string, vectors: PriorityByVector) => void
-  onUpdateRole: (field: 'company' | 'title' | 'dates' | 'location' | 'subtitle', value: string | null) => void
-  onReframe: (bulletId: string) => void
+  onResetOrder: (roleId: string) => void
+  includedByKey: Record<string, boolean>
+  variantByKey: Record<string, string | undefined>
+  onToggleBullet: (roleId: string, bulletId: string, vectors: PriorityByVector) => void
+  onReorder: (roleId: string, nextOrder: string[]) => void
+  onChangeBulletText: (roleId: string, bulletId: string, text: string) => void
+  onChangeBulletLabel: (roleId: string, bulletId: string, label: string) => void
+  onSetBulletVariant: (roleId: string, bulletId: string, variant: string | null) => void
+  onSetBulletVectors: (roleId: string, bulletId: string, vectors: PriorityByVector) => void
+  onUpdateRole: (roleId: string, field: 'company' | 'title' | 'dates' | 'location' | 'subtitle', value: string | null) => void
+  onReframe: (roleId: string, bulletId: string) => void
   reframeLoadingId: string | null
   aiEnabled: boolean
+  suggestions?: Record<string, ComponentSuggestion>
+  onAcceptSuggestion?: (roleId: string, bulletId: string, suggestion: ComponentSuggestion) => void
+  onIgnoreSuggestion?: (roleId: string, bulletId: string) => void
 }
 
 interface SortableBulletProps {
   id: string
+  label?: string
   text: string
   vectors: PriorityByVector
   priority: ComponentPriority
@@ -51,13 +57,17 @@ interface SortableBulletProps {
   selectedVariant?: string
   vectorDefs: VectorDef[]
   selectedVector: VectorSelection
-  onToggle: () => void
-  onChangeText: (value: string) => void
-  onVariantChange: (variant: string | null) => void
-  onVectorsChange: (vectors: PriorityByVector) => void
-  onReframe: () => void
+  onToggle: (id: string, vectors: PriorityByVector) => void
+  onChangeText: (id: string, value: string) => void
+  onLabelChange: (id: string, value: string) => void
+  onVariantChange: (id: string, variant: string | null) => void
+  onVectorsChange: (id: string, vectors: PriorityByVector) => void
+  onReframe: (id: string) => void
   isLoading: boolean
   aiEnabled: boolean
+  suggestion?: ComponentSuggestion
+  onAcceptSuggestion?: (id: string, suggestion: ComponentSuggestion) => void
+  onIgnoreSuggestion?: (id: string) => void
 }
 
 function cyclePriority(current: ComponentPriority): ComponentPriority {
@@ -70,8 +80,9 @@ function cyclePriority(current: ComponentPriority): ComponentPriority {
   }
 }
 
-function SortableBullet({
+const SortableBullet = memo(function SortableBullet({
   id,
+  label,
   text,
   vectors,
   priority,
@@ -82,20 +93,21 @@ function SortableBullet({
   selectedVector,
   onToggle,
   onChangeText,
+  onLabelChange,
   onVariantChange,
   onVectorsChange,
   onReframe,
   isLoading,
   aiEnabled,
+  suggestion,
+  onAcceptSuggestion,
+  onIgnoreSuggestion,
 }: SortableBulletProps) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id })
+  const { setNodeRef, style, dragHandleProps, isDragging } = useSortableItem(id)
   const variantEntries = Object.entries(variants ?? {})
   const showVariantPicker = variantEntries.length > 0
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  }
+  const hasVariables = text.includes('{{')
+  const overlayRef = useRef<HTMLDivElement>(null)
 
   const handlePriorityCycle = () => {
     if (selectedVector === 'all') return
@@ -106,7 +118,7 @@ function SortableBullet({
     } else {
       nextVectors[selectedVector] = next
     }
-    onVectorsChange(nextVectors)
+    onVectorsChange(id, nextVectors)
   }
 
   const handleMatrixDotClick = (vectorId: string) => {
@@ -118,11 +130,19 @@ function SortableBullet({
     } else {
       nextVectors[vectorId] = next
     }
-    onVectorsChange(nextVectors)
+    onVectorsChange(id, nextVectors)
   }
 
+  const handleAccept = useCallback(() => {
+    if (suggestion) onAcceptSuggestion?.(id, suggestion)
+  }, [id, suggestion, onAcceptSuggestion])
+
   return (
-    <article className={`component-card bullet-card ${included ? '' : 'dimmed'}`} ref={setNodeRef} style={style}>
+    <article 
+      className={`component-card bullet-card ${included ? '' : 'dimmed'} ${isDragging ? 'dragging' : ''} ${suggestion ? 'has-suggestion' : ''}`} 
+      ref={setNodeRef} 
+      style={style}
+    >
       <div className={`priority-strip priority-${priority}`} />
       
       <header className="component-card-header">
@@ -131,8 +151,8 @@ function SortableBullet({
             className="drag-handle"
             type="button"
             aria-label="Reorder bullet"
-            {...attributes}
-            {...listeners}
+            {...dragHandleProps}
+            aria-describedby="dnd-instructions-global"
           >
             <GripVertical size={14} />
           </button>
@@ -153,7 +173,7 @@ function SortableBullet({
             <button
               type="button"
               className="btn-ghost"
-              onClick={onReframe}
+              onClick={() => onReframe(id)}
               disabled={isLoading}
               title="AI Reframe for Vector"
               aria-busy={isLoading}
@@ -164,18 +184,42 @@ function SortableBullet({
               <Sparkles size={14} className={isLoading ? 'animate-pulse' : ''} />
             </button>
           )}
-          <button type="button" className="btn-ghost" aria-pressed={included} onClick={onToggle}>
+          <button type="button" className="btn-ghost" aria-pressed={included} onClick={() => onToggle(id, vectors)}>
             {included ? <Eye size={14} /> : <EyeOff size={14} />}
             {included ? 'Included' : 'Excluded'}
           </button>
         </div>
       </header>
-      <textarea
-        value={text}
-        className="component-input"
-        aria-label="Bullet text"
-        onChange={(event) => onChangeText(event.target.value)}
-      />
+
+      <div className="component-input-wrapper">
+        <textarea
+          value={text}
+          className={`component-input ${hasVariables ? 'with-variables' : ''}`}
+          aria-label="Bullet text"
+          onChange={(event) => onChangeText(id, event.target.value)}
+          onScroll={hasVariables ? (e) => {
+            if (overlayRef.current) {
+              overlayRef.current.scrollTop = e.currentTarget.scrollTop
+              overlayRef.current.scrollLeft = e.currentTarget.scrollLeft
+            }
+          } : undefined}
+        />
+        {hasVariables && (
+          <div className="variable-preview" ref={overlayRef} aria-hidden="true">
+            {highlightVariables(text)}
+          </div>
+        )}
+      </div>
+
+      <label className="field-label bullet-label-field">
+        Bullet Label
+        <input
+          className="component-input compact"
+          placeholder="optional (e.g. 'Project Highlight')"
+          value={label ?? ''}
+          onChange={(event) => onLabelChange(id, event.target.value)}
+        />
+      </label>
       
       <div className="bullet-footer-row">
         {showVariantPicker ? (
@@ -184,7 +228,7 @@ function SortableBullet({
             <select
               className="component-input compact"
               value={selectedVariant ?? 'auto'}
-              onChange={(event) => onVariantChange(event.target.value === 'auto' ? null : event.target.value)}
+              onChange={(event) => onVariantChange(id, event.target.value === 'auto' ? null : event.target.value)}
             >
               <option value="auto">Auto</option>
               <option value="default">Default</option>
@@ -218,9 +262,40 @@ function SortableBullet({
           })}
         </div>
       </div>
+
+      {suggestion && (
+        <div className="suggestion-overlay">
+          <div className="suggestion-badge">
+            <Wand2 size={12} /> AI Recommendation
+          </div>
+          <p className="suggestion-reason">{suggestion.reason}</p>
+          <div className="suggestion-action-row">
+            <div className={`suggestion-preview priority-${suggestion.recommendedPriority}`}>
+              Change to {suggestion.recommendedPriority}
+            </div>
+            <div className="suggestion-buttons">
+              <button 
+                className="btn-secondary btn-xs" 
+                onClick={() => onIgnoreSuggestion?.(id)}
+                title="Ignore suggestion"
+              >
+                <X size={12} />
+              </button>
+              <button 
+                className="btn-primary btn-xs" 
+                onClick={handleAccept}
+                title="Accept suggestion"
+              >
+                <Check size={12} />
+                Accept
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </article>
   )
-}
+})
 
 export function BulletList({
   role,
@@ -229,19 +304,23 @@ export function BulletList({
   customOrderLabel,
   canResetOrder,
   onResetOrder,
-  includedByBulletId,
-  variantByBulletId,
+  includedByKey,
+  variantByKey,
   onToggleBullet,
   onReorder,
   onChangeBulletText,
+  onChangeBulletLabel,
   onSetBulletVariant,
   onSetBulletVectors,
   onUpdateRole,
   onReframe,
   reframeLoadingId,
   aiEnabled,
+  suggestions = {},
+  onAcceptSuggestion,
+  onIgnoreSuggestion,
 }: BulletListProps) {
-  const bulletIds = role.bullets.map((bullet) => bullet.id)
+  const bulletIds = useMemo(() => role.bullets.map((bullet) => bullet.id), [role.bullets])
   const [expanded, setExpanded] = useState(true)
   const [announcement, setAnnouncement] = useState('')
   const sensors = useSensors(
@@ -273,9 +352,19 @@ export function BulletList({
       return
     }
     const moved = arrayMove(bulletIds, oldIndex, newIndex)
-    onReorder(moved)
+    onReorder(role.id, moved)
     setAnnouncement(`Dropped bullet at position ${newIndex + 1}.`)
   }
+
+  // Memoized handlers that bake in role.id
+  const handleToggle = useCallback((bulletId: string, vectors: PriorityByVector) => onToggleBullet(role.id, bulletId, vectors), [onToggleBullet, role.id])
+  const handleChangeText = useCallback((bulletId: string, text: string) => onChangeBulletText(role.id, bulletId, text), [onChangeBulletText, role.id])
+  const handleLabelChange = useCallback((bulletId: string, label: string) => onChangeBulletLabel(role.id, bulletId, label), [onChangeBulletLabel, role.id])
+  const handleVariantChange = useCallback((bulletId: string, variant: string | null) => onSetBulletVariant(role.id, bulletId, variant), [onSetBulletVariant, role.id])
+  const handleVectorsChange = useCallback((bulletId: string, vectors: PriorityByVector) => onSetBulletVectors(role.id, bulletId, vectors), [onSetBulletVectors, role.id])
+  const handleReframeBound = useCallback((bulletId: string) => onReframe(role.id, bulletId), [onReframe, role.id])
+  const handleAccept = useCallback((bulletId: string, suggestion: ComponentSuggestion) => onAcceptSuggestion?.(role.id, bulletId, suggestion), [onAcceptSuggestion, role.id])
+  const handleIgnore = useCallback((bulletId: string) => onIgnoreSuggestion?.(role.id, bulletId), [onIgnoreSuggestion, role.id])
 
   const collapseId = `role-collapse-${role.id}`
 
@@ -299,7 +388,7 @@ export function BulletList({
               <input
                 className="component-input compact"
                 value={role.company}
-                onChange={(event) => onUpdateRole('company', event.target.value)}
+                onChange={(event) => onUpdateRole(role.id, 'company', event.target.value)}
               />
             </label>
             <label className="field-label">
@@ -307,7 +396,7 @@ export function BulletList({
               <input
                 className="component-input compact"
                 value={role.title}
-                onChange={(event) => onUpdateRole('title', event.target.value)}
+                onChange={(event) => onUpdateRole(role.id, 'title', event.target.value)}
               />
             </label>
             <label className="field-label">
@@ -315,7 +404,7 @@ export function BulletList({
               <input
                 className="component-input compact"
                 value={role.dates}
-                onChange={(event) => onUpdateRole('dates', event.target.value)}
+                onChange={(event) => onUpdateRole(role.id, 'dates', event.target.value)}
               />
             </label>
             {role.location != null ? (
@@ -325,12 +414,12 @@ export function BulletList({
                   <input
                     className="component-input compact"
                     value={role.location}
-                    onChange={(event) => onUpdateRole('location', event.target.value)}
+                    onChange={(event) => onUpdateRole(role.id, 'location', event.target.value)}
                   />
                   <button
                     type="button"
                     className="btn-ghost btn-icon"
-                    onClick={() => onUpdateRole('location', null)}
+                    onClick={() => onUpdateRole(role.id, 'location', null)}
                     aria-label="Remove location"
                   >
                     <X size={14} />
@@ -341,7 +430,7 @@ export function BulletList({
               <button
                 type="button"
                 className="btn-ghost btn-add-optional"
-                onClick={() => onUpdateRole('location', '')}
+                onClick={() => onUpdateRole(role.id, 'location', '')}
               >
                 <span>+ Location</span>
               </button>
@@ -353,12 +442,12 @@ export function BulletList({
                   <input
                     className="component-input compact"
                     value={role.subtitle}
-                    onChange={(event) => onUpdateRole('subtitle', event.target.value)}
+                    onChange={(event) => onUpdateRole(role.id, 'subtitle', event.target.value)}
                   />
                   <button
                     type="button"
                     className="btn-ghost btn-icon"
-                    onClick={() => onUpdateRole('subtitle', null)}
+                    onClick={() => onUpdateRole(role.id, 'subtitle', null)}
                     aria-label="Remove subtitle"
                   >
                     <X size={14} />
@@ -369,7 +458,7 @@ export function BulletList({
               <button
                 type="button"
                 className="btn-ghost btn-add-optional"
-                onClick={() => onUpdateRole('subtitle', '')}
+                onClick={() => onUpdateRole(role.id, 'subtitle', '')}
               >
                 <span>+ Subtitle</span>
               </button>
@@ -382,7 +471,7 @@ export function BulletList({
             type="button"
             className="btn-ghost"
             disabled={!canResetOrder}
-            onClick={onResetOrder}
+            onClick={() => onResetOrder(role.id)}
           >
             Reset Order
           </button>
@@ -408,27 +497,39 @@ export function BulletList({
           >
             <SortableContext items={bulletIds} strategy={verticalListSortingStrategy}>
               <div className="bullet-list">
-                {role.bullets.map((bullet) => (
-                  <SortableBullet
-                    key={bullet.id}
-                    id={bullet.id}
-                    text={resolveDisplayText(bullet.text, bullet.variants, variantByBulletId[bullet.id], selectedVector).displayText}
-                    vectors={bullet.vectors}
-                    priority={getPriorityForVector(bullet.vectors, selectedVector)}
-                    included={includedByBulletId[bullet.id] ?? true}
-                    variants={bullet.variants}
-                    selectedVariant={variantByBulletId[bullet.id]}
-                    vectorDefs={vectorDefs}
-                    selectedVector={selectedVector}
-                    onToggle={() => onToggleBullet(bullet.id)}
-                    onChangeText={(value) => onChangeBulletText(bullet.id, value)}
-                    onVariantChange={(value) => onSetBulletVariant(bullet.id, value)}
-                    onVectorsChange={(vectors) => onSetBulletVectors(bullet.id, vectors)}
-                    onReframe={() => onReframe(bullet.id)}
-                    isLoading={reframeLoadingId === bullet.id}
-                    aiEnabled={aiEnabled}
-                  />
-                ))}
+                {role.bullets.map((bullet) => {
+                  const key = componentKeys.bullet(role.id, bullet.id)
+                  const autoIncluded = getPriorityForVector(bullet.vectors, selectedVector) !== 'exclude'
+                  const included = includedByKey[key] ?? autoIncluded
+                  const selectedVariant = variantByKey[key]
+
+                  return (
+                    <SortableBullet
+                      key={bullet.id}
+                      id={bullet.id}
+                      label={bullet.label}
+                      text={resolveDisplayText(bullet.text, bullet.variants, selectedVariant, selectedVector).displayText}
+                      vectors={bullet.vectors}
+                      priority={getPriorityForVector(bullet.vectors, selectedVector)}
+                      included={included}
+                      variants={bullet.variants}
+                      selectedVariant={selectedVariant}
+                      vectorDefs={vectorDefs}
+                      selectedVector={selectedVector}
+                      onToggle={handleToggle}
+                      onChangeText={handleChangeText}
+                      onLabelChange={handleLabelChange}
+                      onVariantChange={handleVariantChange}
+                      onVectorsChange={handleVectorsChange}
+                      onReframe={handleReframeBound}
+                      isLoading={reframeLoadingId === bullet.id}
+                      aiEnabled={aiEnabled}
+                      suggestion={suggestions[bullet.id]}
+                      onAcceptSuggestion={handleAccept}
+                      onIgnoreSuggestion={handleIgnore}
+                    />
+                  )
+                })}
               </div>
             </SortableContext>
           </DndContext>
