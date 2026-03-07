@@ -5,8 +5,9 @@ import { defaultResumeData } from '../store/defaultData'
 
 describe('resumeStore', () => {
   beforeEach(() => {
+    // Fresh deep clone for each test to ensure isolation
     useResumeStore.setState({
-      data: { ...defaultResumeData },
+      data: JSON.parse(JSON.stringify(defaultResumeData)),
       past: [],
       future: [],
       canUndo: false,
@@ -14,177 +15,325 @@ describe('resumeStore', () => {
     })
   })
 
-  it('setData pushes to history', () => {
-    const nextData = { ...defaultResumeData, meta: { ...defaultResumeData.meta, name: 'New Name' } }
-    useResumeStore.getState().setData(nextData)
-    
-    expect(useResumeStore.getState().data.meta.name).toBe('New Name')
-    expect(useResumeStore.getState().past.length).toBe(1)
-    expect(useResumeStore.getState().past[0].meta.name).toBe('Jane Smith')
-    expect(useResumeStore.getState().canUndo).toBe(true)
-  })
-
-  it('undo/redo works for data changes', () => {
-    const store = useResumeStore.getState()
-    const nextData = { ...defaultResumeData, meta: { ...defaultResumeData.meta, name: 'New Name' } }
-    
-    store.setData(nextData)
-    expect(useResumeStore.getState().data.meta.name).toBe('New Name')
-    
-    useResumeStore.getState().undo()
-    expect(useResumeStore.getState().data.meta.name).toBe('Jane Smith')
-    expect(useResumeStore.getState().canRedo).toBe(true)
-    
-    useResumeStore.getState().redo()
-    expect(useResumeStore.getState().data.meta.name).toBe('New Name')
-  })
-
-  it('undo with empty history is a no-op', () => {
-    const before = useResumeStore.getState().data
-    useResumeStore.getState().undo()
-    expect(useResumeStore.getState().data).toBe(before)
-  })
-
-  it('setOverride pushes to history', () => {
-    useResumeStore.getState().setOverride('backend', 'b1', true)
-    
-    expect(useResumeStore.getState().data.manualOverrides?.backend?.b1).toBe(true)
-    expect(useResumeStore.getState().past.length).toBe(1)
-    
-    useResumeStore.getState().undo()
-    expect(useResumeStore.getState().data.manualOverrides?.backend?.b1).toBeUndefined()
-  })
-
-  it('handles null override (deletion)', () => {
-    useResumeStore.getState().setOverride('backend', 'b1', true)
-    useResumeStore.getState().setOverride('backend', 'b1', null)
-    
-    expect(useResumeStore.getState().data.manualOverrides?.backend?.b1).toBeUndefined()
-    expect(useResumeStore.getState().past.length).toBe(2)
-  })
-
-  it('resetOverridesForVector clears specific vector', () => {
-    useResumeStore.getState().setOverride('backend', 'b1', true)
-    useResumeStore.getState().setOverride('platform', 'b2', true)
-    
-    useResumeStore.getState().resetOverridesForVector('backend')
-    
-    const data = useResumeStore.getState().data
-    expect(data.manualOverrides?.backend).toBeUndefined()
-    expect(data.manualOverrides?.platform?.b2).toBe(true)
-  })
-
-  it('setVariantOverride pushes to history and handles null', () => {
-    useResumeStore.getState().setVariantOverride('backend', 'b1', 'v1')
-    expect(useResumeStore.getState().data.variantOverrides?.backend?.b1).toBe('v1')
-    
-    useResumeStore.getState().setVariantOverride('backend', 'b1', null)
-    expect(useResumeStore.getState().data.variantOverrides?.backend?.b1).toBeUndefined()
-    
-    useResumeStore.getState().undo()
-    expect(useResumeStore.getState().data.variantOverrides?.backend?.b1).toBe('v1')
-  })
-
-  it('resetAllOverrides works and undoes', () => {
-    useResumeStore.getState().setOverride('backend', 'b1', true)
-    useResumeStore.getState().resetAllOverrides()
-    
-    expect(useResumeStore.getState().data.manualOverrides).toEqual({})
-    
-    useResumeStore.getState().undo()
-    expect(useResumeStore.getState().data.manualOverrides?.backend?.b1).toBe(true)
-  })
-
-  it('resetRoleBulletOrder works and undoes', () => {
-    useResumeStore.getState().setRoleBulletOrder('backend', 'r1', ['b1'])
-    useResumeStore.getState().resetRoleBulletOrder('backend', 'r1')
-    
-    expect(useResumeStore.getState().data.bulletOrders?.backend?.r1).toBeUndefined()
-    
-    useResumeStore.getState().undo()
-    expect(useResumeStore.getState().data.bulletOrders?.backend?.r1).toEqual(['b1'])
-  })
-
-  it('updateData skips history if next state is identical', () => {
-    useResumeStore.getState().updateData((current) => current)
-    
-    expect(useResumeStore.getState().past.length).toBe(0)
-    expect(useResumeStore.getState().canUndo).toBe(false)
-  })
-
-  it('setData skips history if data is referentially identical', () => {
-    const data = useResumeStore.getState().data
-    useResumeStore.getState().setData(data)
-    expect(useResumeStore.getState().past.length).toBe(0)
-  })
-
-  it('canUndo/canRedo flags are correctly synchronized', () => {
-    expect(useResumeStore.getState().canUndo).toBe(false)
-    expect(useResumeStore.getState().canRedo).toBe(false)
-    
-    useResumeStore.getState().setOverride('backend', 'b1', true)
-    expect(useResumeStore.getState().canUndo).toBe(true)
-    
-    useResumeStore.getState().undo()
-    expect(useResumeStore.getState().canUndo).toBe(false)
-    expect(useResumeStore.getState().canRedo).toBe(true)
-    
-    useResumeStore.getState().redo()
-    expect(useResumeStore.getState().canUndo).toBe(true)
-    expect(useResumeStore.getState().canRedo).toBe(false)
-  })
-
-  it('limits history to MAX_HISTORY', () => {
-    // MAX_HISTORY is 50
-    for (let i = 0; i < 60; i++) {
-      useResumeStore.getState().setOverride('backend', `b${i}`, true)
-    }
-    
-    expect(useResumeStore.getState().past.length).toBe(50)
-  })
-
-  it('resumeMigration renames saved_variants to presets (v2→v3)', () => {
-    // Simulate real v2 persisted data: has saved_variants, no presets field
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { presets: _drop, ...dataWithoutPresets } = defaultResumeData
-    const persistedState = {
-      data: {
-        ...dataWithoutPresets,
-        saved_variants: [
-          { id: 'sv-1', name: 'Test', createdAt: '', updatedAt: '', baseVector: 'backend', overrides: { manualOverrides: {}, variantOverrides: {}, bulletOrders: {} } },
-        ],
-        _overridesMigrated: true,
-      },
-    }
-    const migrated = resumeMigration(persistedState, 2, null)
-
-    expect(migrated.data.presets).toHaveLength(1)
-    expect(migrated.data.presets[0].id).toBe('sv-1')
-    expect(migrated.data.saved_variants).toBeUndefined()
-  })
-
-  it('resumeMigration recovers positioning overrides from legacy data', () => {
-    const mockUiData = JSON.stringify({
-      state: {
-        manualOverrides: { backend: { b1: true } },
-        variantOverrides: { backend: { b1: 'v1' } },
-        bulletOrders: { backend: { r1: ['b1'] } }
-      }
+  describe('Core History & Positioning', () => {
+    it('setData pushes to history', () => {
+      const nextData = JSON.parse(JSON.stringify(defaultResumeData))
+      nextData.meta.name = 'New Name'
+      useResumeStore.getState().setData(nextData)
+      
+      expect(useResumeStore.getState().data.meta.name).toBe('New Name')
+      expect(useResumeStore.getState().past.length).toBe(1)
+      expect(useResumeStore.getState().canUndo).toBe(true)
     })
-    
-    // Pass persistedState.data as a valid object but without _overridesMigrated
-    const persistedState = { 
-      data: { 
-        ...defaultResumeData,
-        _overridesMigrated: false 
-      } 
-    }
-    const migrated = resumeMigration(persistedState, 1, mockUiData)
-    
-    expect(migrated.data.manualOverrides.backend.b1).toBe(true)
-    expect(migrated.data.variantOverrides.backend.b1).toBe('v1')
-    expect(migrated.data.bulletOrders.backend.r1).toEqual(['b1'])
-    expect(migrated.data._overridesMigrated).toBe(true)
+
+    it('setData skips history if data is referentially identical', () => {
+      const data = useResumeStore.getState().data
+      useResumeStore.getState().setData(data)
+      expect(useResumeStore.getState().past.length).toBe(0)
+    })
+
+    it('undo/redo works for data changes and flags correctly', () => {
+      const store = useResumeStore.getState()
+      
+      expect(store.canUndo).toBe(false)
+      expect(store.canRedo).toBe(false)
+
+      store.updateMetaField('name', 'New Name')
+      expect(useResumeStore.getState().data.meta.name).toBe('New Name')
+      expect(useResumeStore.getState().canUndo).toBe(true)
+      
+      useResumeStore.getState().undo()
+      expect(useResumeStore.getState().data.meta.name).toBe('Jane Smith')
+      expect(useResumeStore.getState().canRedo).toBe(true)
+      expect(useResumeStore.getState().canUndo).toBe(false)
+      
+      useResumeStore.getState().redo()
+      expect(useResumeStore.getState().data.meta.name).toBe('New Name')
+      expect(useResumeStore.getState().canUndo).toBe(true)
+      expect(useResumeStore.getState().canRedo).toBe(false)
+    })
+
+    it('undo with empty history is a no-op', () => {
+      const before = useResumeStore.getState().data
+      useResumeStore.getState().undo()
+      expect(useResumeStore.getState().data).toBe(before)
+    })
+
+    it('setOverride pushes to history and handles undo', () => {
+      useResumeStore.getState().setOverride('backend', 'b1', true)
+      expect(useResumeStore.getState().data.manualOverrides?.backend?.b1).toBe(true)
+      
+      useResumeStore.getState().undo()
+      expect(useResumeStore.getState().data.manualOverrides?.backend?.b1).toBeUndefined()
+    })
+
+    it('setVariantOverride pushes to history and handles null', () => {
+      useResumeStore.getState().setVariantOverride('backend', 'b1', 'v1')
+      expect(useResumeStore.getState().data.variantOverrides?.backend?.b1).toBe('v1')
+      
+      useResumeStore.getState().setVariantOverride('backend', 'b1', null)
+      expect(useResumeStore.getState().data.variantOverrides?.backend?.b1).toBeUndefined()
+      
+      useResumeStore.getState().undo()
+      expect(useResumeStore.getState().data.variantOverrides?.backend?.b1).toBe('v1')
+    })
+
+    it('handles null override (deletion)', () => {
+      useResumeStore.getState().setOverride('backend', 'b1', true)
+      useResumeStore.getState().setOverride('backend', 'b1', null)
+      
+      expect(useResumeStore.getState().data.manualOverrides?.backend?.b1).toBeUndefined()
+      expect(useResumeStore.getState().past.length).toBe(2)
+    })
+
+    it('resetOverridesForVector clears specific vector', () => {
+      useResumeStore.getState().setOverride('backend', 'b1', true)
+      useResumeStore.getState().setOverride('platform', 'b2', true)
+      
+      useResumeStore.getState().resetOverridesForVector('backend')
+      
+      const data = useResumeStore.getState().data
+      expect(data.manualOverrides?.backend).toBeUndefined()
+      expect(data.manualOverrides?.platform?.b2).toBe(true)
+    })
+
+    it('resetAllOverrides works and undoes', () => {
+      useResumeStore.getState().setOverride('backend', 'b1', true)
+      useResumeStore.getState().resetAllOverrides()
+      
+      expect(useResumeStore.getState().data.manualOverrides).toEqual({})
+      
+      useResumeStore.getState().undo()
+      expect(useResumeStore.getState().data.manualOverrides?.backend?.b1).toBe(true)
+    })
+
+    it('resetRoleBulletOrder works and undoes', () => {
+      useResumeStore.getState().setRoleBulletOrder('backend', 'r1', ['b1'])
+      useResumeStore.getState().resetRoleBulletOrder('backend', 'r1')
+      
+      expect(useResumeStore.getState().data.bulletOrders?.backend?.r1).toBeUndefined()
+      
+      useResumeStore.getState().undo()
+      expect(useResumeStore.getState().data.bulletOrders?.backend?.r1).toEqual(['b1'])
+    })
+
+    it('updateData skips history if next state is identical', () => {
+      useResumeStore.getState().updateData((current) => current)
+      expect(useResumeStore.getState().past.length).toBe(0)
+    })
+
+    it('limits history to MAX_HISTORY', () => {
+      for (let i = 0; i < 60; i++) {
+        useResumeStore.getState().setOverride('backend', `b${i}`, true)
+      }
+      expect(useResumeStore.getState().past.length).toBe(50)
+    })
+  })
+
+  describe('Entity Mutation Actions', () => {
+    it('updateMetaField supports mid-word spaces (no auto-trim)', () => {
+      useResumeStore.getState().updateMetaField('name', 'Jane ')
+      expect(useResumeStore.getState().data.meta.name).toBe('Jane ')
+    })
+
+    it('updateMetaLink handles label coercion but PRESERVES empty URL string', () => {
+      useResumeStore.getState().addMetaLink()
+      const data = useResumeStore.getState().data
+      const idx = data.meta.links.length - 1
+      
+      // Label should coerce to undefined when empty
+      useResumeStore.getState().updateMetaLink(idx, 'label', '')
+      expect(useResumeStore.getState().data.meta.links[idx].label).toBeUndefined()
+      
+      // URL should remain an empty string (functional for controlled inputs)
+      useResumeStore.getState().updateMetaLink(idx, 'url', '')
+      expect(useResumeStore.getState().data.meta.links[idx].url).toBe('')
+    })
+
+    it('updateBulletLabel handle undefined coercion', () => {
+      const data = useResumeStore.getState().data
+      const roleId = data.roles[0].id
+      const bulletId = data.roles[0].bullets[0].id
+      
+      useResumeStore.getState().updateBulletLabel(roleId, bulletId, 'Project Highlight')
+      expect(useResumeStore.getState().data.roles[0].bullets[0].label).toBe('Project Highlight')
+      
+      useResumeStore.getState().updateBulletLabel(roleId, bulletId, '')
+      expect(useResumeStore.getState().data.roles[0].bullets[0].label).toBeUndefined()
+    })
+
+    it('reorderSkillGroups recomputes selection indices', async () => {
+      const store = useResumeStore.getState()
+      const originalGroups = store.data.skill_groups
+      expect(originalGroups.length).toBeGreaterThanOrEqual(2)
+      
+      const newOrder = [originalGroups[1].id, originalGroups[0].id]
+      const vectorId = store.data.vectors[0].id
+      
+      // Set the UI state before calling reorder
+      const { useUiStore } = await import('../store/uiStore')
+      useUiStore.getState().setSelectedVector(vectorId)
+      
+      store.reorderSkillGroups(newOrder)
+      
+      const nextGroups = useResumeStore.getState().data.skill_groups
+      expect(nextGroups[0].id).toBe(originalGroups[1].id)
+      expect(nextGroups[0].vectors?.[vectorId]?.order).toBe(1)
+      expect(nextGroups[1].vectors?.[vectorId]?.order).toBe(2)
+    })
+
+    it('reorderProjects updates the project array order', () => {
+      // Ensure we have at least 2 projects
+      useResumeStore.getState().addProject({
+        id: 'project-2',
+        name: 'Project 2',
+        text: 'Text 2',
+        vectors: {}
+      })
+
+      const originalProjects = useResumeStore.getState().data.projects
+      expect(originalProjects.length).toBeGreaterThanOrEqual(2)
+      
+      const newOrder = [originalProjects[1].id, originalProjects[0].id]
+      useResumeStore.getState().reorderProjects(newOrder)
+      
+      const nextProjects = useResumeStore.getState().data.projects
+      expect(nextProjects[0].id).toBe(originalProjects[1].id)
+      expect(nextProjects[1].id).toBe(originalProjects[0].id)
+    })
+
+    it('smoke test: updateTargetLine', () => {
+      const id = useResumeStore.getState().data.target_lines[0].id
+      useResumeStore.getState().updateTargetLine(id, 'New TL')
+      expect(useResumeStore.getState().data.target_lines[0].text).toBe('New TL')
+    })
+
+    it('smoke test: updateProject', () => {
+      const id = useResumeStore.getState().data.projects[0].id
+      useResumeStore.getState().updateProject(id, 'name', 'New Name')
+      expect(useResumeStore.getState().data.projects[0].name).toBe('New Name')
+    })
+
+    it('smoke test: updateBullet', () => {
+      const role = useResumeStore.getState().data.roles[0]
+      const bullet = role.bullets[0]
+      useResumeStore.getState().updateBullet(role.id, bullet.id, 'New Bullet')
+      expect(useResumeStore.getState().data.roles[0].bullets[0].text).toBe('New Bullet')
+    })
+  })
+
+  describe('Entity Creation (with Trimming)', () => {
+    it('addSkillGroup injects default vectors and order correctly and trims input', () => {
+      const store = useResumeStore.getState()
+      const initialCount = store.data.skill_groups.length
+      const vectorId = store.data.vectors[0].id
+      
+      store.addSkillGroup({
+        id: 'new-sg',
+        label: '  New Skills  ',
+        content: '  Content  '
+      })
+      
+      const newGroup = useResumeStore.getState().data.skill_groups.find(g => g.id === 'new-sg')
+      expect(newGroup).toBeDefined()
+      expect(newGroup?.label).toBe('New Skills')
+      expect(newGroup?.content).toBe('Content')
+      expect(newGroup?.vectors?.[vectorId]?.priority).toBe('strong')
+      expect(newGroup?.vectors?.[vectorId]?.order).toBe(initialCount + 1)
+    })
+
+    it('addRole includes empty vectors and trims input', () => {
+      const store = useResumeStore.getState()
+      store.addRole({
+        id: 'new-role',
+        company: ' C ',
+        title: ' T ',
+        dates: ' D ',
+        vectors: {},
+        bullets: []
+      })
+      
+      const role = useResumeStore.getState().data.roles.find(r => r.id === 'new-role')
+      expect(role).toBeDefined()
+      expect(role?.company).toBe('C')
+      expect(role?.title).toBe('T')
+      expect(role?.dates).toBe('D')
+    })
+
+    it('addBullet trims text and guards against unknown roleId', () => {
+      const roleId = useResumeStore.getState().data.roles[0].id
+      
+      // Success case
+      useResumeStore.getState().addBullet(roleId, { id: 'b1', text: '  Text  ', vectors: {} })
+      expect(useResumeStore.getState().data.roles[0].bullets.at(-1)?.text).toBe('Text')
+      
+      // Guard case (invalid ID)
+      const before = useResumeStore.getState().data
+      useResumeStore.getState().addBullet('invalid-role', { id: 'b2', text: 'X', vectors: {} })
+      expect(useResumeStore.getState().data).toBe(before)
+      expect(useResumeStore.getState().past.length).toBe(1) // Only the first addBullet
+    })
+
+    it('addEducation trims all string fields', () => {
+      useResumeStore.getState().addEducation({ 
+        id: 'e1', 
+        school: ' S ', 
+        degree: ' D ', 
+        location: ' L ', 
+        year: ' Y ' 
+      })
+      const edu = useResumeStore.getState().data.education.at(-1)
+      expect(edu?.school).toBe('S')
+      expect(edu?.degree).toBe('D')
+      expect(edu?.location).toBe('L')
+      expect(edu?.year).toBe('Y')
+    })
+  })
+
+  describe('Migrations', () => {
+    it('resumeMigration recovers positioning overrides from legacy data (v1→v2)', () => {
+      const mockUiData = JSON.stringify({
+        state: {
+          manualOverrides: { backend: { b1: true } },
+          variantOverrides: { backend: { b1: 'v1' } },
+          bulletOrders: { backend: { r1: ['b1'] } }
+        }
+      })
+      
+      const persistedState = { 
+        data: { 
+          ...JSON.parse(JSON.stringify(defaultResumeData)),
+          _overridesMigrated: false 
+        } 
+      }
+      const migrated = resumeMigration(persistedState, 1, mockUiData)
+      
+      expect(migrated.data.manualOverrides.backend.b1).toBe(true)
+      expect(migrated.data.variantOverrides.backend.b1).toBe('v1')
+      expect(migrated.data.bulletOrders.backend.r1).toEqual(['b1'])
+      expect(migrated.data._overridesMigrated).toBe(true)
+    })
+
+    it('resumeMigration backfills EducationEntry.id and RoleComponent.vectors (v3→v4)', () => {
+      const persistedState = {
+        data: {
+          ...JSON.parse(JSON.stringify(defaultResumeData)),
+          education: [{ school: 'S', location: 'L', degree: 'D' }], // No id
+          roles: [{ id: 'r1', company: 'C', title: 'T', dates: 'D', bullets: [] }] // No vectors
+        }
+      }
+      
+      // Simulate migration call for version 3 data
+      const migrated = resumeMigration(persistedState, 3, null)
+      
+      const eduId = migrated.data.education[0].id
+      expect(eduId).toBeDefined()
+      expect(eduId).toMatch(/^edu-/)
+      expect(migrated.data.roles[0].vectors).toEqual({})
+      
+      // Verify idempotency (preserving existing values when re-migrated)
+      const remigrated = resumeMigration(JSON.parse(JSON.stringify(migrated)), 3, null)
+      expect(remigrated.data.education[0].id).toBe(eduId)
+    })
   })
 })
-

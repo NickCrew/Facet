@@ -147,7 +147,7 @@ const createResume = (): AssembledResume => ({
       priority: 'must',
     },
   ],
-  education: [{ school: 'State U', location: 'TX', degree: 'BS', year: '2020' }],
+  education: [{ id: 'edu-1', school: 'State U', location: 'TX', degree: 'BS', year: '2020' }],
 })
 
 describe('typstRenderer', () => {

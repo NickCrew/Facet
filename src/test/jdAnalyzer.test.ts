@@ -9,9 +9,10 @@ describe('jdAnalyzer', () => {
     roles: [
       {
         id: 'r1',
-        company: 'Company',
-        title: 'Title',
-        dates: '2020',
+        company: 'C1',
+        title: 'T1',
+        dates: 'D1',
+        vectors: {},
         bullets: [{ id: 'b1', text: 'Original text', vectors: { v1: 'must' } }]
       }
     ]
@@ -76,6 +77,8 @@ describe('jdAnalyzer', () => {
         bullet_adjustments: [],
         suggested_target_line: 'Target',
         skill_gaps: [],
+        matched_keywords: ['react'],
+        suggested_variables: { company: 'Acme' },
         positioning_note: 'Note'
       }
 
@@ -92,6 +95,7 @@ describe('jdAnalyzer', () => {
 
       expect(result.primary_vector).toBe('v1')
       expect(result.suggested_target_line).toBe('Target')
+      expect(result.suggested_variables.company).toBe('Acme')
     })
   })
 })

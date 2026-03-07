@@ -243,4 +243,80 @@ describe('assembleResume', () => {
 
     expect(bullet?.text).toContain('self-service order processing platform')
   })
+
+  it('includes roles even when vectors field is empty (advisory only)', () => {
+    const data = clone(defaultResumeData)
+    data.roles = [
+      {
+        id: 'empty-vectors-role',
+        company: 'Empty Co',
+        title: 'Engineer',
+        dates: '2020-2021',
+        vectors: {}, // Should be ignored for role-level inclusion
+        bullets: [
+          { id: 'b1', text: 'Text', vectors: { backend: 'must' } }
+        ]
+      }
+    ]
+
+    const result = assembleResume(data, { selectedVector: 'backend' })
+    expect(result.resume.roles).toHaveLength(1)
+    expect(result.resume.roles[0].id).toBe('empty-vectors-role')
+  })
+
+  it('passes through meta header and education data', () => {
+    const data = clone(defaultResumeData)
+    data.meta.name = 'Custom Name'
+    data.education = [
+      { id: 'edu-1', school: 'Test Uni', degree: 'BS', location: 'City', year: '2020' }
+    ]
+
+    const result = assembleResume(data, { selectedVector: 'backend' })
+    expect(result.resume.header.name).toBe('Custom Name')
+    expect(result.resume.education).toHaveLength(1)
+    expect(result.resume.education[0].school).toBe('Test Uni')
+  })
+
+  it('honors override precedence (specific trumps general)', () => {
+    const data = clone(defaultResumeData)
+    const roleId = data.roles[0].id
+    const bulletId = data.roles[0].bullets[0].id
+    
+    // Preliminary: Confirm bullet is included without overrides
+    const baseline = assembleResume(data, { selectedVector: 'backend' })
+    const baseRole = baseline.resume.roles.find(r => r.id === roleId)
+    expect(baseRole?.bullets.find(b => b.id === bulletId)).toBeDefined()
+
+    // role:bullet override should trump global bullet ID override
+    const result = assembleResume(data, {
+      selectedVector: 'backend',
+      manualOverrides: {
+        [bulletId]: true, // Global ID: Include
+        [`role:${roleId}:bullet:${bulletId}`]: false, // Specific: Exclude
+      }
+    })
+
+    const role = result.resume.roles.find(r => r.id === roleId)
+    const bullet = role?.bullets.find(b => b.id === bulletId)
+    expect(bullet).toBeUndefined()
+  })
+
+  it('honors override precedence for mid-level keys', () => {
+    const data = clone(defaultResumeData)
+    const roleId = data.roles[0].id
+    const bulletId = data.roles[0].bullets[0].id
+    
+    // role:r1:b1 (mid-level) should trump bullet:b1 (lower mid-level)
+    const result = assembleResume(data, {
+      selectedVector: 'backend',
+      manualOverrides: {
+        [`bullet:${bulletId}`]: true,
+        [`role:${roleId}:${bulletId}`]: false,
+      }
+    })
+
+    const role = result.resume.roles.find(r => r.id === roleId)
+    const bullet = role?.bullets.find(b => b.id === bulletId)
+    expect(bullet).toBeUndefined()
+  })
 })

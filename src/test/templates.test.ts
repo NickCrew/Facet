@@ -77,7 +77,7 @@ describe('toTemplateResumeData', () => {
       },
       skillGroups: [{ id: 's1', label: 'L', content: 'C' }],
       projects: [{ id: 'pr1', name: 'N', text: 'T', priority: 'must', url: 'U' }],
-      education: [{ school: 'S', degree: 'D', location: 'L', year: 'Y' }]
+      education: [{ id: 'e1', school: 'S', degree: 'D', location: 'L', year: 'Y' }]
     })
     
     const result = toTemplateResumeData(assembled)

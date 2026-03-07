@@ -458,8 +458,8 @@ describe('usePdfPreview', () => {
     expect(activeWorker?.postMessage).not.toHaveBeenCalled()
   })
 
-  // P1 Gap #1, #6: Success-then-error transition and state reset
-  it('clears prior success state and revokes URL when a re-render fails', async () => {
+  // P1 Gap #1, #6: Success-then-error transition - PRESERVES old preview for stability
+  it('preserves prior success state when a re-render fails', async () => {
     const theme = createTheme()
     await renderHarness(createResume('R1'), theme)
     await act(async () => {
@@ -485,11 +485,12 @@ describe('usePdfPreview', () => {
       })
     })
 
-    expect(revokeObjectURLMock).toHaveBeenCalledWith('blob:preview')
+    // Should NOT revoke yet because we are keeping it visible as a stable fallback
+    expect(revokeObjectURLMock).not.toHaveBeenCalledWith('blob:preview')
     expect(latestState).toEqual({
-      previewBlobUrl: null,
-      cachedPdfBlob: null,
-      pageCount: null,
+      previewBlobUrl: 'blob:preview',
+      cachedPdfBlob: expect.any(Blob),
+      pageCount: 1,
       pending: false,
       error: 'fatal'
     })
