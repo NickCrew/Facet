@@ -12,23 +12,22 @@ import {
   SortableContext,
   arrayMove,
   sortableKeyboardCoordinates,
-  useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
 import { Eye, EyeOff, GripVertical } from 'lucide-react'
-import { useState } from 'react'
+import { useState, memo, useMemo } from 'react'
 import type { ComponentPriority, PriorityByVector, ProjectComponent, VectorDef, VectorSelection } from '../types'
 import { getPriorityForVector } from '../engine/assembler'
 import { componentKeys } from '../utils/componentKeys'
 import { resolveDisplayText } from '../utils/resolveDisplayText'
+import { useSortableItem } from '../hooks/useSortableItem'
 
 interface ProjectListProps {
   projects: ProjectComponent[]
   vectorDefs: VectorDef[]
   selectedVector: VectorSelection
   includedByKey: Record<string, boolean>
-  variantByKey: Record<string, string>
+  variantByKey: Record<string, string | undefined>
   onReorder: (nextOrder: string[]) => void
   onUpdate: (projectId: string, field: 'name' | 'url' | 'text', value: string) => void
   onUpdateVectors: (projectId: string, vectors: PriorityByVector) => void
@@ -42,10 +41,10 @@ interface SortableProjectCardProps {
   selectedVector: VectorSelection
   included: boolean
   variant?: string
-  onUpdate: (field: 'name' | 'url' | 'text', value: string) => void
-  onUpdateVectors: (vectors: PriorityByVector) => void
-  onToggleIncluded: () => void
-  onSetVariant: (variant: string | null) => void
+  onUpdate: (id: string, field: 'name' | 'url' | 'text', value: string) => void
+  onUpdateVectors: (id: string, vectors: PriorityByVector) => void
+  onToggleIncluded: (id: string, vectors: PriorityByVector) => void
+  onSetVariant: (id: string, variant: string | null) => void
 }
 
 function cyclePriority(current: ComponentPriority): ComponentPriority {
@@ -58,7 +57,7 @@ function cyclePriority(current: ComponentPriority): ComponentPriority {
   }
 }
 
-function SortableProjectCard({
+const SortableProjectCard = memo(function SortableProjectCard({
   project,
   vectorDefs,
   selectedVector,
@@ -69,15 +68,10 @@ function SortableProjectCard({
   onToggleIncluded,
   onSetVariant,
 }: SortableProjectCardProps) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: project.id })
+  const { setNodeRef, style, dragHandleProps, isDragging } = useSortableItem(project.id)
   const priority = getPriorityForVector(project.vectors, selectedVector)
   const variantIds = project.variants ? Object.keys(project.variants) : []
   const showVariantPicker = variantIds.length > 0
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  }
 
   const handlePriorityCycle = () => {
     if (selectedVector === 'all') return
@@ -88,7 +82,7 @@ function SortableProjectCard({
     } else {
       nextVectors[selectedVector] = next
     }
-    onUpdateVectors(nextVectors)
+    onUpdateVectors(project.id, nextVectors)
   }
 
   const handleMatrixDotClick = (vectorId: string) => {
@@ -100,11 +94,15 @@ function SortableProjectCard({
     } else {
       nextVectors[vectorId] = next
     }
-    onUpdateVectors(nextVectors)
+    onUpdateVectors(project.id, nextVectors)
   }
 
   return (
-    <article className={`component-card bullet-card ${included ? '' : 'dimmed'}`} ref={setNodeRef} style={style}>
+    <article 
+      className={`component-card bullet-card ${included ? '' : 'dimmed'} ${isDragging ? 'dragging' : ''}`} 
+      ref={setNodeRef} 
+      style={style}
+    >
       <div className={`priority-strip priority-${priority}`} />
       
       <header className="component-card-header">
@@ -113,8 +111,8 @@ function SortableProjectCard({
             className="drag-handle"
             type="button"
             aria-label={`Reorder project ${project.name || project.id}`}
-            {...attributes}
-            {...listeners}
+            {...dragHandleProps}
+            aria-describedby="dnd-instructions-projects"
           >
             <GripVertical size={14} />
           </button>
@@ -135,7 +133,7 @@ function SortableProjectCard({
             type="button"
             className="btn-ghost"
             aria-pressed={included}
-            onClick={onToggleIncluded}
+            onClick={() => onToggleIncluded(project.id, project.vectors)}
             data-testid="project-toggle-included"
           >
             {included ? <Eye size={14} /> : <EyeOff size={14} />}
@@ -147,20 +145,20 @@ function SortableProjectCard({
         className="component-input compact"
         aria-label="Project name"
         value={project.name}
-        onChange={(event) => onUpdate('name', event.target.value)}
+        onChange={(event) => onUpdate(project.id, 'name', event.target.value)}
       />
       <input
         className="component-input compact"
         aria-label="Project URL"
         value={project.url ?? ''}
         placeholder="URL"
-        onChange={(event) => onUpdate('url', event.target.value)}
+        onChange={(event) => onUpdate(project.id, 'url', event.target.value)}
       />
       <textarea
         className="component-input"
         aria-label="Project description"
         value={resolveDisplayText(project.text, project.variants, variant, selectedVector).displayText}
-        onChange={(event) => onUpdate('text', event.target.value)}
+        onChange={(event) => onUpdate(project.id, 'text', event.target.value)}
       />
 
       <div className="bullet-footer-row">
@@ -172,6 +170,7 @@ function SortableProjectCard({
               value={variant ?? 'auto'}
               onChange={(event) =>
                 onSetVariant(
+                  project.id,
                   event.target.value === 'auto' ? null : event.target.value,
                 )
               }
@@ -210,9 +209,9 @@ function SortableProjectCard({
       </div>
     </article>
   )
-}
+})
 
-export function ProjectList({
+export const ProjectList = memo(function ProjectList({
   projects,
   vectorDefs,
   selectedVector,
@@ -224,7 +223,7 @@ export function ProjectList({
   onToggleIncluded,
   onSetVariant,
 }: ProjectListProps) {
-  const projectIds = projects.map((project) => project.id)
+  const projectIds = useMemo(() => projects.map((project) => project.id), [projects])
   const [announcement, setAnnouncement] = useState('')
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -258,8 +257,17 @@ export function ProjectList({
     setAnnouncement(`Dropped project at position ${newIndex + 1}.`)
   }
 
+  // Identity forwarding is correct here because ProjectList.memo handles parent instability,
+  // and we don't need to bake in extra context like roleId here.
+  // We drop the intermediate useCallbacks to simplify.
+
   return (
     <>
+      {/* Visual hidden instruction for DnD handles */}
+      <span id="dnd-instructions-projects" className="sr-only">
+        To reorder, press Space or Enter to lift, use Arrow keys to move, and Space or Enter to drop. Press Escape to cancel.
+      </span>
+
       <p className="sr-only" aria-live="polite" aria-atomic="true">
         {announcement}
       </p>
@@ -283,10 +291,10 @@ export function ProjectList({
                   selectedVector={selectedVector}
                   included={included}
                   variant={variantByKey[key]}
-                  onUpdate={(field, value) => onUpdate(project.id, field, value)}
-                  onUpdateVectors={(vectors) => onUpdateVectors(project.id, vectors)}
-                  onToggleIncluded={() => onToggleIncluded(project.id, project.vectors)}
-                  onSetVariant={(variant) => onSetVariant(project.id, variant)}
+                  onUpdate={onUpdate}
+                  onUpdateVectors={onUpdateVectors}
+                  onToggleIncluded={onToggleIncluded}
+                  onSetVariant={onSetVariant}
                 />
               )
             })}
@@ -295,4 +303,4 @@ export function ProjectList({
       </DndContext>
     </>
   )
-}
+})

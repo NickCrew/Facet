@@ -11,14 +11,13 @@ import {
   SortableContext,
   arrayMove,
   sortableKeyboardCoordinates,
-  useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
 import { GripVertical, Settings, Eye, EyeOff, X } from 'lucide-react'
-import { useState } from 'react'
+import { useState, memo, useMemo, useCallback } from 'react'
 import type { ComponentPriority, SkillGroup, SkillGroupVectorConfig, VectorDef, VectorSelection } from '../types'
 import { ensureSkillGroupVectors } from '../utils/skillGroupVectors'
+import { useSortableItem } from '../hooks/useSortableItem'
 
 interface SkillGroupListProps {
   skillGroups: SkillGroup[]
@@ -36,9 +35,9 @@ interface SortableSkillGroupCardProps {
   vectorDefs: VectorDef[]
   selectedVector: VectorSelection
   included: boolean
-  onToggleIncluded: () => void
-  onUpdate: (field: 'label' | 'content', value: string) => void
-  onUpdateVectors: (vectors: Record<string, SkillGroupVectorConfig>) => void
+  onToggleIncluded: (id: string) => void
+  onUpdate: (id: string, field: 'label' | 'content', value: string) => void
+  onUpdateVectors: (id: string, vectors: Record<string, SkillGroupVectorConfig>) => void
 }
 
 function cyclePriority(current: ComponentPriority): ComponentPriority {
@@ -51,7 +50,7 @@ function cyclePriority(current: ComponentPriority): ComponentPriority {
   }
 }
 
-function SortableSkillGroupCard({
+const SortableSkillGroupCard = memo(function SortableSkillGroupCard({
   skillGroup,
   vectorDefs,
   selectedVector,
@@ -60,21 +59,16 @@ function SortableSkillGroupCard({
   onUpdate,
   onUpdateVectors,
 }: SortableSkillGroupCardProps) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: skillGroup.id })
+  const { setNodeRef, style, dragHandleProps, isDragging } = useSortableItem(skillGroup.id)
   const [showConfig, setShowConfig] = useState(false)
   const normalizedVectors = ensureSkillGroupVectors(skillGroup, vectorDefs)
   const priority = selectedVector === 'all' ? 'must' : normalizedVectors[selectedVector]?.priority ?? 'exclude'
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  }
 
   const handlePriorityCycle = () => {
     if (selectedVector === 'all') return
     const config = normalizedVectors[selectedVector]
     const next = cyclePriority(config.priority)
-    onUpdateVectors({
+    onUpdateVectors(skillGroup.id, {
       ...normalizedVectors,
       [selectedVector]: {
         ...config,
@@ -86,7 +80,7 @@ function SortableSkillGroupCard({
   const handleMatrixDotClick = (vectorId: string) => {
     const config = normalizedVectors[vectorId]
     const next = cyclePriority(config.priority)
-    onUpdateVectors({
+    onUpdateVectors(skillGroup.id, {
       ...normalizedVectors,
       [vectorId]: {
         ...config,
@@ -95,8 +89,24 @@ function SortableSkillGroupCard({
     })
   }
 
+  const handleToggle = useCallback(() => {
+    onToggleIncluded(skillGroup.id)
+  }, [skillGroup.id, onToggleIncluded])
+
+  const handleUpdateLabel = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    onUpdate(skillGroup.id, 'label', e.target.value)
+  }, [skillGroup.id, onUpdate])
+
+  const handleUpdateContent = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    onUpdate(skillGroup.id, 'content', e.target.value)
+  }, [skillGroup.id, onUpdate])
+
   return (
-    <article className={`component-card bullet-card ${included ? '' : 'dimmed'}`} ref={setNodeRef} style={style}>
+    <article 
+      className={`component-card bullet-card ${included ? '' : 'dimmed'} ${isDragging ? 'dragging' : ''}`} 
+      ref={setNodeRef} 
+      style={style}
+    >
       <div className={`priority-strip priority-${priority}`} />
       
       <header className="component-card-header">
@@ -104,9 +114,9 @@ function SortableSkillGroupCard({
           <button
             className="drag-handle"
             type="button"
-            aria-label="Reorder skill group"
-            {...attributes}
-            {...listeners}
+            aria-label={`Reorder skill group ${skillGroup.label}`}
+            {...dragHandleProps}
+            aria-describedby="dnd-instructions-skills"
           >
             <GripVertical size={14} />
           </button>
@@ -132,7 +142,7 @@ function SortableSkillGroupCard({
             <Settings size={14} />
             Config
           </button>
-          <button type="button" className="btn-ghost" aria-pressed={included} onClick={onToggleIncluded}>
+          <button type="button" className="btn-ghost" aria-pressed={included} onClick={handleToggle}>
             {included ? <Eye size={14} /> : <EyeOff size={14} />}
             {included ? 'Included' : 'Excluded'}
           </button>
@@ -143,13 +153,13 @@ function SortableSkillGroupCard({
         className="component-input compact"
         aria-label="Skill group name"
         value={skillGroup.label}
-        onChange={(event) => onUpdate('label', event.target.value)}
+        onChange={handleUpdateLabel}
       />
       <textarea
         className="component-input"
         aria-label="Default skill group content"
         value={skillGroup.content}
-        onChange={(event) => onUpdate('content', event.target.value)}
+        onChange={handleUpdateContent}
       />
 
       {showConfig && (
@@ -179,7 +189,7 @@ function SortableSkillGroupCard({
                         value={config.order}
                         onChange={(event) => {
                           const nextOrder = Math.max(1, Number.parseInt(event.target.value || '1', 10) || 1)
-                          onUpdateVectors({
+                          onUpdateVectors(skillGroup.id, {
                             ...normalizedVectors,
                             [vector.id]: {
                               ...config,
@@ -196,7 +206,7 @@ function SortableSkillGroupCard({
                         placeholder={skillGroup.content}
                         value={config.content ?? ''}
                         onChange={(event) =>
-                          onUpdateVectors({
+                          onUpdateVectors(skillGroup.id, {
                             ...normalizedVectors,
                             [vector.id]: {
                               ...config,
@@ -237,9 +247,9 @@ function SortableSkillGroupCard({
       </div>
     </article>
   )
-}
+})
 
-export function SkillGroupList({
+export const SkillGroupList = memo(function SkillGroupList({
   skillGroups,
   vectorDefs,
   selectedVector,
@@ -249,7 +259,7 @@ export function SkillGroupList({
   onUpdateVectors,
   onToggleIncluded,
 }: SkillGroupListProps) {
-  const skillIds = skillGroups.map((skill) => skill.id)
+  const skillIds = useMemo(() => skillGroups.map((skill) => skill.id), [skillGroups])
   const [announcement, setAnnouncement] = useState('')
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -283,8 +293,17 @@ export function SkillGroupList({
     setAnnouncement(`Dropped skill group at position ${newIndex + 1}.`)
   }
 
+  // Identity forwarding
+  const handleUpdate = useCallback((id: string, field: 'label' | 'content', value: string) => onUpdate(id, field, value), [onUpdate])
+  const handleUpdateVectors = useCallback((id: string, vectors: Record<string, SkillGroupVectorConfig>) => onUpdateVectors(id, vectors), [onUpdateVectors])
+  const handleToggleIncluded = useCallback((id: string) => onToggleIncluded(id), [onToggleIncluded])
+
   return (
     <>
+      <span id="dnd-instructions-skills" className="sr-only">
+        To reorder, press Space or Enter to lift, use Arrow keys to move, and Space or Enter to drop. Press Escape to cancel.
+      </span>
+
       <p className="sr-only" aria-live="polite" aria-atomic="true">
         {announcement}
       </p>
@@ -304,9 +323,9 @@ export function SkillGroupList({
                 vectorDefs={vectorDefs}
                 selectedVector={selectedVector}
                 included={includedByKey[skillGroup.id] ?? true}
-                onToggleIncluded={() => onToggleIncluded(skillGroup.id)}
-                onUpdate={(field, value) => onUpdate(skillGroup.id, field, value)}
-                onUpdateVectors={(vectors) => onUpdateVectors(skillGroup.id, vectors)}
+                onToggleIncluded={handleToggleIncluded}
+                onUpdate={handleUpdate}
+                onUpdateVectors={handleUpdateVectors}
               />
             ))}
           </div>
@@ -314,4 +333,4 @@ export function SkillGroupList({
       </DndContext>
     </>
   )
-}
+})
