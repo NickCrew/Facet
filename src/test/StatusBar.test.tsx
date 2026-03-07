@@ -13,6 +13,7 @@ const baseProps = {
   nearBudget: false,
   overBudget: false,
   mustOverBudget: false,
+  matchScore: null,
 }
 
 describe('StatusBar', () => {

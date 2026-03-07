@@ -2,11 +2,14 @@ import { useMemo, type CSSProperties } from 'react'
 import type { AssembledResume, ResumeTheme } from '../types'
 import { toLinkDisplayText, toLinkHref } from '../utils/linkFormatting'
 import { pointsToPixels, inchesToPixels, toHexColor, US_LETTER_HEIGHT_PX } from '../utils/unitConversions'
+import { highlightKeywords } from '../utils/keywordHighlighting'
 
 interface LivePreviewProps {
   assembled: AssembledResume
   theme: ResumeTheme
   showHeatmap?: boolean
+  matchedKeywords?: string[]
+  suggestedChanges?: string[]
 }
 
 // eslint-disable-next-line react-refresh/only-export-components -- used by tests
@@ -81,9 +84,16 @@ export const buildPreviewVars = (theme: ResumeTheme): CSSProperties => {
   } as CSSProperties
 }
 
-export function LivePreview({ assembled, theme, showHeatmap }: LivePreviewProps) {
+export function LivePreview({
+  assembled,
+  theme,
+  showHeatmap,
+  matchedKeywords = [],
+  suggestedChanges = [],
+}: LivePreviewProps) {
   const previewStyle = useMemo(() => buildPreviewVars(theme), [theme])
   const isNoBulletTheme = theme.bulletChar === 'none'
+  const suggestedSet = useMemo(() => new Set(suggestedChanges), [suggestedChanges])
 
   const contactParts = [assembled.header.email, assembled.header.phone, assembled.header.location]
     .map((part) => part.trim())
@@ -99,12 +109,14 @@ export function LivePreview({ assembled, theme, showHeatmap }: LivePreviewProps)
     return (
       <>
         {assembled.targetLine ? (
-          <p className="target-line">{assembled.targetLine.text}</p>
+          <p className={`target-line ${suggestedSet.has(assembled.targetLine.id) ? 'preview-suggested' : ''}`}>
+            {highlightKeywords(assembled.targetLine.text, matchedKeywords)}
+          </p>
         ) : null}
 
         {assembled.profile ? (
-          <section className="resume-section">
-            <p className="profile-text">{assembled.profile.text}</p>
+          <section className={`resume-section ${suggestedSet.has(assembled.profile.id) ? 'preview-suggested' : ''}`}>
+            <p className="profile-text">{highlightKeywords(assembled.profile.text, matchedKeywords)}</p>
           </section>
         ) : null}
 
@@ -113,8 +125,11 @@ export function LivePreview({ assembled, theme, showHeatmap }: LivePreviewProps)
             <h2>{formatSectionLabel(theme.sectionHeaderStyle, 'SKILLS')}</h2>
             <div className="skills-grid">
               {assembled.skillGroups.map((group) => (
-                <div key={group.id} className="skill-group">
-                  <strong>{group.label}:</strong> {group.content}
+                <div 
+                  key={group.id} 
+                  className={`skill-group ${suggestedSet.has(group.id) ? 'preview-suggested' : ''}`}
+                >
+                  <strong>{highlightKeywords(group.label, matchedKeywords)}:</strong> {highlightKeywords(group.content, matchedKeywords)}
                 </div>
               ))}
             </div>
@@ -128,14 +143,14 @@ export function LivePreview({ assembled, theme, showHeatmap }: LivePreviewProps)
               <div key={role.id} className="role-entry">
                 <div className="role-header">
                   <div className="role-header-main">
-                    <span className="company-name">{role.company}</span>
-                    {role.subtitle && <span className="role-subtitle">{role.subtitle}</span>}
+                    <span className="company-name">{highlightKeywords(role.company, matchedKeywords)}</span>
+                    {role.subtitle && <span className="role-subtitle">{highlightKeywords(role.subtitle, matchedKeywords)}</span>}
                     {role.dates && (
                       <span className="role-dates">{role.dates}</span>
                     )}
                   </div>
                   <div className="role-header-sub">
-                    <span className="role-title">{role.title}</span>
+                    <span className="role-title">{highlightKeywords(role.title, matchedKeywords)}</span>
                     {role.location && (
                       <span className="role-location">{role.location}</span>
                     )}
@@ -143,7 +158,12 @@ export function LivePreview({ assembled, theme, showHeatmap }: LivePreviewProps)
                 </div>
                 <ul className={`bullet-list ${isNoBulletTheme ? 'no-bullets' : ''}`}>
                   {role.bullets.map((bullet) => (
-                    <li key={bullet.id}>{bullet.text}</li>
+                    <li 
+                      key={bullet.id} 
+                      className={suggestedSet.has(bullet.id) ? 'preview-suggested' : ''}
+                    >
+                      {highlightKeywords(bullet.text, matchedKeywords)}
+                    </li>
                   ))}
                 </ul>
               </div>
@@ -155,14 +175,17 @@ export function LivePreview({ assembled, theme, showHeatmap }: LivePreviewProps)
           <section className="resume-section">
             <h2>{formatSectionLabel(theme.sectionHeaderStyle, 'PROJECTS')}</h2>
             {assembled.projects.map((project) => (
-              <div key={project.id} className="project-entry">
+              <div 
+                key={project.id} 
+                className={`project-entry ${suggestedSet.has(project.id) ? 'preview-suggested' : ''}`}
+              >
                 <div className="project-header">
-                  <span className="project-name">{project.name}</span>
+                  <span className="project-name">{highlightKeywords(project.name, matchedKeywords)}</span>
                   {project.url && (
                     <span className="project-url">({project.url})</span>
                   )}
                 </div>
-                <p className="project-text">{project.text}</p>
+                <p className="project-text">{highlightKeywords(project.text, matchedKeywords)}</p>
               </div>
             ))}
           </section>
@@ -173,8 +196,11 @@ export function LivePreview({ assembled, theme, showHeatmap }: LivePreviewProps)
             <h2>{formatSectionLabel(theme.sectionHeaderStyle, 'EDUCATION')}</h2>
             <ul className="education-list">
               {assembled.education.map((item) => (
-                <li key={`${item.school}-${item.degree}`} className="education-row">
-                  <strong>{item.school}</strong>, {item.location} - {item.degree}{item.year ? ` (${item.year})` : ''}
+                <li 
+                  key={item.id} 
+                  className={`education-row ${suggestedSet.has(item.id) ? 'preview-suggested' : ''}`}
+                >
+                  <strong>{highlightKeywords(item.school, matchedKeywords)}</strong>, {item.location} - {highlightKeywords(item.degree, matchedKeywords)}{item.year ? ` (${item.year})` : ''}
                 </li>
               ))}
             </ul>
@@ -215,8 +241,11 @@ export function LivePreview({ assembled, theme, showHeatmap }: LivePreviewProps)
                 <h2>{formatSectionLabel(theme.sectionHeaderStyle, 'SKILLS')}</h2>
                 <div className="skills-sidebar">
                   {assembled.skillGroups.map((group) => (
-                    <div key={group.id} className="skill-group">
-                      <strong>{group.label}:</strong> {group.content}
+                    <div 
+                      key={group.id} 
+                      className={`skill-group ${suggestedSet.has(group.id) ? 'preview-suggested' : ''}`}
+                    >
+                      <strong>{highlightKeywords(group.label, matchedKeywords)}:</strong> {highlightKeywords(group.content, matchedKeywords)}
                     </div>
                   ))}
                 </div>
@@ -228,9 +257,12 @@ export function LivePreview({ assembled, theme, showHeatmap }: LivePreviewProps)
                 <h2>{formatSectionLabel(theme.sectionHeaderStyle, 'EDUCATION')}</h2>
                 <ul className="education-list-sidebar">
                   {assembled.education.map((item) => (
-                    <li key={`${item.school}-${item.degree}`} className="education-row">
-                      <strong>{item.school}</strong><br />
-                      {item.degree}{item.year ? ` (${item.year})` : ''}
+                    <li 
+                      key={item.id} 
+                      className={`education-row ${suggestedSet.has(item.id) ? 'preview-suggested' : ''}`}
+                    >
+                      <strong>{highlightKeywords(item.school, matchedKeywords)}</strong><br />
+                      {highlightKeywords(item.degree, matchedKeywords)}{item.year ? ` (${item.year})` : ''}
                     </li>
                   ))}
                 </ul>

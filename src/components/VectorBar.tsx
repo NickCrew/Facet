@@ -1,5 +1,6 @@
 import { Plus, RotateCcw, Target } from 'lucide-react'
 import type { VectorDef, VectorSelection } from '../types'
+import { HelpHint } from './HelpHint'
 
 interface VectorBarProps {
   vectors: VectorDef[]
@@ -17,7 +18,7 @@ export function VectorBar({
   onResetAuto,
 }: VectorBarProps) {
   return (
-    <div className="vector-bar">
+    <div className="vector-bar" data-tour="vector-bar">
       <div className="vector-pills">
         <button
           className={`vector-pill ${selectedVector === 'all' ? 'active' : ''}`}
@@ -44,6 +45,7 @@ export function VectorBar({
         ))}
       </div>
       <div className="vector-actions">
+        <HelpHint text="Vectors are positioning angles. Select one to assemble a resume tailored to that direction." placement="bottom" />
         <button className="vector-pill add-pill" onClick={onAddVector} type="button">
           <Plus size={14} />
           New Vector

@@ -3,6 +3,8 @@ import { BookOpen, Copy, Download, Eye, FileDown, FileJson, FileText, FolderOpen
 import { DropdownMenu } from './components/DropdownMenu'
 import './index.css'
 import type {
+  AddComponentPayload,
+  AddComponentType,
   PriorityByVector,
   ResumeThemeOverrides,
   ResumeThemePresetId,
@@ -126,6 +128,8 @@ function App() {
     resetRoleBulletOrder,
     resetAllOverrides,
     resetOverridesForVector,
+    reorderProjects,
+    reorderSkillGroups,
   } = useResumeStore()
   const {
     selectedVector,
@@ -712,16 +716,8 @@ function App() {
   }
 
   const onAddComponent = (
-    type: 'target_line' | 'profile' | 'skill_group' | 'project' | 'bullet',
-    payload: {
-      text?: string
-      label?: string
-      content?: string
-      name?: string
-      url?: string
-      roleId?: string
-      vectors?: PriorityByVector
-    },
+    type: AddComponentType,
+    payload: AddComponentPayload,
   ) => {
     const baseVectors = payload.vectors ?? defaultVectorsForSelection(selectedVector, data.vectors)
 
@@ -1289,12 +1285,7 @@ function App() {
                   }
                 })
               }
-              onReorderProjects={(order) =>
-                updateData((current) => ({
-                  ...current,
-                  projects: reorderById(current.projects, order),
-                }))
-              }
+              onReorderProjects={reorderProjects}
               onUpdateRole={(id, field, value) =>
                 updateData((current) => ({
                   ...current,
@@ -1313,6 +1304,21 @@ function App() {
                           ...role,
                           bullets: role.bullets.map((bullet) =>
                             bullet.id === bulletId ? { ...bullet, text } : bullet,
+                          ),
+                        },
+                  ),
+                }))
+              }
+              onUpdateBulletLabel={(roleId, bulletId, label) =>
+                updateData((current) => ({
+                  ...current,
+                  roles: current.roles.map((role) =>
+                    role.id !== roleId
+                      ? role
+                      : {
+                          ...role,
+                          bullets: role.bullets.map((bullet) =>
+                            bullet.id === bulletId ? { ...bullet, label: label || undefined } : bullet,
                           ),
                         },
                   ),

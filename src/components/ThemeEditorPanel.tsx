@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 
 import type { ResumeTheme, ResumeThemeOverrides, ResumeThemePresetId, TemplateId } from '../types'
+import { HelpHint } from './HelpHint'
 import {
   THEME_BULLET_OPTIONS,
   THEME_DATES_ALIGNMENT_OPTIONS,
@@ -285,7 +286,7 @@ export function ThemeEditorPanel({
           </div>
 
           <div className="theme-gallery-header">
-            <h3>Theme Gallery</h3>
+            <h3>Theme Gallery <HelpHint text="Presets provide a starting point. Override individual values below." placement="bottom" /></h3>
             <p>Click a card to apply a theme.</p>
           </div>
           <div className="theme-gallery-strip" aria-label="Theme visual gallery">
