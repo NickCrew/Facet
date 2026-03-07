@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { Copy, Download, Eye, FileDown, FileJson, FileText, FolderOpen, Layers, Monitor, Moon, Paintbrush, Save, ScanSearch, Sun, Trash2, Upload, Zap } from 'lucide-react'
+import { BookOpen, Copy, Download, Eye, FileDown, FileJson, FileText, FolderOpen, Layers, Monitor, Moon, Paintbrush, Save, ScanSearch, Sun, Trash2, Upload, Zap } from 'lucide-react'
 import { DropdownMenu } from './components/DropdownMenu'
 import './index.css'
 import type {
@@ -989,6 +989,8 @@ function App() {
             <DropdownMenu.Divider />
             <DropdownMenu.Item icon={Copy} label="Copy as Text" onClick={onCopyText} />
             <DropdownMenu.Item icon={FileDown} label="Copy as Markdown" onClick={onCopyMarkdown} />
+            <DropdownMenu.Divider />
+            <DropdownMenu.Item icon={BookOpen} label="Docs" onClick={() => window.open('https://github.com/NickCrew/Facet/blob/main/docs/NAVIGATOR.md', '_blank', 'noopener,noreferrer')} />
           </DropdownMenu>
 
           <DropdownMenu label="Actions" icon={Zap}>
