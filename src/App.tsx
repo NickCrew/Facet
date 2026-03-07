@@ -46,6 +46,7 @@ import { createId, sanitizeEndpointUrl, slugify } from './utils/idUtils'
 import { findOptimalDensity } from './utils/densityOptimizer'
 
 const vectorFallbackColors = ['#2563EB', '#0D9488', '#7C3AED', '#EA580C', '#4F46E5', '#0891B2']
+const CURRENT_YEAR = new Date().getFullYear()
 
 const EMPTY_MANUAL_OVERRIDES: Readonly<Record<string, Record<string, boolean>>> = Object.freeze({})
 const EMPTY_VARIANT_OVERRIDES: Readonly<Record<string, Record<string, VariantSelection>>> = Object.freeze({})
@@ -173,6 +174,11 @@ function App() {
   const noticeTimeoutRef = useRef<number | null>(null)
   const jdModalRef = useRef<HTMLDivElement>(null)
   const reframeModalRef = useRef<HTMLDivElement>(null)
+  const variablesModalRef = useRef<HTMLDivElement>(null)
+
+  useFocusTrap(jdModalOpen, jdModalRef, () => setJdModalOpen(false))
+  useFocusTrap(!!reframeResult, reframeModalRef, () => setReframeResult(null))
+  useFocusTrap(variablesOpen, variablesModalRef, () => setVariablesOpen(false))
   const jdAnalysisEndpointRaw = (import.meta.env.VITE_ANTHROPIC_PROXY_URL as string | undefined) ?? ''
   const jdAnalysisEndpoint = useMemo(() => sanitizeEndpointUrl(jdAnalysisEndpointRaw), [jdAnalysisEndpointRaw])
 
