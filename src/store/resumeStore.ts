@@ -1,8 +1,26 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
-import type { ResumeData, VariantSelection, VectorId } from '../types'
+import type {
+  PriorityByVector,
+  ResumeData,
+  SkillGroupVectorConfig,
+  VariantSelection,
+  VectorId,
+  EducationEntry,
+  ProjectComponent,
+  SkillGroupComponent,
+  RoleComponent,
+  RoleBulletComponent,
+  TargetLineComponent,
+  ProfileComponent,
+  ComponentPriority,
+} from '../types'
 import { defaultResumeData } from './defaultData'
 import { resolveStorage } from './storage'
+import { reorderSkillGroupForSelection } from '../utils/skillGroupVectors'
+import { reorderById } from '../utils/reorderById'
+import { createId } from '../utils/idUtils'
+import { useUiStore } from './uiStore'
 
 const MAX_HISTORY = 50
 
@@ -38,6 +56,36 @@ interface ResumeState {
   resetAllOverrides: () => void
   setRoleBulletOrder: (vectorId: VectorId | 'all', roleId: string, order: string[]) => void
   resetRoleBulletOrder: (vectorId: VectorId | 'all', roleId: string) => void
+
+  // Entity Update Actions
+  updateMetaField: (field: 'name' | 'email' | 'phone' | 'location', value: string) => void
+  updateMetaLink: (index: number, field: 'label' | 'url', value: string) => void
+  addMetaLink: () => void
+  removeMetaLink: (index: number) => void
+  updateTargetLine: (id: string, text: string) => void
+  updateTargetLineVectors: (id: string, vectors: PriorityByVector) => void
+  updateProfile: (id: string, text: string) => void
+  updateProfileVectors: (id: string, vectors: PriorityByVector) => void
+  updateProject: (id: string, field: 'name' | 'url' | 'text', value: string) => void
+  updateProjectVectors: (id: string, vectors: PriorityByVector) => void
+  reorderProjects: (order: string[]) => void
+  updateSkillGroup: (id: string, field: 'label' | 'content', value: string) => void
+  updateSkillGroupVectors: (id: string, vectors: Record<string, SkillGroupVectorConfig>) => void
+  reorderSkillGroups: (order: string[]) => void
+  updateRole: (roleId: string, field: 'company' | 'title' | 'dates' | 'location' | 'subtitle', value: string | null) => void
+  updateBullet: (roleId: string, bulletId: string, text: string) => void
+  updateBulletLabel: (roleId: string, bulletId: string, label: string) => void
+  updateBulletVectors: (roleId: string, bulletId: string, vectors: PriorityByVector) => void
+  updateVariables: (variables: Record<string, string>) => void
+
+  // Entity Creation Actions (Type-safe)
+  addTargetLine: (line: TargetLineComponent) => void
+  addProfile: (profile: ProfileComponent) => void
+  addSkillGroup: (group: Omit<SkillGroupComponent, 'vectors'>) => void
+  addProject: (project: ProjectComponent) => void
+  addBullet: (roleId: string, bullet: RoleBulletComponent) => void
+  addRole: (role: RoleComponent) => void
+  addEducation: (entry: EducationEntry) => void
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration handles raw persisted state with unknown shape
@@ -69,6 +117,28 @@ export function resumeMigration(persistedState: any, version: number, legacyUiDa
     }
     delete persistedState.data.saved_variants
   }
+
+  // v3 → v4 (implicit or step): backfill EducationEntry.id and RoleComponent.vectors
+  // Idempotent — safe to run on all versions; only acts if fields are missing.
+  if (version < 4 && persistedState.data) {
+    if (persistedState.data.education) {
+      persistedState.data.education = persistedState.data.education.map((e: any) => {
+        if (!e.id) {
+          return { ...e, id: createId('edu') }
+        }
+        return e
+      })
+    }
+    if (persistedState.data.roles) {
+      persistedState.data.roles = persistedState.data.roles.map((r: any) => {
+        if (!r.vectors) {
+          return { ...r, vectors: {} }
+        }
+        return r
+      })
+    }
+  }
+
   return persistedState
 }
 
@@ -82,6 +152,8 @@ export const useResumeStore = create<ResumeState>()(
       canRedo: false,
 
       setData: (data) => {
+        const { data: current } = get()
+        if (data === current) return
         get().updateData(() => data)
       },
 
@@ -252,15 +324,265 @@ export const useResumeStore = create<ResumeState>()(
           }
         })
       },
+
+      // Update implementations
+      // Note: We avoid trimming on every onChange to support mid-keystroke spacing.
+      // Trimming is handled at creation time or during export/serialization.
+      updateMetaField: (field, value) => {
+        get().updateData((current) => ({
+          ...current,
+          meta: { ...current.meta, [field]: value }
+        }))
+      },
+
+      updateMetaLink: (index, field, value) => {
+        get().updateData((current) => ({
+          ...current,
+          meta: {
+            ...current.meta,
+            links: current.meta.links.map((link, linkIndex) =>
+              linkIndex === index ? { 
+                ...link, 
+                [field]: field === 'label' ? (value === '' ? undefined : value) : value 
+              } : link
+            )
+          }
+        }))
+      },
+
+      addMetaLink: () => {
+        get().updateData((current) => ({
+          ...current,
+          meta: { ...current.meta, links: [...current.meta.links, { url: '' }] }
+        }))
+      },
+
+      removeMetaLink: (index) => {
+        get().updateData((current) => ({
+          ...current,
+          meta: { ...current.meta, links: current.meta.links.filter((_, i) => i !== index) }
+        }))
+      },
+
+      updateTargetLine: (id, text) => {
+        get().updateData((current) => ({
+          ...current,
+          target_lines: current.target_lines.map((l) => l.id === id ? { ...l, text } : l)
+        }))
+      },
+
+      updateTargetLineVectors: (id, vectors) => {
+        get().updateData((current) => ({
+          ...current,
+          target_lines: current.target_lines.map((l) => l.id === id ? { ...l, vectors } : l)
+        }))
+      },
+
+      updateProfile: (id, text) => {
+        get().updateData((current) => ({
+          ...current,
+          profiles: current.profiles.map((p) => p.id === id ? { ...p, text } : p)
+        }))
+      },
+
+      updateProfileVectors: (id, vectors) => {
+        get().updateData((current) => ({
+          ...current,
+          profiles: current.profiles.map((p) => p.id === id ? { ...p, vectors } : p)
+        }))
+      },
+
+      updateProject: (id, field, value) => {
+        get().updateData((current) => ({
+          ...current,
+          projects: current.projects.map((p) => 
+            p.id === id ? { ...p, [field]: field === 'url' ? (value === '' ? undefined : value) : value } : p
+          )
+        }))
+      },
+
+      updateProjectVectors: (id, vectors) => {
+        get().updateData((current) => ({
+          ...current,
+          projects: current.projects.map((p) => p.id === id ? { ...p, vectors } : p)
+        }))
+      },
+
+      reorderProjects: (order) => {
+        get().updateData((current) => ({
+          ...current,
+          projects: reorderById(current.projects, order)
+        }))
+      },
+
+      updateSkillGroup: (id, field, value) => {
+        get().updateData((current) => ({
+          ...current,
+          skill_groups: current.skill_groups.map((group) => {
+            if (group.id !== id) return group
+            return { ...group, [field]: value }
+          })
+        }))
+      },
+
+      updateSkillGroupVectors: (id, vectors) => {
+        get().updateData((current) => ({
+          ...current,
+          skill_groups: current.skill_groups.map((group) => group.id === id ? { ...group, vectors } : group)
+        }))
+      },
+
+      reorderSkillGroups: (order) => {
+        const { selectedVector } = useUiStore.getState()
+        get().updateData((current) => {
+          const reordered = reorderById(current.skill_groups, order)
+          return {
+            ...current,
+            skill_groups: reordered.map((skill, index) => 
+              reorderSkillGroupForSelection(skill, selectedVector, current.vectors, index + 1)
+            )
+          }
+        })
+      },
+
+      updateRole: (roleId, field, value) => {
+        get().updateData((current) => ({
+          ...current,
+          roles: current.roles.map((r) => r.id === roleId ? { ...r, [field]: value } : r)
+        }))
+      },
+
+      updateBullet: (roleId, bulletId, text) => {
+        get().updateData((current) => ({
+          ...current,
+          roles: current.roles.map((r) => 
+            r.id === roleId 
+              ? { ...r, bullets: r.bullets.map((b) => b.id === bulletId ? { ...b, text } : b) } 
+              : r
+          )
+        }))
+      },
+
+      updateBulletLabel: (roleId, bulletId, label) => {
+        get().updateData((current) => ({
+          ...current,
+          roles: current.roles.map((r) => 
+            r.id === roleId 
+              ? { ...r, bullets: r.bullets.map((b) => b.id === bulletId ? { ...b, label: label === '' ? undefined : label } : b) } 
+              : r
+          )
+        }))
+      },
+
+      updateBulletVectors: (roleId, bulletId, vectors) => {
+        get().updateData((current) => ({
+          ...current,
+          roles: current.roles.map((r) => 
+            r.id === roleId 
+              ? { ...r, bullets: r.bullets.map((b) => b.id === bulletId ? { ...b, vectors } : b) } 
+              : r
+          )
+        }))
+      },
+
+      updateVariables: (variables) => {
+        get().updateData((current) => ({
+          ...current,
+          variables,
+        }))
+      },
+
+      // Creation implementations (Type-safe)
+      addTargetLine: (line) => {
+        get().updateData((current) => ({
+          ...current,
+          target_lines: [...current.target_lines, { ...line, text: line.text.trim() }]
+        }))
+      },
+
+      addProfile: (profile) => {
+        get().updateData((current) => ({
+          ...current,
+          profiles: [...current.profiles, { ...profile, text: profile.text.trim() }]
+        }))
+      },
+
+      addSkillGroup: (group) => {
+        get().updateData((current) => {
+          // Resolve vectors and fresh order in the store
+          const vectors: Record<string, SkillGroupVectorConfig> = Object.fromEntries(
+            current.vectors.map((vector) => [
+              vector.id,
+              {
+                priority: 'strong' as ComponentPriority,
+                order: current.skill_groups.length + 1,
+              },
+            ]),
+          )
+          return {
+            ...current,
+            skill_groups: [...current.skill_groups, { ...group, label: group.label.trim(), content: group.content.trim(), vectors }]
+          }
+        })
+      },
+
+      addProject: (project) => {
+        get().updateData((current) => ({
+          ...current,
+          projects: [...current.projects, { 
+            ...project, 
+            name: project.name.trim(), 
+            text: project.text.trim(),
+            url: project.url?.trim()
+          }]
+        }))
+      },
+
+      addBullet: (roleId, bullet) => {
+        get().updateData((current) => {
+          if (!current.roles.some(r => r.id === roleId)) return current
+          return {
+            ...current,
+            roles: current.roles.map(r => 
+              r.id === roleId ? { ...r, bullets: [...r.bullets, { ...bullet, text: bullet.text.trim() }] } : r
+            )
+          }
+        })
+      },
+
+      addRole: (role) => {
+        get().updateData((current) => ({
+          ...current,
+          roles: [...current.roles, { 
+            ...role, 
+            company: role.company.trim(), 
+            title: role.title.trim(),
+            dates: role.dates.trim(),
+            location: role.location?.trim(),
+            subtitle: role.subtitle?.trim(),
+          }]
+        }))
+      },
+
+      addEducation: (entry) => {
+        get().updateData((current) => ({
+          ...current,
+          education: [...current.education, { 
+            ...entry, 
+            school: entry.school.trim(), 
+            degree: entry.degree.trim(),
+            location: entry.location.trim(),
+            year: entry.year?.trim()
+          }]
+        }))
+      },
     }),
     {
       name: 'vector-resume-data',
-      version: 3,
+      version: 4,
       storage: createJSONStorage(resolveStorage),
       partialize: (state) => ({ data: state.data }),
       migrate: resumeMigration,
     },
   ),
 )
-
-

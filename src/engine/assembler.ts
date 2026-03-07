@@ -16,6 +16,7 @@ import {
   type VectorSelection,
 } from '../types'
 import { applyPageBudget } from './pageBudget'
+import { resolveVariables } from '../utils/variableResolver'
 
 const PRIORITY_RANK: Record<IncludedPriority, number> = {
   must: 0,
@@ -64,21 +65,20 @@ const resolveTextVariant = (
   variants: TextVariantMap | undefined,
   variantOverrides: ManualVariantOverrides,
   selectedVector: VectorSelection,
+  variables: Record<string, string> = {},
 ): string => {
+  let resolvedText = text
   const variantOverride = resolveVariantOverride(variantOverrides, keys)
+  
   if (variantOverride === 'default') {
-    return text
+    resolvedText = text
+  } else if (variantOverride && variants?.[variantOverride]) {
+    resolvedText = variants[variantOverride]
+  } else if (selectedVector !== 'all' && variants?.[selectedVector]) {
+    resolvedText = variants[selectedVector]
   }
 
-  if (variantOverride && variants?.[variantOverride]) {
-    return variants[variantOverride]
-  }
-
-  if (selectedVector !== 'all' && variants?.[selectedVector]) {
-    return variants[selectedVector]
-  }
-
-  return text
+  return resolveVariables(resolvedText, variables)
 }
 
 export const buildComponentKeys = (type: string, id: string, roleId?: string): string[] => {
@@ -282,6 +282,7 @@ export const assembleResume = (
   const bulletOrderByRole = options.bulletOrderByRole ?? {}
   const targetPages = options.targetPages ?? DEFAULT_TARGET_PAGES
   const trimToPageBudget = options.trimToPageBudget ?? true
+  const variables = options.variables ?? data.variables ?? {}
 
   const targetLineCandidates: RankedTextComponent[] = []
   const profileCandidates: RankedTextComponent[] = []
@@ -303,6 +304,7 @@ export const assembleResume = (
           targetLine.variants,
           variantOverrides,
           selectedVector,
+          variables,
         ),
         priority: normalizeIncludedPriority(autoPriority, override),
       },
@@ -321,7 +323,7 @@ export const assembleResume = (
     profileCandidates.push({
       component: {
         id: profile.id,
-        text: resolveTextVariant(keys, profile.text, profile.variants, variantOverrides, selectedVector),
+        text: resolveTextVariant(keys, profile.text, profile.variants, variantOverrides, selectedVector, variables),
         priority: normalizeIncludedPriority(autoPriority, override),
       },
       sourceIndex: index,
@@ -344,7 +346,11 @@ export const assembleResume = (
 
       return left.sourceIndex - right.sourceIndex
     })
-    .map(({ id, label, config }) => ({ id, label, content: config.content }))
+    .map(({ id, label, config }) => ({ 
+      id, 
+      label: resolveVariables(label, variables), 
+      content: resolveVariables(config.content, variables) 
+    }))
 
   const roles = data.roles
     .map((role) => {
@@ -365,7 +371,7 @@ export const assembleResume = (
 
           return {
             id: bullet.id,
-            text: resolveTextVariant(keys, bullet.text, bullet.variants, variantOverrides, selectedVector),
+            text: resolveTextVariant(keys, bullet.text, bullet.variants, variantOverrides, selectedVector, variables),
             priority: normalizeIncludedPriority(autoPriority, override),
             sourceIndex: bulletIndex,
           }
@@ -389,11 +395,11 @@ export const assembleResume = (
 
       return {
         id: role.id,
-        company: role.company,
-        title: role.title,
-        dates: role.dates,
-        location: role.location,
-        subtitle: role.subtitle,
+        company: resolveVariables(role.company, variables),
+        title: resolveVariables(role.title, variables),
+        dates: resolveVariables(role.dates, variables),
+        location: role.location ? resolveVariables(role.location, variables) : role.location,
+        subtitle: role.subtitle ? resolveVariables(role.subtitle, variables) : role.subtitle,
         bullets: orderedBullets,
       }
     })
@@ -410,23 +416,35 @@ export const assembleResume = (
 
       return {
         id: project.id,
-        name: project.name,
+        name: resolveVariables(project.name, variables),
         url: project.url,
-        text: resolveTextVariant(keys, project.text, project.variants, variantOverrides, selectedVector),
+        text: resolveTextVariant(keys, project.text, project.variants, variantOverrides, selectedVector, variables),
         priority: normalizeIncludedPriority(autoPriority, override),
       }
     })
     .filter((project): project is Exclude<typeof project, null> => project !== null)
 
+  const education = data.education.map(entry => ({
+    ...entry,
+    school: resolveVariables(entry.school, variables),
+    location: resolveVariables(entry.location, variables),
+    degree: resolveVariables(entry.degree, variables),
+    year: entry.year ? resolveVariables(entry.year, variables) : entry.year,
+  }))
+
   const assembled = {
     selectedVector,
-    header: data.meta,
+    header: {
+      ...data.meta,
+      name: resolveVariables(data.meta.name, variables),
+      location: resolveVariables(data.meta.location, variables),
+    },
     targetLine: pickHighestPriorityText(targetLineCandidates),
     profile: pickHighestPriorityText(profileCandidates),
     skillGroups,
     roles,
     projects,
-    education: data.education,
+    education,
   }
 
   const budgeted = applyPageBudget(assembled, {

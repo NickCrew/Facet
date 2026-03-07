@@ -1,20 +1,4 @@
-import type { ResumeData } from '../types'
-
-export interface JdBulletAdjustment {
-  bullet_id: string
-  recommended_priority: 'must' | 'strong' | 'optional' | 'exclude'
-  reason: string
-}
-
-export interface JdAnalysisResult {
-  primary_vector: string
-  bullet_adjustments: JdBulletAdjustment[]
-  suggested_target_line: string
-  skill_gaps: string[]
-  matched_keywords: string[]
-  suggested_variables: Record<string, string>
-  positioning_note: string
-}
+import type { ResumeData, JdAnalysisResult, JdBulletAdjustment } from '../types'
 
 export interface PreparedJobDescription {
   content: string

@@ -74,6 +74,7 @@ export const defaultResumeData: ResumeData = {
       title: 'Senior Backend Engineer',
       dates: 'Jan 2022 – Present',
       subtitle: null,
+      vectors: {},
       bullets: [
         {
           id: 'acme-b1',
@@ -102,6 +103,7 @@ export const defaultResumeData: ResumeData = {
       title: 'Software Engineer',
       dates: 'Jun 2018 – Dec 2021',
       subtitle: null,
+      vectors: {},
       bullets: [
         {
           id: 'byteforge-b1',
@@ -127,6 +129,7 @@ export const defaultResumeData: ResumeData = {
   ],
   education: [
     {
+      id: 'edu-ucb',
       school: 'UC Berkeley',
       location: 'Berkeley, CA',
       degree: 'B.S. Computer Science',

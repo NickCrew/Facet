@@ -33,7 +33,7 @@ export function usePdfPreview({ resume, theme, debounceMs = DEFAULT_DEBOUNCE_MS 
 
   useEffect(() => {
     // Initialize worker
-    workerRef.current = new Worker(new URL('../engine/pdf.worker.ts', import.meta.url), {
+    workerRef.current = new Worker(new URL('../engine/typst.worker.ts', import.meta.url), {
       type: 'module'
     })
 
@@ -54,18 +54,14 @@ export function usePdfPreview({ resume, theme, debounceMs = DEFAULT_DEBOUNCE_MS 
         setCachedPdfBlob(blob)
         setPageCount(nextPageCount)
         setPending(false)
+        setError(null) // Clear any previous error on success
 
         if (previousUrl) {
           URL.revokeObjectURL(previousUrl)
         }
       } else {
-        if (previewUrlRef.current) {
-          URL.revokeObjectURL(previewUrlRef.current)
-          previewUrlRef.current = null
-        }
-        setPreviewBlobUrl(null)
-        setCachedPdfBlob(null)
-        setPageCount(null)
+        // IMPORTANT: We keep the old preview URL and cached blob 
+        // to avoid blanking the screen during temporary errors.
         setError(workerError || 'Unable to render PDF preview.')
         setPending(false)
       }
@@ -87,7 +83,7 @@ export function usePdfPreview({ resume, theme, debounceMs = DEFAULT_DEBOUNCE_MS 
 
     const timer = window.setTimeout(() => {
       setPending(true)
-      setError(null)
+      setError(null) // Clear error when starting a new render attempt
 
       if (!workerRef.current) {
         setPending(false)
@@ -115,6 +111,8 @@ export function usePdfPreview({ resume, theme, debounceMs = DEFAULT_DEBOUNCE_MS 
 
     return () => {
       window.clearTimeout(timer)
+      // IMPORTANT: Increment generation on cleanup to invalidate in-flight 
+      // worker requests when the effect re-runs or unmounts.
       renderGenerationRef.current = generation + 1
     }
   }, [resume, theme, debounceMs])

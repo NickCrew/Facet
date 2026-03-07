@@ -165,6 +165,7 @@ export interface RoleComponent {
   dates: string
   location?: string | null
   subtitle?: string | null
+  vectors: PriorityByVector
   bullets: RoleBulletComponent[]
 }
 
@@ -178,6 +179,7 @@ export interface ProjectComponent {
 }
 
 export interface EducationEntry {
+  id: string
   school: string
   location: string
   degree: string
@@ -224,6 +226,7 @@ export interface ResumeData {
   manualOverrides?: VectorManualOverrides
   variantOverrides?: VectorVariantOverrides
   bulletOrders?: VectorBulletOrders
+  variables?: VariableRegistry
   _overridesMigrated?: boolean
 }
 
@@ -232,6 +235,8 @@ export type VectorManualOverrides = Record<VectorId | 'all', ManualComponentOver
 
 export type ManualVariantOverrides = Record<string, VariantSelection>
 export type VectorVariantOverrides = Record<VectorId | 'all', ManualVariantOverrides>
+
+export type VariableRegistry = Record<string, string>
 
 export type RoleBulletOrderMap = Record<string, string[]>
 export type VectorBulletOrders = Record<VectorId | 'all', RoleBulletOrderMap>
@@ -297,6 +302,7 @@ export interface AssemblyOptions {
   bulletOrderByRole?: RoleBulletOrderMap
   targetPages?: number
   trimToPageBudget?: boolean
+  variables?: Record<string, string>
 }
 
 export interface AssemblyResult {
@@ -315,3 +321,44 @@ export type Priority = ComponentPriority
 export type VectorDef = ResumeVector
 export type SkillGroup = SkillGroupComponent
 export type Role = RoleComponent
+
+// Component Creation types
+export type AddComponentType =
+  | 'target_line'
+  | 'profile'
+  | 'skill_group'
+  | 'project'
+  | 'bullet'
+  | 'role'
+  | 'education'
+
+export interface AddComponentPayload {
+  text?: string
+  label?: string
+  content?: string
+  name?: string
+  url?: string
+  roleId?: string
+  vectors?: PriorityByVector
+}
+
+export interface ComponentSuggestion {
+  recommendedPriority: ComponentPriority
+  reason: string
+}
+
+export interface JdBulletAdjustment {
+  bullet_id: string
+  recommended_priority: ComponentPriority
+  reason: string
+}
+
+export interface JdAnalysisResult {
+  primary_vector: string
+  bullet_adjustments: JdBulletAdjustment[]
+  suggested_target_line: string
+  skill_gaps: string[]
+  matched_keywords: string[]
+  suggested_variables: Record<string, string>
+  positioning_note: string
+}
