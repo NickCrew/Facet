@@ -37,6 +37,7 @@ interface UsePresetsArgs {
   themeState: ResumeThemeState
   updateData: (fn: (current: ResumeData) => ResumeData) => void
   showNotice: (tone: NoticeTone, message: string) => void
+  onPresetSaved?: (preset: Preset) => void
 }
 
 interface UsePresetsResult {
@@ -66,6 +67,7 @@ export function usePresets({
   themeState,
   updateData,
   showNotice,
+  onPresetSaved,
 }: UsePresetsArgs): UsePresetsResult {
   const [activePresetId, setActivePresetId] = useState<string | null>(null)
 
@@ -222,8 +224,9 @@ export function usePresets({
     const description = window.prompt('Preset description (optional)', activePreset?.description ?? '') ?? ''
 
     try {
-      persistPreset(name, description, selectedVector, getSnapshotForVector(selectedVector))
+      const saved = persistPreset(name, description, selectedVector, getSnapshotForVector(selectedVector))
       showNotice('success', `Saved preset ${name}`)
+      onPresetSaved?.(saved)
     } catch (error) {
       if (!(error instanceof PresetSaveCanceledError)) {
         showNotice('error', 'Unable to save preset.')

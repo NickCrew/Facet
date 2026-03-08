@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import {
-  BookOpen,
   Copy,
   Download,
   Eye,
@@ -58,6 +57,8 @@ import { useFocusTrap } from '../../utils/useFocusTrap'
 import { normalizeThemeState, resolveTheme } from '../../themes/theme'
 import { ThemeEditorPanel } from '../../components/ThemeEditorPanel'
 import { usePdfPreview } from '../../hooks/usePdfPreview'
+import { useHandoffStore } from '../../store/handoffStore'
+import { usePipelineStore } from '../../store/pipelineStore'
 import { useSuggestionActions } from '../../hooks/useSuggestionActions'
 import { usePresets } from '../../hooks/usePresets'
 import { createId, slugify } from '../../utils/idUtils'
@@ -65,6 +66,7 @@ import { findOptimalDensity } from '../../utils/densityOptimizer'
 
 const vectorFallbackColors = ['#2563EB', '#0D9488', '#7C3AED', '#EA580C', '#4F46E5', '#0891B2']
 const CURRENT_YEAR = new Date().getFullYear()
+const SIDEBAR_WIDTH = 48
 
 const EMPTY_MANUAL_OVERRIDES: Readonly<Record<string, Record<string, boolean>>> = Object.freeze({})
 const EMPTY_VARIANT_OVERRIDES: Readonly<Record<string, Record<string, VariantSelection>>> = Object.freeze({})
@@ -170,6 +172,7 @@ export function BuildPage() {
 
   // 3. Refs
   const noticeTimeoutRef = useRef<number | null>(null)
+  const handoffEntryIdRef = useRef<string | null>(null)
   const jdModalRef = useRef<HTMLDivElement>(null)
   const reframeModalRef = useRef<HTMLDivElement>(null)
   const variablesModalRef = useRef<HTMLDivElement>(null)
@@ -256,6 +259,13 @@ export function BuildPage() {
     themeState,
     updateData,
     showNotice,
+    onPresetSaved: (preset) => {
+      const entryId = handoffEntryIdRef.current
+      if (entryId) {
+        usePipelineStore.getState().updateEntry(entryId, { presetId: preset.id })
+        handoffEntryIdRef.current = null
+      }
+    },
   })
 
   const bulletSuggestions = useMemo(() => {
@@ -363,6 +373,22 @@ export function BuildPage() {
     [assembledResult.resume.roles]
   )
 
+  // Pipeline → Build handoff
+  useEffect(() => {
+    const handoff = useHandoffStore.getState().consume()
+    if (handoff) {
+      setJdInput(handoff.jd)
+      setJdModalOpen(true)
+      if (handoff.vectorId) {
+        setSelectedVector(handoff.vectorId)
+      }
+      if (handoff.entryId) {
+        handoffEntryIdRef.current = handoff.entryId
+      }
+    }
+    return () => { handoffEntryIdRef.current = null }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // 8. Event Handlers
   useEffect(() => {
     if (!draggingSplit) {
@@ -370,7 +396,7 @@ export function BuildPage() {
     }
 
     const onMouseMove = (event: MouseEvent) => {
-      const next = Math.min(0.7, Math.max(0.3, event.clientX / window.innerWidth))
+      const next = Math.min(0.7, Math.max(0.3, (event.clientX - SIDEBAR_WIDTH) / (window.innerWidth - SIDEBAR_WIDTH)))
       setPanelRatio(next)
     }
 
@@ -830,11 +856,10 @@ export function BuildPage() {
             <DropdownMenu.Item icon={Copy} label="Copy as Text" onClick={onCopyText} />
             <DropdownMenu.Item icon={FileDown} label="Copy as Markdown" onClick={onCopyMarkdown} />
             <DropdownMenu.Divider />
-            <DropdownMenu.Item icon={BookOpen} label="Docs" onClick={() => window.open('https://github.com/NickCrew/Facet/blob/main/docs/NAVIGATOR.md', '_blank', 'noopener,noreferrer')} />
+            <DropdownMenu.Item icon={ScanSearch} label="Analyze JD" onClick={() => setJdModalOpen(true)} />
           </DropdownMenu>
 
           <DropdownMenu label="Actions" icon={Zap}>
-            <DropdownMenu.Item icon={ScanSearch} label="Analyze JD" onClick={() => setJdModalOpen(true)} />
             <DropdownMenu.Item icon={Paintbrush} label="Variables" onClick={() => setVariablesOpen(true)} />
             <DropdownMenu.Divider />
             <div className="dropdown-preset-section">
@@ -942,7 +967,7 @@ export function BuildPage() {
                   variantByKey={variantsForVector}
                   bulletOrderByRole={effectiveBulletOrders}
                   activeVectorBulletOrderByRole={activeBulletOrders}
-                  defaultBulletOrderByRole={bulletOrders.all ?? {}}
+                  defaultBulletOrderByRole={data.bulletOrders?.all ?? {}}
                   onToggleComponent={toggleComponentWithPriority}
                   onSetVariant={(key, variant) => setVariantOverride(vectorKey, key, variant)}
                   onUpdateTargetLine={updateTargetLine}
@@ -1179,7 +1204,6 @@ export function BuildPage() {
 
       {variablesOpen && (
         <VariableEditor
-          ref={variablesModalRef}
           variables={variables}
           onChange={updateVariables}
           onClose={() => setVariablesOpen(false)}
