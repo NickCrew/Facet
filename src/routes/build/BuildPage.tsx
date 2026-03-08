@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import {
+  Columns,
   Copy,
   Download,
   Eye,
@@ -7,6 +8,7 @@ import {
   FileJson,
   FileText,
   FolderOpen,
+  Package,
   Paintbrush,
   Save,
   ScanSearch,
@@ -29,6 +31,9 @@ import type {
 import { assembleResume, getPriorityForVector } from '../../engine/assembler'
 import { renderResumeAsText } from '../../utils/textRenderer'
 import { renderResumeAsMarkdown } from '../../utils/markdownRenderer'
+import { buildBundle } from '../../utils/bundleExporter'
+import { exportResumeConfig } from '../../engine/serializer'
+import { ComparisonDiff } from '../../components/ComparisonDiff'
 import { useResumeStore } from '../../store/resumeStore'
 import { toVectorKey, useUiStore } from '../../store/uiStore'
 import { componentKeys } from '../../utils/componentKeys'
@@ -166,6 +171,8 @@ export function BuildPage() {
     setSuggestionModeActive,
     viewMode,
     setViewMode,
+    comparisonVector,
+    setComparisonVector,
     tourCompleted,
     setTourCompleted,
   } = useUiStore()
@@ -356,6 +363,32 @@ export function BuildPage() {
       (warning) => warning.code === 'must_over_budget' || warning.code === 'over_budget_after_trim',
     )
   const mustOnlyOverPageLimit = assembledResult.mustOnlyEstimatedPageUsage >= 1.0
+
+  // Comparison assembly — only computed when a comparison vector is active
+  const comparisonVectorKey = comparisonVector ? toVectorKey(comparisonVector) : null
+  const comparisonOverrides = useMemo(
+    () => (comparisonVectorKey ? manualOverrides[comparisonVectorKey] ?? {} : {}),
+    [manualOverrides, comparisonVectorKey],
+  )
+  const comparisonVariants = useMemo(
+    () => (comparisonVectorKey ? variantOverrides[comparisonVectorKey] ?? {} : {}),
+    [variantOverrides, comparisonVectorKey],
+  )
+  const comparisonBulletOrders = useMemo(
+    () => (comparisonVector ? resolveEffectiveBulletOrders(bulletOrders, comparisonVector) : {}),
+    [bulletOrders, comparisonVector],
+  )
+  const comparisonResult = useMemo(() => {
+    if (!comparisonVector) return null
+    return assembleResume(data, {
+      selectedVector: comparisonVector,
+      manualOverrides: comparisonOverrides,
+      variantOverrides: comparisonVariants,
+      bulletOrderByRole: comparisonBulletOrders,
+      targetPages: 2,
+      variables,
+    })
+  }, [data, comparisonVector, comparisonOverrides, comparisonVariants, comparisonBulletOrders, variables])
 
   const {
     previewBlobUrl,
@@ -609,6 +642,34 @@ export function BuildPage() {
     }
   }
 
+  const onDownloadBundle = useCallback(async () => {
+    if (!cachedPdfBlob) {
+      showNotice('error', 'PDF is still rendering. Please try again in a moment.')
+      return
+    }
+    try {
+      const pdfName = buildResumePdfFileName(data.meta.name, selectedVector, data.vectors)
+      const baseFileName = pdfName.replace(/\.pdf$/, '')
+      const zipBlob = await buildBundle({
+        pdfBlob: cachedPdfBlob,
+        plainText: renderResumeAsText(assembledResult.resume),
+        jsonSource: exportResumeConfig(data, 'json'),
+        baseFileName,
+      })
+      const url = URL.createObjectURL(zipBlob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${baseFileName}.zip`
+      document.body.append(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 10000)
+      showNotice('success', 'Bundle downloaded')
+    } catch {
+      showNotice('error', 'Failed to create bundle')
+    }
+  }, [cachedPdfBlob, data, selectedVector, assembledResult.resume, showNotice])
+
   const handleGlobalKeyDown = useCallback(
     (event: globalThis.KeyboardEvent) => {
       const target = event.target as HTMLElement
@@ -849,12 +910,37 @@ export function BuildPage() {
             </button>
           </div>
 
+          {data.vectors.length >= 2 && (
+            <div className="comparison-toggle">
+              <DropdownMenu label="Compare" icon={Columns}>
+                <DropdownMenu.Item
+                  icon={X}
+                  label="Exit Comparison"
+                  onClick={() => setComparisonVector(null)}
+                  disabled={!comparisonVector}
+                />
+                <DropdownMenu.Divider />
+                {data.vectors
+                  .filter((v) => v.id !== selectedVector)
+                  .map((v) => (
+                    <DropdownMenu.Item
+                      key={v.id}
+                      icon={Columns}
+                      label={v.label}
+                      onClick={() => setComparisonVector(v.id)}
+                    />
+                  ))}
+              </DropdownMenu>
+            </div>
+          )}
+
           <DropdownMenu label="File" icon={FolderOpen}>
             <DropdownMenu.Item icon={Upload} label="Import" shortcut="⌘I" onClick={() => setImportExportMode('import')} />
             <DropdownMenu.Item icon={FileJson} label="Export" shortcut="⌘E" onClick={() => setImportExportMode('export')} />
             <DropdownMenu.Divider />
             <DropdownMenu.Item icon={Copy} label="Copy as Text" onClick={onCopyText} />
             <DropdownMenu.Item icon={FileDown} label="Copy as Markdown" onClick={onCopyMarkdown} />
+            <DropdownMenu.Item icon={Package} label="Download Bundle" onClick={onDownloadBundle} />
             <DropdownMenu.Divider />
             <DropdownMenu.Item icon={ScanSearch} label="Analyze JD" onClick={() => setJdModalOpen(true)} />
           </DropdownMenu>
@@ -1042,13 +1128,45 @@ export function BuildPage() {
           />
 
           <section
-            className="preview-column"
+            className={`preview-column ${comparisonResult ? 'comparison-active' : ''}`}
             id="preview-panel"
             role="tabpanel"
             aria-labelledby={viewMode === 'pdf' ? 'tab-pdf' : 'tab-live'}
             data-tour="preview-panel"
           >
-            {viewMode === 'pdf' ? (
+            {comparisonResult ? (
+              <>
+                <div className="comparison-layout">
+                  <div className="comparison-panel">
+                    <div className="comparison-panel-header">
+                      {data.vectors.find((v) => v.id === selectedVector)?.label ?? 'All Vectors'}
+                    </div>
+                    <LivePreview
+                      assembled={assembledResult.resume}
+                      theme={resolvedTheme}
+                      showHeatmap={showHeatmap}
+                    />
+                  </div>
+                  <div className="comparison-diff-strip">
+                    <ComparisonDiff
+                      leftResult={assembledResult}
+                      rightResult={comparisonResult}
+                      leftLabel={data.vectors.find((v) => v.id === selectedVector)?.label ?? 'All'}
+                      rightLabel={data.vectors.find((v) => v.id === comparisonVector)?.label ?? 'All'}
+                    />
+                  </div>
+                  <div className="comparison-panel">
+                    <div className="comparison-panel-header">
+                      {data.vectors.find((v) => v.id === comparisonVector)?.label ?? 'All Vectors'}
+                    </div>
+                    <LivePreview
+                      assembled={comparisonResult.resume}
+                      theme={resolvedTheme}
+                    />
+                  </div>
+                </div>
+              </>
+            ) : viewMode === 'pdf' ? (
               <PdfPreview blobUrl={previewBlobUrl} loading={pdfRenderPending} error={pdfRenderError} />
             ) : (
               <LivePreview

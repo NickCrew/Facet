@@ -13,6 +13,7 @@ export interface UiState {
   showHeatmap: boolean
   showDesignHealth: boolean
   suggestionModeActive: boolean
+  comparisonVector: VectorSelection | null
   setSelectedVector: (vector: VectorSelection) => void
   setPanelRatio: (ratio: number) => void
   setAppearance: (appearance: 'light' | 'dark' | 'system') => void
@@ -20,6 +21,7 @@ export interface UiState {
   setShowHeatmap: (show: boolean) => void
   setShowDesignHealth: (show: boolean) => void
   setSuggestionModeActive: (active: boolean) => void
+  setComparisonVector: (v: VectorSelection | null) => void
   tourCompleted: boolean
   setTourCompleted: (completed: boolean) => void
 }
@@ -36,6 +38,7 @@ export const useUiStore = create<UiState>()(
       showHeatmap: false,
       showDesignHealth: false,
       suggestionModeActive: false,
+      comparisonVector: null,
       setSelectedVector: (vector) => set({ selectedVector: vector }),
       setPanelRatio: (ratio) => set({ panelRatio: Math.min(0.7, Math.max(0.3, ratio)) }),
       setAppearance: (appearance) => set({ appearance }),
@@ -43,6 +46,7 @@ export const useUiStore = create<UiState>()(
       setShowHeatmap: (show) => set({ showHeatmap: show }),
       setShowDesignHealth: (show) => set({ showDesignHealth: show }),
       setSuggestionModeActive: (active) => set({ suggestionModeActive: active }),
+      setComparisonVector: (v) => set({ comparisonVector: v }),
       tourCompleted: false,
       setTourCompleted: (completed) => set({ tourCompleted: completed }),
     }),
@@ -51,6 +55,9 @@ export const useUiStore = create<UiState>()(
       name: 'vector-resume-ui',
       version: 5,
       storage: createJSONStorage(resolveStorage),
+      // comparisonVector is transient — don't persist across sessions
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      partialize: ({ comparisonVector: _transient, ...rest }) => rest as UiState,
       migrate: (persistedState: unknown) => {
         // We're versioning purely to force cleanup of old override data
         // that moved to resumeStore, but we want to keep current UI preferences
