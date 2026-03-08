@@ -92,6 +92,8 @@ The root route renders `AppShell` (`src/components/AppShell.tsx`) which provides
 
 Router config lives in `src/router.tsx`. Route components live in `src/routes/{name}/`.
 
+See `docs/PIPELINE_PREP_SPEC.md` for the full architecture spec covering Pipeline and Prep feature implementation, data models, store design, component breakdown, and integration points.
+
 ### UI Layout (Build Route)
 
 Two-panel split: Component Library (left, ~45%) | Live Preview (right, ~55%) with a draggable splitter. Vector selector bar at top, status bar at bottom showing page usage. The split ratio is persisted in `uiStore`.
