@@ -15,7 +15,7 @@ export type SectionHeaderStyle = 'caps-rule' | 'bold-rule' | 'bold-only' | 'unde
 export type BulletChar = '•' | '–' | '▸' | 'none'
 export type ThemeTextAlignment = 'left' | 'center' | 'right'
 export type ThemeDatesAlignment = 'right-tab' | 'inline'
-export type TemplateId = 'classic' | 'sidebar' | 'minimalist'
+export type TemplateId = 'classic' | 'sidebar' | 'minimalist' | 'letter'
 
 export type ResumeThemePresetId =
   | 'ferguson-v12'

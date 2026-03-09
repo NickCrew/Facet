@@ -2,6 +2,7 @@ import type { TemplateId } from '../types'
 import resumeTemplate from './resume.typ?raw'
 import sidebarTemplate from './sidebar.typ?raw'
 import minimalistTemplate from './minimalist.typ?raw'
+import letterTemplate from './letter.typ?raw'
 
 export interface TemplateMetadata {
   id: TemplateId
@@ -28,6 +29,12 @@ export const TEMPLATES: Record<TemplateId, TemplateMetadata> = {
     name: 'Minimalist Executive',
     description: 'Clean, uppercase-focused layout for senior roles.',
     content: minimalistTemplate,
+  },
+  letter: {
+    id: 'letter',
+    name: 'Cover Letter',
+    description: 'Clean, professional cover letter template.',
+    content: letterTemplate,
   },
 }
 
