@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Outlet, Link, useRouterState } from '@tanstack/react-router'
-import { Layers, ListChecks, BookOpen, Moon, Sun, Monitor } from 'lucide-react'
+import { Layers, ListChecks, BookOpen, FileText, Moon, Sun, Monitor } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { FacetGemMark } from './FacetWordmark'
 
@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { to: '/build' as const, icon: Layers, label: 'Build' },
   { to: '/pipeline' as const, icon: ListChecks, label: 'Pipeline' },
   { to: '/prep' as const, icon: BookOpen, label: 'Prep' },
+  { to: '/letters' as const, icon: FileText, label: 'Letters' },
 ] as const
 
 export function AppShell() {

@@ -3,6 +3,7 @@ import { AppShell } from './components/AppShell'
 import { BuildPage } from './routes/build/BuildPage'
 import { PipelinePage } from './routes/pipeline/PipelinePage'
 import { PrepPage } from './routes/prep/PrepPage'
+import { LettersPage } from './routes/letters/LettersPage'
 
 const rootRoute = createRootRoute({
   component: AppShell,
@@ -39,7 +40,13 @@ const prepRoute = createRoute({
   }),
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, buildRoute, pipelineRoute, prepRoute])
+const lettersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/letters',
+  component: LettersPage,
+})
+
+const routeTree = rootRoute.addChildren([indexRoute, buildRoute, pipelineRoute, prepRoute, lettersRoute])
 
 export const router = createRouter({
   routeTree,

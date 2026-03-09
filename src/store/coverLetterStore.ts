@@ -2,12 +2,11 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import type { CoverLetterTemplate } from '../types/coverLetter'
 import { resolveStorage } from './storage'
-import { createId } from '../utils/idUtils'
 
 interface CoverLetterState {
   templates: CoverLetterTemplate[]
   
-  addTemplate: (template: Omit<CoverLetterTemplate, 'id'>) => void
+  addTemplate: (template: CoverLetterTemplate) => void
   updateTemplate: (id: string, patch: Partial<CoverLetterTemplate>) => void
   deleteTemplate: (id: string) => void
   importTemplates: (templates: CoverLetterTemplate[]) => void
@@ -19,11 +18,7 @@ export const useCoverLetterStore = create<CoverLetterState>()(
       templates: [],
 
       addTemplate: (template) => {
-        const newTemplate: CoverLetterTemplate = {
-          ...template,
-          id: createId('clt'),
-        }
-        set((s) => ({ templates: [...s.templates, newTemplate] }))
+        set((s) => ({ templates: [...s.templates, template] }))
       },
 
       updateTemplate: (id, patch) => {
