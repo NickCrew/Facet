@@ -108,6 +108,66 @@
   overflow-y: auto;
   background: var(--bg-canvas);
   padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.letters-generator {
+  max-width: 800px;
+  margin: 0 auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.letters-generator-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.letters-generator-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+.letters-generator-copy {
+  margin: var(--space-2) 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.letters-generator-eyebrow {
+  margin: 0 0 var(--space-1);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-primary);
+}
+
+.letters-generator-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.letters-generator-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.letters-generator-note-error {
+  color: var(--critical);
 }
 
 .letters-editor {
@@ -164,7 +224,10 @@
 }
 
 .letters-editor textarea,
-.letters-editor input:not(.letters-title-input) {
+.letters-editor input:not(.letters-title-input),
+.letters-main select,
+.letters-generator textarea,
+.letters-generator input {
   width: 100%;
   padding: 10px 12px;
   font-family: var(--font-mono);
@@ -179,12 +242,18 @@
 }
 
 .letters-editor textarea:focus,
-.letters-editor input:not(.letters-title-input):focus {
+.letters-editor input:not(.letters-title-input):focus,
+.letters-main select:focus,
+.letters-generator textarea:focus,
+.letters-generator input:focus {
   border-color: var(--accent-primary);
 }
 
 .letters-editor textarea:focus-visible,
-.letters-editor input:not(.letters-title-input):focus-visible {
+.letters-editor input:not(.letters-title-input):focus-visible,
+.letters-main select:focus-visible,
+.letters-generator textarea:focus-visible,
+.letters-generator input:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: -1px;
 }
@@ -290,4 +359,25 @@
 
 .letters-empty-state-content p {
   margin-bottom: var(--space-4);
+}
+
+@media (max-width: 880px) {
+  .letters-page {
+    flex-direction: column;
+  }
+
+  .letters-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    max-height: 220px;
+  }
+
+  .letters-generator-header {
+    flex-direction: column;
+  }
+
+  .letters-generator-grid {
+    grid-template-columns: 1fr;
+  }
 }

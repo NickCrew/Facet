@@ -1,20 +1,71 @@
-import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Plus, Sparkles, Trash2 } from 'lucide-react'
+import { assembleResume } from '../../engine/assembler'
 import { useCoverLetterStore } from '../../store/coverLetterStore'
+import { usePipelineStore } from '../../store/pipelineStore'
 import { useResumeStore } from '../../store/resumeStore'
 import type { CoverLetterParagraph } from '../../types/coverLetter'
-import { createId } from '../../utils/idUtils'
+import { createId, sanitizeEndpointUrl } from '../../utils/idUtils'
+import { generateCoverLetter } from '../../utils/coverLetterGenerator'
 import { VectorPriorityEditor } from '../../components/VectorPriorityEditor'
 import './letters.css'
 
+const AI_ENDPOINT = sanitizeEndpointUrl((import.meta.env.VITE_ANTHROPIC_PROXY_URL as string | undefined) ?? '')
+
+function buildResearchDraft(positioning: string, notes: string, url: string) {
+  return [positioning, notes, url].filter(Boolean).join('\n\n')
+}
+
 export function LettersPage() {
   const { templates, addTemplate, updateTemplate, deleteTemplate } = useCoverLetterStore()
-  const { data: { vectors } } = useResumeStore()
+  const pipelineEntries = usePipelineStore((state) => state.entries)
+  const resumeData = useResumeStore((state) => state.data)
+  const { vectors } = resumeData
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
-  
+  const [selectedEntryId, setSelectedEntryId] = useState('')
+  const [selectedVectorId, setSelectedVectorId] = useState('')
+  const [companyResearchDraft, setCompanyResearchDraft] = useState('')
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [generationError, setGenerationError] = useState<string | null>(null)
+
+  const candidateEntries = useMemo(
+    () => [...pipelineEntries].sort((left, right) => right.lastAction.localeCompare(left.lastAction)),
+    [pipelineEntries],
+  )
+
   const activeTemplateId = selectedTemplateId ?? templates[0]?.id ?? null
   const activeTemplate = templates.find(t => t.id === activeTemplateId)
+  const selectedEntry = useMemo(
+    () => pipelineEntries.find((entry) => entry.id === selectedEntryId) ?? null,
+    [pipelineEntries, selectedEntryId],
+  )
+  const helperMessage =
+    !AI_ENDPOINT
+      ? 'AI generation is disabled. Configure VITE_ANTHROPIC_PROXY_URL.'
+      : selectedEntry && !selectedEntry.jobDescription.trim()
+        ? 'This pipeline entry needs a job description before AI generation will work.'
+        : candidateEntries.length === 0
+          ? 'Add a pipeline opportunity with a job description to generate a cover letter draft.'
+          : null
+
+  useEffect(() => {
+    if (selectedEntryId) return
+    const firstEntry = candidateEntries[0]
+    if (!firstEntry) return
+
+    setSelectedEntryId(firstEntry.id)
+    setSelectedVectorId(firstEntry.vectorId ?? vectors[0]?.id ?? '')
+    // When the selected entry disappears, fall back to the freshest remaining opportunity.
+    setCompanyResearchDraft(buildResearchDraft(firstEntry.positioning, firstEntry.notes, firstEntry.url))
+  }, [candidateEntries, selectedEntryId, vectors])
+
+  useEffect(() => {
+    if (!selectedEntryId) return
+    if (!selectedEntry) {
+      setSelectedEntryId('')
+    }
+  }, [selectedEntry, selectedEntryId])
 
   const handleCreateTemplate = () => {
     const id = createId('clt')
@@ -59,6 +110,96 @@ export function LettersPage() {
     }
   }
 
+  const handleEntryChange = (entryId: string) => {
+    setSelectedEntryId(entryId)
+    const nextEntry = pipelineEntries.find((entry) => entry.id === entryId)
+    if (!nextEntry) return
+
+    setCompanyResearchDraft(buildResearchDraft(nextEntry.positioning, nextEntry.notes, nextEntry.url))
+    setSelectedVectorId(nextEntry.vectorId ?? vectors[0]?.id ?? '')
+  }
+
+  const handleGenerate = async () => {
+    if (isGenerating) {
+      return
+    }
+    if (!AI_ENDPOINT) {
+      setGenerationError('AI generation is disabled. Configure VITE_ANTHROPIC_PROXY_URL.')
+      return
+    }
+    if (!selectedEntry) {
+      setGenerationError('Choose a pipeline entry before generating a cover letter.')
+      return
+    }
+    if (!selectedVectorId) {
+      setGenerationError('Choose a vector before generating a cover letter.')
+      return
+    }
+    if (!selectedEntry.jobDescription.trim()) {
+      setGenerationError('The selected pipeline entry does not have a job description yet.')
+      return
+    }
+
+    const vector = resumeData.vectors.find((item) => item.id === selectedVectorId)
+    if (!vector) {
+      setGenerationError('The selected vector could not be found in resume data.')
+      return
+    }
+
+    setGenerationError(null)
+    setIsGenerating(true)
+
+    try {
+      const freshResumeData = useResumeStore.getState().data
+      const assembled = assembleResume(freshResumeData, {
+        selectedVector: vector.id,
+        manualOverrides: freshResumeData.manualOverrides?.[vector.id] ?? {},
+        bulletOrderByRole: freshResumeData.bulletOrders?.[vector.id] ?? {},
+        targetPages: 2,
+        variables: freshResumeData.variables ?? {},
+      }).resume
+
+      const generated = await generateCoverLetter(AI_ENDPOINT, {
+        company: selectedEntry.company,
+        role: selectedEntry.role,
+        contact: selectedEntry.contact || undefined,
+        vectorId: vector.id,
+        vectorLabel: vector.label,
+        companyUrl: selectedEntry.url || undefined,
+        skillMatch: selectedEntry.skillMatch || undefined,
+        positioning: selectedEntry.positioning || undefined,
+        notes: selectedEntry.notes || undefined,
+        companyResearch: companyResearchDraft || undefined,
+        jobDescription: selectedEntry.jobDescription,
+        resumeContext: {
+          candidate: freshResumeData.meta,
+          vector,
+          assembled,
+        },
+      })
+
+      const id = createId('clt')
+      addTemplate({
+        id,
+        name: generated.name,
+        header: generated.header,
+        greeting: generated.greeting,
+        paragraphs: generated.paragraphs.map((paragraph) => ({
+          id: createId('clp'),
+          label: paragraph.label,
+          text: paragraph.text,
+          vectors: { [vector.id]: 'include' },
+        })),
+        signOff: generated.signOff,
+      })
+      setSelectedTemplateId(id)
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : 'Cover letter generation failed.')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
   return (
     <div className="letters-page">
       <nav className="letters-sidebar" aria-label="Template list">
@@ -99,6 +240,87 @@ export function LettersPage() {
       </nav>
       
       <div className="letters-main">
+        <section className="letters-generator" aria-labelledby="letters-generator-title">
+          <div className="letters-generator-header">
+            <div>
+              <p className="letters-generator-eyebrow">AI Draft</p>
+              <h3 id="letters-generator-title">Generate a cover letter from a pipeline opportunity</h3>
+              <p className="letters-generator-copy">
+                Pick the target opportunity, confirm the vector, add any extra research notes, and create a draft you can keep editing below.
+              </p>
+            </div>
+            <button
+              className="letters-btn letters-btn-primary"
+              onClick={() => void handleGenerate()}
+              disabled={isGenerating || candidateEntries.length === 0}
+              aria-describedby={[
+                helperMessage ? 'letters-generator-help' : null,
+                generationError ? 'letters-generator-error' : null,
+              ].filter(Boolean).join(' ') || undefined}
+            >
+              <Sparkles size={14} /> {isGenerating ? 'Generating...' : 'Generate with AI'}
+            </button>
+          </div>
+
+          {candidateEntries.length > 0 ? (
+            <>
+              <div className="letters-generator-grid">
+                <div className="letters-field">
+                  <label htmlFor="cl-entry">Pipeline Entry</label>
+                  <select id="cl-entry" value={selectedEntryId} onChange={(event) => handleEntryChange(event.target.value)}>
+                    <option value="">Select an opportunity</option>
+                    {candidateEntries.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.company} - {entry.role}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="letters-field">
+                  <label htmlFor="cl-vector">Vector</label>
+                  <select id="cl-vector" value={selectedVectorId} onChange={(event) => setSelectedVectorId(event.target.value)}>
+                    <option value="">Select a vector</option>
+                    {vectors.map((vector) => (
+                      <option key={vector.id} value={vector.id}>
+                        {vector.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="letters-field">
+                <label htmlFor="cl-research">Company Research Notes</label>
+                <textarea
+                  id="cl-research"
+                  value={companyResearchDraft}
+                  onChange={(event) => setCompanyResearchDraft(event.target.value)}
+                  rows={4}
+                  placeholder="Paste company research, hiring-manager notes, product context, or any specifics you want reflected in the draft."
+                />
+              </div>
+            </>
+          ) : (
+            <p id="letters-generator-help" className="letters-generator-note">Add a pipeline opportunity with a job description to generate a cover letter draft.</p>
+          )}
+
+          {candidateEntries.length > 0 && helperMessage && (
+            <p
+              id="letters-generator-help"
+              className={`letters-generator-note ${!AI_ENDPOINT ? 'letters-generator-note-error' : ''}`}
+              role={!AI_ENDPOINT ? 'alert' : undefined}
+            >
+              {helperMessage}
+            </p>
+          )}
+          {generationError && (
+            <p id="letters-generator-error" className="letters-generator-note letters-generator-note-error" role="alert">
+              {generationError}
+            </p>
+          )}
+        </section>
+
         {activeTemplate ? (
           <div className="letters-editor">
             <input 
