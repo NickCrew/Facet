@@ -1,5 +1,7 @@
 import type { CoverLetterTemplate, CoverLetterParagraph } from '../types/coverLetter'
 import type { VectorId, ResumeMeta } from '../types'
+import { toLinkDisplayText, toLinkHref } from '../utils/linkFormatting'
+import { sanitizeUrl } from '../utils/sanitizeUrl'
 
 export interface CoverLetterAssemblyOptions {
   vectorId: VectorId
@@ -75,6 +77,13 @@ export function assembleCoverLetterData(
     .map(s => s?.trim())
     .filter(Boolean)
     .join(' | ')
+  const contactLinks = meta.links
+    .map((link) => {
+      const text = toLinkDisplayText(link)
+      const href = sanitizeUrl(toLinkHref(link.url))
+      return href && text ? { text, href } : null
+    })
+    .filter((link): link is { text: string; href: string } => link !== null)
 
   return {
     metadata: {
@@ -83,7 +92,7 @@ export function assembleCoverLetterData(
     },
     name: meta.name,
     contactLine: contactLine || null,
-    contactLinks: [], // TODO: wire up contact links from meta
+    contactLinks,
     date: dateString,
     recipient: resolve(recipient) || null,
     greeting: resolve(template.greeting),

@@ -121,4 +121,26 @@ describe('letterAssembler', () => {
 
     expect(data.contactLine).toBe('john@example.com')
   })
-})
+
+  it('includes sanitized contact links from resume meta and preserves ordering', () => {
+    const metaWithLinks: ResumeMeta = {
+      ...mockMeta,
+      links: [
+        { label: 'GitHub', url: 'github.com/john' },
+        { label: 'Portfolio', url: 'https://john.example' },
+        { label: 'Unsafe', url: 'javascript:alert(1)' },
+        { url: '   ' },
+      ],
+    }
+
+    const data = assembleCoverLetterData(mockTemplate, {
+      vectorId: 'v1',
+      meta: metaWithLinks,
+    })
+
+    expect(data.contactLinks).toEqual([
+      { text: 'GitHub: github.com/john', href: 'https://github.com/john' },
+      { text: 'Portfolio: https://john.example', href: 'https://john.example' },
+    ])
+  })
+}) 
