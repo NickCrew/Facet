@@ -1585,7 +1585,7 @@ select.component-input {
 }
 
 .matrix-dot.priority-exclude {
-  border-color: color-mix(in srgb, var(--vector-color) 45%, var(--border-default));
+  border-color: var(--vector-color);
   background: transparent;
 }
 
