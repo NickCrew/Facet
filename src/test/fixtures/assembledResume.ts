@@ -13,5 +13,6 @@ export const buildAssembledResume = (overrides: Partial<AssembledResume> = {}): 
   roles: [],
   projects: [],
   education: [],
+  certifications: [],
   ...overrides,
 })

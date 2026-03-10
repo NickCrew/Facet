@@ -23,7 +23,6 @@ import type {
   AddComponentType,
   ResumeThemeOverrides,
   ResumeThemePresetId,
-  VariantSelection,
   PriorityByVector,
   JdAnalysisResult,
   ResumeData,
@@ -74,7 +73,6 @@ const CURRENT_YEAR = new Date().getFullYear()
 const SIDEBAR_WIDTH = 48
 
 const EMPTY_MANUAL_OVERRIDES: Readonly<Record<string, Record<string, boolean>>> = Object.freeze({})
-const EMPTY_VARIANT_OVERRIDES: Readonly<Record<string, Record<string, VariantSelection>>> = Object.freeze({})
 const EMPTY_BULLET_ORDERS: Readonly<Record<string, Record<string, string[]>>> = Object.freeze({})
 const EMPTY_VARIABLES: Readonly<Record<string, string>> = Object.freeze({})
 
@@ -96,6 +94,7 @@ const ID_MAP: Record<AddComponentType, string> = {
   bullet: 'bullet',
   role: 'role',
   education: 'education',
+  certification: 'cert',
 }
 
 export function BuildPage() {
@@ -106,7 +105,6 @@ export function BuildPage() {
     undo,
     redo,
     setOverride,
-    setVariantOverride,
     setRoleBulletOrder,
     resetRoleBulletOrder,
     resetOverridesForVector,
@@ -135,8 +133,25 @@ export function BuildPage() {
     addBullet,
     addRole,
     addEducation,
+    updateEducation,
+    updateEducationVectors,
+    deleteEducation,
+    reorderEducation,
+    addCertification,
+    updateCertification,
+    updateCertificationVectors,
+    deleteCertification,
+    reorderCertifications,
     updateVariables,
     resetToDefaults,
+    updateTargetLineVariant: updateTargetLineVariantStore,
+    resetTargetLineVariant: resetTargetLineVariantStore,
+    updateProfileVariant: updateProfileVariantStore,
+    resetProfileVariant: resetProfileVariantStore,
+    updateBulletVariant: updateBulletVariantStore,
+    resetBulletVariant: resetBulletVariantStore,
+    updateProjectVariant: updateProjectVariantStore,
+    resetProjectVariant: resetProjectVariantStore,
   } = useResumeStore()
 
   // 1. State Declarations
@@ -198,7 +213,6 @@ export function BuildPage() {
 
   const variables = data.variables ?? EMPTY_VARIABLES
   const manualOverrides = data.manualOverrides ?? EMPTY_MANUAL_OVERRIDES
-  const variantOverrides = data.variantOverrides ?? EMPTY_VARIANT_OVERRIDES
   const bulletOrders = data.bulletOrders ?? EMPTY_BULLET_ORDERS
   const vectorKey = toVectorKey(selectedVector)
 
@@ -216,10 +230,6 @@ export function BuildPage() {
   const overridesForVector = useMemo(
     () => manualOverrides[vectorKey] ?? {},
     [manualOverrides, vectorKey],
-  )
-  const variantsForVector = useMemo(
-    () => variantOverrides[vectorKey] ?? {},
-    [variantOverrides, vectorKey],
   )
   const activeBulletOrders = useMemo(
     () => bulletOrders[vectorKey] ?? {},
@@ -261,7 +271,6 @@ export function BuildPage() {
     data,
     selectedVector,
     overridesForVector,
-    variantsForVector,
     activeBulletOrders,
     themeState,
     updateData,
@@ -346,12 +355,11 @@ export function BuildPage() {
       assembleResume(data, {
         selectedVector,
         manualOverrides: overridesForVector,
-        variantOverrides: variantsForVector,
         bulletOrderByRole: effectiveBulletOrders,
         targetPages: 2,
         variables,
       }),
-    [data, selectedVector, overridesForVector, variantsForVector, effectiveBulletOrders, variables],
+    [data, selectedVector, overridesForVector, effectiveBulletOrders, variables],
   )
 
   const assembled = assembledResult.resume
@@ -370,10 +378,6 @@ export function BuildPage() {
     () => (comparisonVectorKey ? manualOverrides[comparisonVectorKey] ?? {} : {}),
     [manualOverrides, comparisonVectorKey],
   )
-  const comparisonVariants = useMemo(
-    () => (comparisonVectorKey ? variantOverrides[comparisonVectorKey] ?? {} : {}),
-    [variantOverrides, comparisonVectorKey],
-  )
   const comparisonBulletOrders = useMemo(
     () => (comparisonVector ? resolveEffectiveBulletOrders(bulletOrders, comparisonVector) : {}),
     [bulletOrders, comparisonVector],
@@ -383,12 +387,11 @@ export function BuildPage() {
     return assembleResume(data, {
       selectedVector: comparisonVector,
       manualOverrides: comparisonOverrides,
-      variantOverrides: comparisonVariants,
       bulletOrderByRole: comparisonBulletOrders,
       targetPages: 2,
       variables,
     })
-  }, [data, comparisonVector, comparisonOverrides, comparisonVariants, comparisonBulletOrders, variables])
+  }, [data, comparisonVector, comparisonOverrides, comparisonBulletOrders, variables])
 
   const {
     previewBlobUrl,
@@ -569,40 +572,8 @@ export function BuildPage() {
   const onApplyReframe = () => {
     if (!reframeResult) return
     const { roleId, bulletId, vectorId, reframed } = reframeResult
-    const componentKey = componentKeys.bullet(roleId, bulletId)
 
-    updateData((current) => {
-      const nextRoles = current.roles.map((r) => {
-        if (r.id !== roleId) return r
-        return {
-          ...r,
-          bullets: r.bullets.map((b) => {
-            if (b.id !== bulletId) return b
-            return {
-              ...b,
-              variants: {
-                ...(b.variants ?? {}),
-                [vectorId]: reframed,
-              },
-            }
-          }),
-        }
-      })
-
-      const nextVariantOverrides = {
-        ...(current.variantOverrides ?? {}),
-        [vectorId]: {
-          ...(current.variantOverrides?.[vectorId] ?? {}),
-          [componentKey]: vectorId,
-        },
-      }
-
-      return {
-        ...current,
-        roles: nextRoles,
-        variantOverrides: nextVariantOverrides,
-      }
-    })
+    updateBulletVariantStore(roleId, bulletId, vectorId, reframed)
 
     setReframeResult(null)
     showNotice('success', 'Applied AI rewrite as variant')
@@ -783,7 +754,10 @@ export function BuildPage() {
         addRole({ id, company: 'New Company', title: 'Role Title', dates: 'Jan 2024 – Present', vectors: { [vectorKey]: 'must' }, bullets: [] })
         break
       case 'education':
-        addEducation({ id, school: 'New School', location: 'Location', degree: 'Degree', year: CURRENT_YEAR.toString() })
+        addEducation({ id, school: payload.name?.trim() || 'New School', location: payload.label?.trim() || 'Location', degree: payload.text?.trim() || 'Degree', year: payload.url?.trim() || CURRENT_YEAR.toString(), vectors: baseVectors })
+        break
+      case 'certification':
+        addCertification({ id, name: payload.name?.trim() || 'New Certification', issuer: payload.issuer?.trim() || 'Issuer', date: payload.date?.trim() || undefined, credential_id: payload.content?.trim() || undefined, url: payload.url?.trim() || undefined, vectors: baseVectors })
         break
     }
   }
@@ -943,7 +917,7 @@ export function BuildPage() {
             <DropdownMenu.Item icon={FileDown} label="Copy as Markdown" onClick={onCopyMarkdown} />
             <DropdownMenu.Item icon={Package} label="Download Bundle" onClick={onDownloadBundle} />
             <DropdownMenu.Divider />
-            <DropdownMenu.Item icon={ScanSearch} label="Analyze JD" onClick={() => setJdModalOpen(true)} />
+            <DropdownMenu.Item icon={ScanSearch} label={jdAnalysisEndpoint ? 'Analyze JD' : 'Analyze JD (AI not configured)'} onClick={() => setJdModalOpen(true)} />
           </DropdownMenu>
 
           <DropdownMenu label="Actions" icon={Zap}>
@@ -1051,18 +1025,22 @@ export function BuildPage() {
                   data={data}
                   selectedVector={selectedVector}
                   includedByKey={overridesForVector}
-                  variantByKey={variantsForVector}
                   bulletOrderByRole={effectiveBulletOrders}
                   activeVectorBulletOrderByRole={activeBulletOrders}
                   defaultBulletOrderByRole={data.bulletOrders?.all ?? {}}
                   onToggleComponent={toggleComponentWithPriority}
-                  onSetVariant={(key, variant) => setVariantOverride(vectorKey, key, variant)}
                   onUpdateTargetLine={updateTargetLine}
                   onUpdateTargetLineVectors={updateTargetLineVectors}
+                  onUpdateTargetLineVariant={(id, text) => updateTargetLineVariantStore(id, selectedVector as string, text)}
+                  onResetTargetLineVariant={(id) => resetTargetLineVariantStore(id, selectedVector as string)}
                   onUpdateProfile={updateProfile}
                   onUpdateProfileVectors={updateProfileVectors}
+                  onUpdateProfileVariant={(id, text) => updateProfileVariantStore(id, selectedVector as string, text)}
+                  onResetProfileVariant={(id) => resetProfileVariantStore(id, selectedVector as string)}
                   onUpdateProject={updateProject}
                   onUpdateProjectVectors={updateProjectVectors}
+                  onUpdateProjectVariant={(id, text) => updateProjectVariantStore(id, selectedVector as string, text)}
+                  onResetProjectVariant={(id) => resetProjectVariantStore(id, selectedVector as string)}
                   onReorderProjects={reorderProjects}
                   onUpdateSkillGroup={updateSkillGroup}
                   onUpdateSkillGroupVectors={updateSkillGroupVectors}
@@ -1071,12 +1049,22 @@ export function BuildPage() {
                   onUpdateBullet={updateBullet}
                   onUpdateBulletLabel={updateBulletLabel}
                   onUpdateBulletVectors={updateBulletVectors}
+                  onUpdateBulletVariant={(roleId, bulletId, text) => updateBulletVariantStore(roleId, bulletId, selectedVector as string, text)}
+                  onResetBulletVariant={(roleId, bulletId) => resetBulletVariantStore(roleId, bulletId, selectedVector as string)}
                   onToggleBullet={(roleId, bulletId, vectors) => toggleComponentWithPriority(componentKeys.bullet(roleId, bulletId), vectors)}
                   onReorderBullets={handleRoleBulletReorder}
                   onResetRoleBulletOrder={(roleId) => resetRoleBulletOrder(vectorKey, roleId)}
                   onReframeBullet={onReframeBullet}
                   reframeLoadingId={reframeLoadingId}
                   aiEnabled={!!jdAnalysisEndpoint}
+                  onUpdateEducation={updateEducation}
+                  onUpdateEducationVectors={updateEducationVectors}
+                  onDeleteEducation={deleteEducation}
+                  onReorderEducation={reorderEducation}
+                  onUpdateCertification={updateCertification}
+                  onUpdateCertificationVectors={updateCertificationVectors}
+                  onDeleteCertification={deleteCertification}
+                  onReorderCertifications={reorderCertifications}
                   onAddComponent={onAddComponentBound}
                   onUpdateMetaField={updateMetaField}
                   onUpdateMetaLink={updateMetaLink}

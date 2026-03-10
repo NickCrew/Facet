@@ -90,6 +90,7 @@ export interface TypstDataPayload {
   }>
   projects: Array<{ name: string; urlText: string | null; urlHref: string | null; text: string }>
   education: Array<{ school: string; location: string; degree: string; year: string | null }>
+  certifications: Array<{ name: string; issuer: string; date: string | null; credential_id: string | null; url: string | null }>
 }
 
 const toRgbTuple = (value: string): [number, number, number] => {
@@ -164,6 +165,13 @@ export const toDataPayload = (resume: AssembledResume): TypstDataPayload => {
       location: entry.location,
       degree: entry.degree,
       year: entry.year ?? null,
+    })),
+    certifications: resume.certifications.map((cert) => ({
+      name: cert.name,
+      issuer: cert.issuer,
+      date: cert.date ?? null,
+      credential_id: cert.credential_id ?? null,
+      url: cert.url ?? null,
     })),
   }
 }

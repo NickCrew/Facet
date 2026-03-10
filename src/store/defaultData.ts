@@ -134,7 +134,9 @@ export const defaultResumeData: ResumeData = {
       location: 'Berkeley, CA',
       degree: 'B.S. Computer Science',
       year: '2018',
+      vectors: {},
     },
   ],
+  certifications: [],
   presets: [],
 }

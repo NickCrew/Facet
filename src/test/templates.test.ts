@@ -77,7 +77,8 @@ describe('toTemplateResumeData', () => {
       },
       skillGroups: [{ id: 's1', label: 'L', content: 'C' }],
       projects: [{ id: 'pr1', name: 'N', text: 'T', priority: 'must', url: 'U' }],
-      education: [{ id: 'e1', school: 'S', degree: 'D', location: 'L', year: 'Y' }]
+      education: [{ id: 'e1', school: 'S', degree: 'D', location: 'L', year: 'Y', priority: 'must' as const }],
+      certifications: []
     })
     
     const result = toTemplateResumeData(assembled)
@@ -88,7 +89,7 @@ describe('toTemplateResumeData', () => {
     expect(result.skillGroups[0]).toEqual({ label: 'L', content: 'C' })
     expect(result.projects[0]).toEqual({ name: 'N', text: 'T', url: 'U' })
     expect(result.education[0]).not.toBe(assembled.education[0])
-    expect(result.education[0]).toEqual(assembled.education[0])
+    expect(result.education[0]).toEqual({ school: 'S', degree: 'D', location: 'L', year: 'Y' })
   })
 
   it('handles empty arrays gracefully', () => {

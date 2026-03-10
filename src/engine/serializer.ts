@@ -414,12 +414,34 @@ function assertResumeDataShape(value: unknown): asserts value is ResumeData {
   }
 
   const education = assertArray(root.education, 'education')
+  const educationIds = new Set<string>()
   for (const [index, entry] of education.entries()) {
     const record = assertRecord(entry, `education[${index}]`)
+    if (record.id !== undefined) {
+      const id = assertString(record.id, `education[${index}].id`)
+      assertUniqueId(educationIds, id, `education[${index}]`)
+    }
     assertString(record.school, `education[${index}].school`)
     assertString(record.location, `education[${index}].location`)
     assertString(record.degree, `education[${index}].degree`)
     if (record.year !== undefined) assertString(record.year, `education[${index}].year`)
+    if (record.vectors !== undefined) {
+      assertPriorityMap(record.vectors, `education[${index}].vectors`)
+    }
+  }
+
+  const certifications = assertArray(root.certifications ?? [], 'certifications')
+  const certificationIds = new Set<string>()
+  for (const [index, cert] of certifications.entries()) {
+    const record = assertRecord(cert, `certifications[${index}]`)
+    const id = assertString(record.id, `certifications[${index}].id`)
+    assertUniqueId(certificationIds, id, `certifications[${index}]`)
+    assertString(record.name, `certifications[${index}].name`)
+    assertString(record.issuer, `certifications[${index}].issuer`)
+    assertOptionalString(record.date, `certifications[${index}].date`)
+    assertOptionalString(record.credential_id, `certifications[${index}].credential_id`)
+    assertOptionalString(record.url, `certifications[${index}].url`)
+    assertPriorityMap(record.vectors, `certifications[${index}].vectors`)
   }
 
   if (root.manualOverrides !== undefined) {
@@ -428,16 +450,6 @@ function assertResumeDataShape(value: unknown): asserts value is ResumeData {
       const record = assertRecord(vectorMap, `manualOverrides.${vectorKey}`)
       for (const [key, value] of Object.entries(record)) {
         assertBoolean(value, `manualOverrides.${vectorKey}.${key}`)
-      }
-    }
-  }
-
-  if (root.variantOverrides !== undefined) {
-    const variantOverrides = assertRecord(root.variantOverrides, 'variantOverrides')
-    for (const [vectorKey, vectorMap] of Object.entries(variantOverrides)) {
-      const record = assertRecord(vectorMap, `variantOverrides.${vectorKey}`)
-      for (const [key, value] of Object.entries(record)) {
-        assertString(value, `variantOverrides.${vectorKey}.${key}`)
       }
     }
   }
@@ -471,22 +483,6 @@ function assertResumeDataShape(value: unknown): asserts value is ResumeData {
       )
       for (const [key, rawValue] of Object.entries(manualOverrides)) {
         assertBoolean(rawValue, `presets[${index}].overrides.manualOverrides.${key}`)
-      }
-
-      const variantOverrides = assertRecord(
-        overrides.variantOverrides,
-        `presets[${index}].overrides.variantOverrides`,
-      )
-      for (const [key, rawValue] of Object.entries(variantOverrides)) {
-        const variantSelection = assertString(
-          rawValue,
-          `presets[${index}].overrides.variantOverrides.${key}`,
-        )
-        if (variantSelection === 'auto') {
-          throw new Error(
-            `presets[${index}].overrides.variantOverrides.${key} must be a vector id or "default".`,
-          )
-        }
       }
 
       assertRoleBulletOrderMap(
@@ -607,6 +603,14 @@ const collectWarningsAndNormalizeVectors = (data: ResumeData): { data: ResumeDat
       warnings.push(`projects.${project.id} has empty text.`)
     }
   }
+  for (const entry of data.education) {
+    if (entry.vectors && Object.keys(entry.vectors).length > 0) {
+      collectPriorityMapKeys(entry.vectors, `education.${entry.id}`)
+    }
+  }
+  for (const cert of data.certifications ?? []) {
+    collectPriorityMapKeys(cert.vectors, `certifications.${cert.id}`)
+  }
   for (const skillGroup of data.skill_groups) {
     if (skillGroup.content.trim().length === 0) {
       warnings.push(`skill_groups.${skillGroup.id} has empty content.`)
@@ -654,6 +658,7 @@ const collectWarningsAndNormalizeVectors = (data: ResumeData): { data: ResumeDat
       ...data,
       theme: normalizeThemeState(data.theme),
       vectors,
+      certifications: data.certifications ?? [],
       skill_groups: data.skill_groups.map((skillGroup) => ({
         ...skillGroup,
         vectors: ensureSkillGroupVectors(skillGroup, vectors),

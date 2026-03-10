@@ -21,6 +21,7 @@ const baseResume: AssembledResume = {
   roles: [],
   projects: [],
   education: [],
+  certifications: [],
 }
 
 function makeResult(overrides: Partial<AssembledResume> = {}): AssemblyResult {

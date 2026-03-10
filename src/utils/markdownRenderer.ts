@@ -80,5 +80,14 @@ export const renderResumeAsMarkdown = (resume: AssembledResume): string => {
     }
   }
 
+  if (templateResume.certifications.length > 0) {
+    lines.push('')
+    lines.push('## Certifications')
+    for (const cert of templateResume.certifications) {
+      const label = cert.url ? `[${cert.name}](${cert.url})` : `**${cert.name}**`
+      lines.push(`- ${label} — ${cert.issuer}${cert.date ? ` (${cert.date})` : ''}`)
+    }
+  }
+
   return lines.join('\n').trim()
 }

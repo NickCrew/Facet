@@ -70,6 +70,7 @@ const cloneAssembledResume = (resume: AssembledResume): AssembledResume => ({
   })),
   projects: resume.projects.map((project) => ({ ...project })),
   education: resume.education.map((entry) => ({ ...entry })),
+  certifications: resume.certifications.map((cert) => ({ ...cert })),
 })
 
 const buildMustOnlySnapshot = (resume: AssembledResume): AssembledResume => ({
@@ -85,6 +86,12 @@ const buildMustOnlySnapshot = (resume: AssembledResume): AssembledResume => ({
   projects: resume.projects
     .filter((project) => project.priority === 'must')
     .map((project) => ({ ...project })),
+  education: resume.education
+    .filter((entry) => entry.priority === 'must')
+    .map((entry) => ({ ...entry })),
+  certifications: resume.certifications
+    .filter((cert) => cert.priority === 'must')
+    .map((cert) => ({ ...cert })),
 })
 
 const removeOldestBulletByPriority = (
@@ -148,6 +155,11 @@ export const estimateResumeLines = (resume: AssembledResume): number => {
   if (resume.education.length > 0) {
     lines += 1
     lines += resume.education.length
+  }
+
+  if (resume.certifications.length > 0) {
+    lines += 1
+    lines += resume.certifications.length
   }
 
   return Math.max(1, lines)

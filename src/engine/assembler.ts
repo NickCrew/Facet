@@ -8,11 +8,9 @@ import {
   type ComponentPriority,
   type IncludedPriority,
   type ManualComponentOverrides,
-  type ManualVariantOverrides,
   type PriorityByVector,
   type ResumeData,
   type TextVariantMap,
-  type VariantSelection,
   type VectorSelection,
 } from '../types'
 import { applyPageBudget } from './pageBudget'
@@ -60,23 +58,15 @@ export const getPriorityForVector = (
 ): ComponentPriority => resolvePriorityForVector(priorities, selectedVector) ?? 'exclude'
 
 const resolveTextVariant = (
-  keys: string[],
   text: string,
   variants: TextVariantMap | undefined,
-  variantOverrides: ManualVariantOverrides,
   selectedVector: VectorSelection,
   variables: Record<string, string> = {},
 ): string => {
-  let resolvedText = text
-  const variantOverride = resolveVariantOverride(variantOverrides, keys)
-  
-  if (variantOverride === 'default') {
-    resolvedText = text
-  } else if (variantOverride && variants?.[variantOverride]) {
-    resolvedText = variants[variantOverride]
-  } else if (selectedVector !== 'all' && variants?.[selectedVector]) {
-    resolvedText = variants[selectedVector]
-  }
+  const resolvedText =
+    selectedVector !== 'all' && variants?.[selectedVector]
+      ? variants[selectedVector]
+      : text
 
   return resolveVariables(resolvedText, variables)
 }
@@ -95,19 +85,6 @@ const resolveManualOverride = (
   overrides: ManualComponentOverrides,
   keys: string[],
 ): boolean | undefined => {
-  for (const key of keys) {
-    if (hasOwn(overrides, key)) {
-      return overrides[key]
-    }
-  }
-
-  return undefined
-}
-
-const resolveVariantOverride = (
-  overrides: ManualVariantOverrides,
-  keys: string[],
-): VariantSelection | undefined => {
   for (const key of keys) {
     if (hasOwn(overrides, key)) {
       return overrides[key]
@@ -278,7 +255,6 @@ export const assembleResume = (
 ): AssemblyResult => {
   const selectedVector = options.selectedVector ?? 'all'
   const manualOverrides = options.manualOverrides ?? {}
-  const variantOverrides = options.variantOverrides ?? {}
   const bulletOrderByRole = options.bulletOrderByRole ?? {}
   const targetPages = options.targetPages ?? DEFAULT_TARGET_PAGES
   const trimToPageBudget = options.trimToPageBudget ?? true
@@ -298,14 +274,7 @@ export const assembleResume = (
     targetLineCandidates.push({
       component: {
         id: targetLine.id,
-        text: resolveTextVariant(
-          keys,
-          targetLine.text,
-          targetLine.variants,
-          variantOverrides,
-          selectedVector,
-          variables,
-        ),
+        text: resolveTextVariant(targetLine.text, targetLine.variants, selectedVector, variables),
         priority: normalizeIncludedPriority(autoPriority, override),
       },
       sourceIndex: index,
@@ -323,7 +292,7 @@ export const assembleResume = (
     profileCandidates.push({
       component: {
         id: profile.id,
-        text: resolveTextVariant(keys, profile.text, profile.variants, variantOverrides, selectedVector, variables),
+        text: resolveTextVariant(profile.text, profile.variants, selectedVector, variables),
         priority: normalizeIncludedPriority(autoPriority, override),
       },
       sourceIndex: index,
@@ -371,7 +340,7 @@ export const assembleResume = (
 
           return {
             id: bullet.id,
-            text: resolveTextVariant(keys, bullet.text, bullet.variants, variantOverrides, selectedVector, variables),
+            text: resolveTextVariant(bullet.text, bullet.variants, selectedVector, variables),
             priority: normalizeIncludedPriority(autoPriority, override),
             sourceIndex: bulletIndex,
           }
@@ -418,19 +387,52 @@ export const assembleResume = (
         id: project.id,
         name: resolveVariables(project.name, variables),
         url: project.url,
-        text: resolveTextVariant(keys, project.text, project.variants, variantOverrides, selectedVector, variables),
+        text: resolveTextVariant(project.text, project.variants, selectedVector, variables),
         priority: normalizeIncludedPriority(autoPriority, override),
       }
     })
     .filter((project): project is Exclude<typeof project, null> => project !== null)
 
-  const education = data.education.map(entry => ({
-    ...entry,
-    school: resolveVariables(entry.school, variables),
-    location: resolveVariables(entry.location, variables),
-    degree: resolveVariables(entry.degree, variables),
-    year: entry.year ? resolveVariables(entry.year, variables) : entry.year,
-  }))
+  const education = data.education
+    .map((entry) => {
+      const keys = buildComponentKeys('education', entry.id)
+      const autoPriority = resolvePriorityForVector(entry.vectors ?? {}, selectedVector)
+      const override = resolveManualOverride(manualOverrides, keys)
+      if (!shouldIncludeComponent(autoPriority, override)) {
+        return null
+      }
+
+      return {
+        id: entry.id,
+        school: resolveVariables(entry.school, variables),
+        location: resolveVariables(entry.location, variables),
+        degree: resolveVariables(entry.degree, variables),
+        year: entry.year ? resolveVariables(entry.year, variables) : entry.year,
+        priority: normalizeIncludedPriority(autoPriority, override),
+      }
+    })
+    .filter((entry): entry is Exclude<typeof entry, null> => entry !== null)
+
+  const certifications = (data.certifications ?? [])
+    .map((cert) => {
+      const keys = buildComponentKeys('certification', cert.id)
+      const autoPriority = resolvePriorityForVector(cert.vectors, selectedVector)
+      const override = resolveManualOverride(manualOverrides, keys)
+      if (!shouldIncludeComponent(autoPriority, override)) {
+        return null
+      }
+
+      return {
+        id: cert.id,
+        name: resolveVariables(cert.name, variables),
+        issuer: resolveVariables(cert.issuer, variables),
+        date: cert.date ? resolveVariables(cert.date, variables) : cert.date,
+        credential_id: cert.credential_id,
+        url: cert.url,
+        priority: normalizeIncludedPriority(autoPriority, override),
+      }
+    })
+    .filter((cert): cert is Exclude<typeof cert, null> => cert !== null)
 
   const assembled = {
     selectedVector,
@@ -445,6 +447,7 @@ export const assembleResume = (
     roles,
     projects,
     education,
+    certifications,
   }
 
   const budgeted = applyPageBudget(assembled, {

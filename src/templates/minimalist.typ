@@ -156,3 +156,15 @@
     #v(4pt)
   ]
 ]
+
+#if data.certifications.len() > 0 [
+  #section-header("Certifications")
+  #for cert in data.certifications [
+    #grid(
+      columns: (1fr, auto),
+      [#text(weight: "bold")[#cert.name] — #cert.issuer],
+      [#if cert.date != none [#cert.date]]
+    )
+    #v(4pt)
+  ]
+]

@@ -11,6 +11,7 @@ describe('pageBudget internals', () => {
       roles: [],
       projects: [],
       education: [],
+      certifications: [],
     }
     // Baseline lines: 2 (name/contact container) + 0 (content)
     const lines = estimateResumeLines(emptyResume)
@@ -46,10 +47,11 @@ describe('pageBudget internals', () => {
         { id: 'pr1', name: 'Proj', text: 'Project description', priority: 'must' }
       ],
       education: [
-        { id: 'e1', school: 'Uni', degree: 'BS', location: 'Loc', year: '2020' }
+        { id: 'e1', school: 'Uni', degree: 'BS', location: 'Loc', year: '2020', priority: 'must' as const }
       ],
+      certifications: [],
     }
-    
+
     const lines = estimateResumeLines(resume)
     // Tighter bounds catch regressions while allowing for minor heuristic tuning
     expect(lines).toBeGreaterThan(12)
@@ -65,6 +67,7 @@ describe('pageBudget internals', () => {
       roles: [],
       projects: [],
       education: [],
+      certifications: [],
     }
     const lines = estimateResumeLines(resume)
     // Base 3 + 1 (profile space) + ~6 (profile text) = ~10

@@ -21,6 +21,8 @@ import { ComponentCard } from './ComponentCard'
 import { HelpHint } from './HelpHint'
 import { SkillGroupList } from './SkillGroupList'
 import { ProjectList } from './ProjectList'
+import { EducationList } from './EducationList'
+import { CertificationList } from './CertificationList'
 import { VectorPriorityEditor } from './VectorPriorityEditor'
 import { resolveDisplayText } from '../utils/resolveDisplayText'
 
@@ -31,23 +33,29 @@ type LibrarySectionId =
   | 'skill-groups'
   | 'roles-bullets'
   | 'projects'
+  | 'education'
+  | 'certifications'
 
 interface ComponentLibraryProps {
   data: ResumeData
   selectedVector: VectorSelection
   includedByKey: Record<string, boolean>
-  variantByKey: Record<string, string | undefined>
   bulletOrderByRole: Record<string, string[]>
   activeVectorBulletOrderByRole: Record<string, string[]>
   defaultBulletOrderByRole: Record<string, string[]>
   onToggleComponent: (componentKey: string, vectors: PriorityByVector) => void
-  onSetVariant: (componentKey: string, variant: string | null) => void
   onUpdateTargetLine: (id: string, text: string) => void
   onUpdateTargetLineVectors: (id: string, vectors: PriorityByVector) => void
+  onUpdateTargetLineVariant: (id: string, text: string) => void
+  onResetTargetLineVariant: (id: string) => void
   onUpdateProfile: (id: string, text: string) => void
   onUpdateProfileVectors: (id: string, vectors: PriorityByVector) => void
+  onUpdateProfileVariant: (id: string, text: string) => void
+  onResetProfileVariant: (id: string) => void
   onUpdateProject: (id: string, field: 'name' | 'url' | 'text', value: string) => void
   onUpdateProjectVectors: (id: string, vectors: PriorityByVector) => void
+  onUpdateProjectVariant: (id: string, text: string) => void
+  onResetProjectVariant: (id: string) => void
   onReorderProjects: (order: string[]) => void
   onUpdateSkillGroup: (id: string, field: 'label' | 'content', value: string) => void
   onUpdateSkillGroupVectors: (id: string, vectors: Record<string, SkillGroupVectorConfig>) => void
@@ -56,6 +64,8 @@ interface ComponentLibraryProps {
   onUpdateBullet: (roleId: string, bulletId: string, text: string) => void
   onUpdateBulletLabel: (roleId: string, bulletId: string, label: string) => void
   onUpdateBulletVectors: (roleId: string, bulletId: string, vectors: PriorityByVector) => void
+  onUpdateBulletVariant: (roleId: string, bulletId: string, text: string) => void
+  onResetBulletVariant: (roleId: string, bulletId: string) => void
   onToggleBullet: (roleId: string, bulletId: string, vectors: PriorityByVector) => void
   onReorderBullets: (roleId: string, order: string[]) => void
   onResetRoleBulletOrder: (roleId: string) => void
@@ -65,6 +75,14 @@ interface ComponentLibraryProps {
   onAddComponent: (type: AddComponentType, payload: AddComponentPayload) => void
   onUpdateMetaField: (field: 'name' | 'email' | 'phone' | 'location', value: string) => void
   onUpdateMetaLink: (index: number, field: 'label' | 'url', value: string) => void
+  onUpdateEducation: (id: string, field: 'school' | 'location' | 'degree' | 'year', value: string) => void
+  onUpdateEducationVectors: (id: string, vectors: PriorityByVector) => void
+  onDeleteEducation: (id: string) => void
+  onReorderEducation: (order: string[]) => void
+  onUpdateCertification: (id: string, field: 'name' | 'issuer' | 'date' | 'credential_id' | 'url', value: string) => void
+  onUpdateCertificationVectors: (id: string, vectors: PriorityByVector) => void
+  onDeleteCertification: (id: string) => void
+  onReorderCertifications: (order: string[]) => void
   onAddMetaLink: () => void
   onRemoveMetaLink: (index: number) => void
   bulletSuggestions?: Record<string, ComponentSuggestion>
@@ -76,7 +94,7 @@ interface ComponentLibraryProps {
 }
 
 function requiresVectorPriority(type: AddComponentType): boolean {
-  return type === 'target_line' || type === 'profile' || type === 'project' || type === 'bullet'
+  return type === 'target_line' || type === 'profile' || type === 'project' || type === 'bullet' || type === 'education' || type === 'certification'
 }
 
 function useFilteredList<T>(
@@ -97,18 +115,22 @@ export function ComponentLibrary({
   data,
   selectedVector,
   includedByKey,
-  variantByKey,
   bulletOrderByRole,
   activeVectorBulletOrderByRole,
   defaultBulletOrderByRole,
   onToggleComponent,
-  onSetVariant,
   onUpdateTargetLine,
   onUpdateTargetLineVectors,
+  onUpdateTargetLineVariant,
+  onResetTargetLineVariant,
   onUpdateProfile,
   onUpdateProfileVectors,
+  onUpdateProfileVariant,
+  onResetProfileVariant,
   onUpdateProject,
   onUpdateProjectVectors,
+  onUpdateProjectVariant,
+  onResetProjectVariant,
   onReorderProjects,
   onUpdateSkillGroup,
   onUpdateSkillGroupVectors,
@@ -117,6 +139,8 @@ export function ComponentLibrary({
   onUpdateBullet,
   onUpdateBulletLabel,
   onUpdateBulletVectors,
+  onUpdateBulletVariant,
+  onResetBulletVariant,
   onToggleBullet,
   onReorderBullets,
   onResetRoleBulletOrder,
@@ -124,6 +148,14 @@ export function ComponentLibrary({
   reframeLoadingId,
   aiEnabled,
   onAddComponent,
+  onUpdateEducation,
+  onUpdateEducationVectors,
+  onDeleteEducation,
+  onReorderEducation,
+  onUpdateCertification,
+  onUpdateCertificationVectors,
+  onDeleteCertification,
+  onReorderCertifications,
   onUpdateMetaField,
   onUpdateMetaLink,
   onAddMetaLink,
@@ -148,6 +180,8 @@ export function ComponentLibrary({
     'skill-groups': false,
     'roles-bullets': true,
     projects: false,
+    education: false,
+    certifications: false,
   })
   const modalRef = useRef<HTMLDivElement>(null)
 
@@ -161,7 +195,8 @@ export function ComponentLibrary({
         profile: 'Profile',
         target_line: 'Target Line',
         role: 'Role',
-        education: 'Education'
+        education: 'Education',
+        certification: 'Certification',
       }
       setAddAnnouncement(`Switched to ${typeLabels[addType]} form`)
     }
@@ -209,6 +244,19 @@ export function ComponentLibrary({
     project.url ?? '',
   ])
 
+  const filteredEducation = useFilteredList(data.education, searchQuery, (entry) => [
+    entry.school,
+    entry.location,
+    entry.degree,
+    entry.year ?? '',
+  ])
+
+  const filteredCertifications = useFilteredList(data.certifications ?? [], searchQuery, (cert) => [
+    cert.name,
+    cert.issuer,
+    cert.date ?? '',
+  ])
+
   const roleChoices = useMemo(() => data.roles.map((role) => ({ id: role.id, label: role.company })), [data.roles])
   const defaultRoleId = roleChoices[0]?.id
   const defaultAddVectors = useMemo(
@@ -252,6 +300,20 @@ export function ComponentLibrary({
     if ((addType === 'profile' || addType === 'target_line') && !text) {
       setAddError('Text is required.')
       return
+    }
+
+    if (addType === 'education') {
+      if (!name) {
+        setAddError('School name is required.')
+        return
+      }
+    }
+
+    if (addType === 'certification') {
+      if (!name || !(payload.issuer?.trim())) {
+        setAddError('Certification name and issuer are required.')
+        return
+      }
     }
 
     onAddComponent(addType, payload)
@@ -343,22 +405,47 @@ export function ComponentLibrary({
     ? undefined
     : data.vectors.find((v) => v.id === selectedVector)?.color
 
-  // Memoized handlers for ComponentCard children to ensure React.memo effectiveness
+  // Variant-aware body change handlers
+  const handleTargetLineBodyChange = useCallback((id: string, text: string) => {
+    if (selectedVector === 'all') {
+      onUpdateTargetLine(id, text)
+    } else {
+      onUpdateTargetLineVariant(id, text)
+    }
+  }, [selectedVector, onUpdateTargetLine, onUpdateTargetLineVariant])
+
+  const handleProfileBodyChange = useCallback((id: string, text: string) => {
+    if (selectedVector === 'all') {
+      onUpdateProfile(id, text)
+    } else {
+      onUpdateProfileVariant(id, text)
+    }
+  }, [selectedVector, onUpdateProfile, onUpdateProfileVariant])
+
+  const handleProjectTextChange = useCallback((id: string, field: 'name' | 'url' | 'text', value: string) => {
+    if (field === 'text' && selectedVector !== 'all') {
+      onUpdateProjectVariant(id, value)
+    } else {
+      onUpdateProject(id, field, value)
+    }
+  }, [selectedVector, onUpdateProject, onUpdateProjectVariant])
+
+  const handleBulletTextChange = useCallback((roleId: string, bulletId: string, text: string) => {
+    if (selectedVector === 'all') {
+      onUpdateBullet(roleId, bulletId, text)
+    } else {
+      onUpdateBulletVariant(roleId, bulletId, text)
+    }
+  }, [selectedVector, onUpdateBullet, onUpdateBulletVariant])
+
+  // Memoized handlers for ComponentCard children
   const handleToggleTargetLine = useCallback((id: string, vectors: PriorityByVector) => {
     onToggleComponent(componentKeys.targetLine(id), vectors)
   }, [onToggleComponent])
 
-  const handleVariantTargetLine = useCallback((id: string, variant: string | null) => {
-    onSetVariant(componentKeys.targetLine(id), variant)
-  }, [onSetVariant])
-
   const handleToggleProfile = useCallback((id: string, vectors: PriorityByVector) => {
     onToggleComponent(componentKeys.profile(id), vectors)
   }, [onToggleComponent])
-
-  const handleVariantProfile = useCallback((id: string, variant: string | null) => {
-    onSetVariant(componentKeys.profile(id), variant)
-  }, [onSetVariant])
 
   const handleToggleSkillGroup = useCallback((id: string) => {
     onToggleComponent(id, {})
@@ -368,17 +455,17 @@ export function ComponentLibrary({
     onToggleComponent(componentKeys.project(id), vectors)
   }, [onToggleComponent])
 
-  const handleSetProjectVariantBound = useCallback((id: string, variant: string | null) => {
-    onSetVariant(componentKeys.project(id), variant)
-  }, [onSetVariant])
-
   const handleToggleBulletBound = useCallback((roleId: string, bulletId: string, vectors: PriorityByVector) => {
     onToggleBullet(roleId, bulletId, vectors)
   }, [onToggleBullet])
 
-  const handleSetBulletVariantBound = useCallback((roleId: string, bulletId: string, variant: string | null) => {
-    onSetVariant(componentKeys.bullet(roleId, bulletId), variant)
-  }, [onSetVariant])
+  const handleToggleEducationBound = useCallback((id: string, vectors: PriorityByVector) => {
+    onToggleComponent(componentKeys.education(id), vectors)
+  }, [onToggleComponent])
+
+  const handleToggleCertificationBound = useCallback((id: string, vectors: PriorityByVector) => {
+    onToggleComponent(componentKeys.certification(id), vectors)
+  }, [onToggleComponent])
 
   return (
     <aside
@@ -520,22 +607,22 @@ export function ComponentLibrary({
           {filteredTargetLines.map((line) => {
             const key = componentKeys.targetLine(line.id)
             const autoIncluded = getPriorityForVector(line.vectors, selectedVector) !== 'exclude'
+            const hasVariant = selectedVector !== 'all' && Boolean(line.variants?.[selectedVector])
             return (
               <ComponentCard
                 key={line.id}
                 id={line.id}
                 title={line.id}
-                body={line.text}
+                body={resolveDisplayText(line.text, line.variants, selectedVector)}
                 vectors={line.vectors}
                 vectorDefs={data.vectors}
                 selectedVector={selectedVector}
                 included={includedByKey[key] ?? autoIncluded}
-                variants={line.variants}
-                selectedVariant={variantByKey[key]}
+                hasVariant={hasVariant}
                 onToggleIncluded={handleToggleTargetLine}
-                onVariantChange={handleVariantTargetLine}
-                onBodyChange={onUpdateTargetLine}
+                onBodyChange={handleTargetLineBodyChange}
                 onVectorsChange={onUpdateTargetLineVectors}
+                onResetVariant={onResetTargetLineVariant}
                 suggestion={targetLineSuggestion?.recommendedPriority ? targetLineSuggestion : undefined}
                 onAcceptSuggestion={onAcceptTargetLineSuggestion}
                 onIgnoreSuggestion={onIgnoreTargetLineSuggestion}
@@ -561,23 +648,22 @@ export function ComponentLibrary({
           {filteredProfiles.map((profile) => {
             const key = componentKeys.profile(profile.id)
             const autoIncluded = getPriorityForVector(profile.vectors, selectedVector) !== 'exclude'
-            const selectedVariant = variantByKey[key]
+            const hasVariant = selectedVector !== 'all' && Boolean(profile.variants?.[selectedVector])
             return (
               <ComponentCard
                 key={profile.id}
                 id={profile.id}
                 title={profile.id}
-                body={resolveDisplayText(profile.text, profile.variants, selectedVariant, selectedVector).displayText}
+                body={resolveDisplayText(profile.text, profile.variants, selectedVector)}
                 vectors={profile.vectors}
                 vectorDefs={data.vectors}
                 selectedVector={selectedVector}
                 included={includedByKey[key] ?? autoIncluded}
-                variants={profile.variants}
-                selectedVariant={selectedVariant}
+                hasVariant={hasVariant}
                 onToggleIncluded={handleToggleProfile}
-                onVariantChange={handleVariantProfile}
-                onBodyChange={onUpdateProfile}
+                onBodyChange={handleProfileBodyChange}
                 onVectorsChange={onUpdateProfileVectors}
+                onResetVariant={onResetProfileVariant}
               />
             )
           })}
@@ -650,14 +736,13 @@ export function ComponentLibrary({
                 onResetOrder={onResetRoleBulletOrder}
                 onUpdateRole={onUpdateRole}
                 includedByKey={includedByKey}
-                variantByKey={variantByKey}
                 onToggleBullet={handleToggleBulletBound}
                 onReorder={onReorderBullets}
-                onChangeBulletText={onUpdateBullet}
+                onChangeBulletText={handleBulletTextChange}
                 onChangeBulletLabel={onUpdateBulletLabel}
-                onSetBulletVariant={handleSetBulletVariantBound}
                 onSetBulletVectors={onUpdateBulletVectors}
                 onReframe={onReframeBullet}
+                onResetBulletVariant={onResetBulletVariant}
                 reframeLoadingId={reframeLoadingId}
                 aiEnabled={aiEnabled}
                 suggestions={bulletSuggestions}
@@ -691,12 +776,11 @@ export function ComponentLibrary({
           vectorDefs={data.vectors}
           selectedVector={selectedVector}
           includedByKey={includedByKey}
-          variantByKey={variantByKey}
           onReorder={onReorderProjects}
-          onUpdate={onUpdateProject}
+          onUpdate={handleProjectTextChange}
           onUpdateVectors={onUpdateProjectVectors}
           onToggleIncluded={handleToggleProjectBound}
-          onSetVariant={handleSetProjectVariantBound}
+          onResetVariant={onResetProjectVariant}
         />,
         {
           summary: `${filteredProjects.length} projects`,
@@ -705,6 +789,54 @@ export function ComponentLibrary({
             setAddOpen(true)
           },
           isEmpty: searchQuery ? filteredProjects.length === 0 : false,
+        },
+      )}
+
+      {renderSection(
+        'education',
+        'Education',
+        <EducationList
+          education={filteredEducation}
+          vectorDefs={data.vectors}
+          selectedVector={selectedVector}
+          includedByKey={includedByKey}
+          onReorder={onReorderEducation}
+          onUpdate={onUpdateEducation}
+          onUpdateVectors={onUpdateEducationVectors}
+          onToggleIncluded={handleToggleEducationBound}
+          onDelete={onDeleteEducation}
+        />,
+        {
+          summary: `${filteredEducation.length} entries`,
+          onAdd: () => {
+            setAddType('education')
+            setAddOpen(true)
+          },
+          isEmpty: searchQuery ? filteredEducation.length === 0 : false,
+        },
+      )}
+
+      {renderSection(
+        'certifications',
+        'Certifications',
+        <CertificationList
+          certifications={filteredCertifications}
+          vectorDefs={data.vectors}
+          selectedVector={selectedVector}
+          includedByKey={includedByKey}
+          onReorder={onReorderCertifications}
+          onUpdate={onUpdateCertification}
+          onUpdateVectors={onUpdateCertificationVectors}
+          onToggleIncluded={handleToggleCertificationBound}
+          onDelete={onDeleteCertification}
+        />,
+        {
+          summary: `${filteredCertifications.length} certs`,
+          onAdd: () => {
+            setAddType('certification')
+            setAddOpen(true)
+          },
+          isEmpty: searchQuery ? filteredCertifications.length === 0 : false,
         },
       )}
 
@@ -748,6 +880,8 @@ export function ComponentLibrary({
                 <option value="bullet">Bullet</option>
                 <option value="project">Project</option>
                 <option value="skill_group">Skill Group</option>
+                <option value="education">Education</option>
+                <option value="certification">Certification</option>
                 <option value="profile">Profile</option>
                 <option value="target_line">Target Line</option>
               </select>
@@ -825,6 +959,88 @@ export function ComponentLibrary({
                     className="component-input"
                     value={payload.content ?? ''}
                     onChange={(event) => setPayload((prev) => ({ ...prev, content: event.target.value }))}
+                  />
+                </label>
+              </>
+            ) : null}
+
+            {addType === 'education' ? (
+              <>
+                <label className="field-label">
+                  School
+                  <input
+                    className="component-input compact"
+                    value={payload.name ?? ''}
+                    onChange={(event) => setPayload((prev) => ({ ...prev, name: event.target.value }))}
+                  />
+                </label>
+                <label className="field-label">
+                  Location
+                  <input
+                    className="component-input compact"
+                    value={payload.label ?? ''}
+                    onChange={(event) => setPayload((prev) => ({ ...prev, label: event.target.value }))}
+                  />
+                </label>
+                <label className="field-label">
+                  Degree
+                  <input
+                    className="component-input compact"
+                    value={payload.text ?? ''}
+                    onChange={(event) => setPayload((prev) => ({ ...prev, text: event.target.value }))}
+                  />
+                </label>
+                <label className="field-label">
+                  Year
+                  <input
+                    className="component-input compact"
+                    value={payload.url ?? ''}
+                    onChange={(event) => setPayload((prev) => ({ ...prev, url: event.target.value }))}
+                  />
+                </label>
+              </>
+            ) : null}
+
+            {addType === 'certification' ? (
+              <>
+                <label className="field-label">
+                  Name
+                  <input
+                    className="component-input compact"
+                    value={payload.name ?? ''}
+                    onChange={(event) => setPayload((prev) => ({ ...prev, name: event.target.value }))}
+                  />
+                </label>
+                <label className="field-label">
+                  Issuer
+                  <input
+                    className="component-input compact"
+                    value={payload.issuer ?? ''}
+                    onChange={(event) => setPayload((prev) => ({ ...prev, issuer: event.target.value }))}
+                  />
+                </label>
+                <label className="field-label">
+                  Date
+                  <input
+                    className="component-input compact"
+                    value={payload.date ?? ''}
+                    onChange={(event) => setPayload((prev) => ({ ...prev, date: event.target.value }))}
+                  />
+                </label>
+                <label className="field-label">
+                  Credential ID
+                  <input
+                    className="component-input compact"
+                    value={payload.content ?? ''}
+                    onChange={(event) => setPayload((prev) => ({ ...prev, content: event.target.value }))}
+                  />
+                </label>
+                <label className="field-label">
+                  URL
+                  <input
+                    className="component-input compact"
+                    value={payload.url ?? ''}
+                    onChange={(event) => setPayload((prev) => ({ ...prev, url: event.target.value }))}
                   />
                 </label>
               </>

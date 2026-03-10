@@ -67,15 +67,18 @@ describe('resumeStore', () => {
       expect(useResumeStore.getState().data.manualOverrides?.backend?.b1).toBeUndefined()
     })
 
-    it('setVariantOverride pushes to history and handles null', () => {
-      useResumeStore.getState().setVariantOverride('backend', 'b1', 'v1')
-      expect(useResumeStore.getState().data.variantOverrides?.backend?.b1).toBe('v1')
-      
-      useResumeStore.getState().setVariantOverride('backend', 'b1', null)
-      expect(useResumeStore.getState().data.variantOverrides?.backend?.b1).toBeUndefined()
-      
-      useResumeStore.getState().undo()
-      expect(useResumeStore.getState().data.variantOverrides?.backend?.b1).toBe('v1')
+    it('updateBulletVariant writes variant text and resetBulletVariant clears it', () => {
+      const roleId = useResumeStore.getState().data.roles[0]?.id
+      const bulletId = useResumeStore.getState().data.roles[0]?.bullets[0]?.id
+      if (!roleId || !bulletId) return
+
+      useResumeStore.getState().updateBulletVariant(roleId, bulletId, 'backend', 'Variant text')
+      const bullet = useResumeStore.getState().data.roles[0].bullets[0]
+      expect(bullet.variants?.backend).toBe('Variant text')
+
+      useResumeStore.getState().resetBulletVariant(roleId, bulletId, 'backend')
+      const bulletAfter = useResumeStore.getState().data.roles[0].bullets[0]
+      expect(bulletAfter.variants?.backend).toBeUndefined()
     })
 
     it('handles null override (deletion)', () => {
@@ -275,12 +278,13 @@ describe('resumeStore', () => {
     })
 
     it('addEducation trims all string fields', () => {
-      useResumeStore.getState().addEducation({ 
-        id: 'e1', 
-        school: ' S ', 
-        degree: ' D ', 
-        location: ' L ', 
-        year: ' Y ' 
+      useResumeStore.getState().addEducation({
+        id: 'e1',
+        school: ' S ',
+        degree: ' D ',
+        location: ' L ',
+        year: ' Y ',
+        vectors: {},
       })
       const edu = useResumeStore.getState().data.education.at(-1)
       expect(edu?.school).toBe('S')
@@ -295,21 +299,19 @@ describe('resumeStore', () => {
       const mockUiData = JSON.stringify({
         state: {
           manualOverrides: { backend: { b1: true } },
-          variantOverrides: { backend: { b1: 'v1' } },
           bulletOrders: { backend: { r1: ['b1'] } }
         }
       })
-      
-      const persistedState = { 
-        data: { 
+
+      const persistedState = {
+        data: {
           ...JSON.parse(JSON.stringify(defaultResumeData)),
-          _overridesMigrated: false 
-        } 
+          _overridesMigrated: false
+        }
       }
       const migrated = resumeMigration(persistedState, 1, mockUiData)
-      
+
       expect(migrated.data.manualOverrides.backend.b1).toBe(true)
-      expect(migrated.data.variantOverrides.backend.b1).toBe('v1')
       expect(migrated.data.bulletOrders.backend.r1).toEqual(['b1'])
       expect(migrated.data._overridesMigrated).toBe(true)
     })

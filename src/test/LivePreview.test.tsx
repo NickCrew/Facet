@@ -23,6 +23,7 @@ const mockAssembled: AssembledResume = {
   roles: [],
   projects: [],
   education: [],
+  certifications: [],
 }
 
 const theme = getThemePreset('ferguson-v12')

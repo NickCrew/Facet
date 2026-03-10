@@ -43,6 +43,7 @@ const createResume = (name: string): AssembledResume => ({
   roles: [],
   projects: [],
   education: [],
+  certifications: [],
 })
 
 const createTheme = (font = 'Inter'): ResumeTheme => ({

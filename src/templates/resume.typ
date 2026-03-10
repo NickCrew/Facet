@@ -252,3 +252,17 @@
     ]
   ]
 ]
+
+#if data.certifications.len() > 0 [
+  #section-header("Certifications")
+  #for cert in data.certifications [
+    #block(below: to-pt(theme.paragraphGap))[
+      #text(
+        font: theme.fontHeading,
+        weight: "bold",
+        fill: to-color(theme.colorHeading),
+      )[#cert.name]
+      #text(fill: to-color(theme.colorBody))[ — #cert.issuer#if cert.date != none [ (#cert.date)]]
+    ]
+  ]
+]

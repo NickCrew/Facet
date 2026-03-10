@@ -82,8 +82,19 @@
         #text(weight: "bold", size: to-pt(theme.sizeSectionHeader))[EDUCATION]
         #v(4pt)
         #for entry in data.education [
-          #text(weight: if theme.educationSchoolBold { "bold" } else { "regular" })[#entry.school] 
+          #text(weight: if theme.educationSchoolBold { "bold" } else { "regular" })[#entry.school]
           #entry.degree#if entry.year != none [ (#entry.year)]
+          #v(4pt)
+        ]
+      ]
+
+      #if data.certifications.len() > 0 [
+        #v(to-pt(theme.sectionGapBefore))
+        #text(weight: "bold", size: to-pt(theme.sizeSectionHeader))[CERTIFICATIONS]
+        #v(4pt)
+        #for cert in data.certifications [
+          #text(weight: "bold")[#cert.name]
+          #cert.issuer#if cert.date != none [ (#cert.date)]
           #v(4pt)
         ]
       ]

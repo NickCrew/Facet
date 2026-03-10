@@ -29,6 +29,14 @@ export interface TemplateEducationEntry {
   year?: string
 }
 
+export interface TemplateCertificationEntry {
+  name: string
+  issuer: string
+  date?: string
+  credential_id?: string
+  url?: string
+}
+
 export interface TemplateResumeData {
   header: HeaderData
   targetLine?: string
@@ -37,6 +45,7 @@ export interface TemplateResumeData {
   roles: TemplateRole[]
   projects: TemplateProject[]
   education: TemplateEducationEntry[]
+  certifications: TemplateCertificationEntry[]
 }
 
 export type TemplateOutput = Blob | Uint8Array | string
@@ -71,5 +80,6 @@ export const toTemplateResumeData = (resume: AssembledResume): TemplateResumeDat
     url: project.url,
     text: project.text,
   })),
-  education: resume.education.map((entry) => ({ ...entry })),
+  education: resume.education.map(({ id: _id, priority: _p, ...entry }) => entry),
+  certifications: resume.certifications.map(({ id: _id, priority: _p, ...cert }) => cert),
 })

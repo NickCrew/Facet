@@ -47,6 +47,7 @@ function createResume(): AssembledResume {
     ],
     projects: [],
     education: [],
+    certifications: [],
   }
 }
 

@@ -196,11 +196,24 @@ export function LivePreview({
             <h2>{formatSectionLabel(theme.sectionHeaderStyle, 'EDUCATION')}</h2>
             <ul className="education-list">
               {assembled.education.map((item) => (
-                <li 
-                  key={item.id} 
+                <li
+                  key={item.id}
                   className={`education-row ${suggestedSet.has(item.id) ? 'preview-suggested' : ''}`}
                 >
                   <strong>{highlightKeywords(item.school, matchedKeywords)}</strong>, {item.location} - {highlightKeywords(item.degree, matchedKeywords)}{item.year ? ` (${item.year})` : ''}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        {assembled.certifications.length > 0 && theme.templateId !== 'sidebar' ? (
+          <section className="resume-section">
+            <h2>{formatSectionLabel(theme.sectionHeaderStyle, 'CERTIFICATIONS')}</h2>
+            <ul className="education-list">
+              {assembled.certifications.map((cert) => (
+                <li key={cert.id} className="education-row">
+                  <strong>{highlightKeywords(cert.name, matchedKeywords)}</strong> — {highlightKeywords(cert.issuer, matchedKeywords)}{cert.date ? ` (${cert.date})` : ''}
                 </li>
               ))}
             </ul>
@@ -257,12 +270,26 @@ export function LivePreview({
                 <h2>{formatSectionLabel(theme.sectionHeaderStyle, 'EDUCATION')}</h2>
                 <ul className="education-list-sidebar">
                   {assembled.education.map((item) => (
-                    <li 
-                      key={item.id} 
+                    <li
+                      key={item.id}
                       className={`education-row ${suggestedSet.has(item.id) ? 'preview-suggested' : ''}`}
                     >
                       <strong>{highlightKeywords(item.school, matchedKeywords)}</strong><br />
                       {highlightKeywords(item.degree, matchedKeywords)}{item.year ? ` (${item.year})` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {assembled.certifications.length > 0 && (
+              <section className="resume-section">
+                <h2>{formatSectionLabel(theme.sectionHeaderStyle, 'CERTIFICATIONS')}</h2>
+                <ul className="education-list-sidebar">
+                  {assembled.certifications.map((cert) => (
+                    <li key={cert.id} className="education-row">
+                      <strong>{highlightKeywords(cert.name, matchedKeywords)}</strong><br />
+                      {highlightKeywords(cert.issuer, matchedKeywords)}{cert.date ? ` (${cert.date})` : ''}
                     </li>
                   ))}
                 </ul>

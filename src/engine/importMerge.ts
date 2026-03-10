@@ -1,4 +1,5 @@
 import type {
+  CertificationComponent,
   EducationEntry,
   ProfileComponent,
   ProjectComponent,
@@ -46,12 +47,6 @@ const mergeRoles = (existing: RoleComponent[], incoming: RoleComponent[]): RoleC
   return next
 }
 
-const mergeEducation = (existing: EducationEntry[], incoming: EducationEntry[]): EducationEntry[] => {
-  const keys = new Set(existing.map((entry) => `${entry.school}|${entry.degree}|${entry.year ?? ''}`))
-  const additions = incoming.filter((entry) => !keys.has(`${entry.school}|${entry.degree}|${entry.year ?? ''}`))
-  return [...existing, ...additions]
-}
-
 export const mergeResumeData = (current: ResumeData, imported: ResumeData): ResumeData => ({
   ...current,
   vectors: mergeById<ResumeVector>(current.vectors, imported.vectors),
@@ -60,6 +55,7 @@ export const mergeResumeData = (current: ResumeData, imported: ResumeData): Resu
   skill_groups: mergeById<SkillGroupComponent>(current.skill_groups, imported.skill_groups),
   roles: mergeRoles(current.roles, imported.roles),
   projects: mergeById<ProjectComponent>(current.projects, imported.projects),
-  education: mergeEducation(current.education, imported.education),
+  education: mergeById<EducationEntry>(current.education, imported.education),
+  certifications: mergeById<CertificationComponent>(current.certifications ?? [], imported.certifications ?? []),
   presets: mergeById<Preset>(current.presets ?? [], imported.presets ?? []),
 })

@@ -4,9 +4,9 @@ import type {
   PriorityByVector,
   ResumeData,
   SkillGroupVectorConfig,
-  VariantSelection,
   VectorId,
   EducationEntry,
+  CertificationComponent,
   ProjectComponent,
   SkillGroupComponent,
   RoleComponent,
@@ -47,15 +47,20 @@ interface ResumeState {
   
   // Positioning actions (Moved from uiStore for Global Undo/Redo)
   setOverride: (vectorId: VectorId | 'all', componentKey: string, included: boolean | null) => void
-  setVariantOverride: (
-    vectorId: VectorId | 'all',
-    componentKey: string,
-    variant: VariantSelection | null,
-  ) => void
   resetOverridesForVector: (vectorId: VectorId | 'all') => void
   resetAllOverrides: () => void
   setRoleBulletOrder: (vectorId: VectorId | 'all', roleId: string, order: string[]) => void
   resetRoleBulletOrder: (vectorId: VectorId | 'all', roleId: string) => void
+
+  // Variant actions (implicit vector-aware editing)
+  updateTargetLineVariant: (id: string, vectorId: VectorId, text: string) => void
+  resetTargetLineVariant: (id: string, vectorId: VectorId) => void
+  updateProfileVariant: (id: string, vectorId: VectorId, text: string) => void
+  resetProfileVariant: (id: string, vectorId: VectorId) => void
+  updateBulletVariant: (roleId: string, bulletId: string, vectorId: VectorId, text: string) => void
+  resetBulletVariant: (roleId: string, bulletId: string, vectorId: VectorId) => void
+  updateProjectVariant: (id: string, vectorId: VectorId, text: string) => void
+  resetProjectVariant: (id: string, vectorId: VectorId) => void
 
   // Entity Update Actions
   updateMetaField: (field: 'name' | 'email' | 'phone' | 'location', value: string) => void
@@ -86,6 +91,15 @@ interface ResumeState {
   addBullet: (roleId: string, bullet: RoleBulletComponent) => void
   addRole: (role: RoleComponent) => void
   addEducation: (entry: EducationEntry) => void
+  updateEducation: (id: string, field: 'school' | 'location' | 'degree' | 'year', value: string) => void
+  updateEducationVectors: (id: string, vectors: PriorityByVector) => void
+  deleteEducation: (id: string) => void
+  reorderEducation: (order: string[]) => void
+  addCertification: (cert: CertificationComponent) => void
+  updateCertification: (id: string, field: 'name' | 'issuer' | 'date' | 'credential_id' | 'url', value: string) => void
+  updateCertificationVectors: (id: string, vectors: PriorityByVector) => void
+  deleteCertification: (id: string) => void
+  reorderCertifications: (order: string[]) => void
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration handles raw persisted state with unknown shape
@@ -100,7 +114,6 @@ export function resumeMigration(persistedState: any, version: number, legacyUiDa
           persistedState.data = {
             ...persistedState.data,
             manualOverrides: uiState.manualOverrides,
-            variantOverrides: uiState.variantOverrides,
             bulletOrders: uiState.bulletOrders,
             _overridesMigrated: true,
           }
@@ -136,6 +149,21 @@ export function resumeMigration(persistedState: any, version: number, legacyUiDa
         }
         return r
       })
+    }
+  }
+
+  // v4 → v5: backfill EducationEntry.vectors and initialize certifications
+  if (version < 5 && persistedState.data) {
+    if (persistedState.data.education) {
+      persistedState.data.education = persistedState.data.education.map((e: any) => {
+        if (!e.vectors) {
+          return { ...e, vectors: {} }
+        }
+        return e
+      })
+    }
+    if (!persistedState.data.certifications) {
+      persistedState.data.certifications = []
     }
   }
 
@@ -237,45 +265,16 @@ export const useResumeStore = create<ResumeState>()(
         })
       },
 
-      setVariantOverride: (vector, componentKey, variant) => {
-        get().updateData((current) => {
-          const variantOverrides = current.variantOverrides ?? {}
-          const currentForVector = variantOverrides[vector] ?? {}
-
-          let nextForVector: Record<string, VariantSelection>
-          if (variant === null) {
-            nextForVector = { ...currentForVector }
-            delete nextForVector[componentKey]
-          } else {
-            nextForVector = {
-              ...currentForVector,
-              [componentKey]: variant,
-            }
-          }
-
-          return {
-            ...current,
-            variantOverrides: {
-              ...variantOverrides,
-              [vector]: nextForVector,
-            },
-          }
-        })
-      },
-
       resetOverridesForVector: (vector) => {
         get().updateData((current) => {
           const manualOverrides = { ...(current.manualOverrides ?? {}) }
           delete manualOverrides[vector]
-          const variantOverrides = { ...(current.variantOverrides ?? {}) }
-          delete variantOverrides[vector]
           const bulletOrders = { ...(current.bulletOrders ?? {}) }
           delete bulletOrders[vector]
-          
+
           return {
             ...current,
             manualOverrides,
-            variantOverrides,
             bulletOrders,
           }
         })
@@ -285,7 +284,6 @@ export const useResumeStore = create<ResumeState>()(
         get().updateData((current) => ({
           ...current,
           manualOverrides: {},
-          variantOverrides: {},
           bulletOrders: {},
         }))
       },
@@ -492,6 +490,107 @@ export const useResumeStore = create<ResumeState>()(
         }))
       },
 
+      // Variant update/reset actions
+      updateTargetLineVariant: (id, vectorId, text) => {
+        get().updateData((current) => ({
+          ...current,
+          target_lines: current.target_lines.map((l) =>
+            l.id === id ? { ...l, variants: { ...(l.variants ?? {}), [vectorId]: text } } : l
+          ),
+        }))
+      },
+
+      resetTargetLineVariant: (id, vectorId) => {
+        get().updateData((current) => ({
+          ...current,
+          target_lines: current.target_lines.map((l) => {
+            if (l.id !== id) return l
+            const variants = { ...(l.variants ?? {}) }
+            delete variants[vectorId]
+            return { ...l, variants: Object.keys(variants).length > 0 ? variants : undefined }
+          }),
+        }))
+      },
+
+      updateProfileVariant: (id, vectorId, text) => {
+        get().updateData((current) => ({
+          ...current,
+          profiles: current.profiles.map((p) =>
+            p.id === id ? { ...p, variants: { ...(p.variants ?? {}), [vectorId]: text } } : p
+          ),
+        }))
+      },
+
+      resetProfileVariant: (id, vectorId) => {
+        get().updateData((current) => ({
+          ...current,
+          profiles: current.profiles.map((p) => {
+            if (p.id !== id) return p
+            const variants = { ...(p.variants ?? {}) }
+            delete variants[vectorId]
+            return { ...p, variants: Object.keys(variants).length > 0 ? variants : undefined }
+          }),
+        }))
+      },
+
+      updateBulletVariant: (roleId, bulletId, vectorId, text) => {
+        get().updateData((current) => ({
+          ...current,
+          roles: current.roles.map((r) =>
+            r.id === roleId
+              ? {
+                  ...r,
+                  bullets: r.bullets.map((b) =>
+                    b.id === bulletId
+                      ? { ...b, variants: { ...(b.variants ?? {}), [vectorId]: text } }
+                      : b
+                  ),
+                }
+              : r
+          ),
+        }))
+      },
+
+      resetBulletVariant: (roleId, bulletId, vectorId) => {
+        get().updateData((current) => ({
+          ...current,
+          roles: current.roles.map((r) =>
+            r.id === roleId
+              ? {
+                  ...r,
+                  bullets: r.bullets.map((b) => {
+                    if (b.id !== bulletId) return b
+                    const variants = { ...(b.variants ?? {}) }
+                    delete variants[vectorId]
+                    return { ...b, variants: Object.keys(variants).length > 0 ? variants : undefined }
+                  }),
+                }
+              : r
+          ),
+        }))
+      },
+
+      updateProjectVariant: (id, vectorId, text) => {
+        get().updateData((current) => ({
+          ...current,
+          projects: current.projects.map((p) =>
+            p.id === id ? { ...p, variants: { ...(p.variants ?? {}), [vectorId]: text } } : p
+          ),
+        }))
+      },
+
+      resetProjectVariant: (id, vectorId) => {
+        get().updateData((current) => ({
+          ...current,
+          projects: current.projects.map((p) => {
+            if (p.id !== id) return p
+            const variants = { ...(p.variants ?? {}) }
+            delete variants[vectorId]
+            return { ...p, variants: Object.keys(variants).length > 0 ? variants : undefined }
+          }),
+        }))
+      },
+
       // Creation implementations (Type-safe)
       addTargetLine: (line) => {
         get().updateData((current) => ({
@@ -567,19 +666,94 @@ export const useResumeStore = create<ResumeState>()(
       addEducation: (entry) => {
         get().updateData((current) => ({
           ...current,
-          education: [...current.education, { 
-            ...entry, 
-            school: entry.school.trim(), 
+          education: [...current.education, {
+            ...entry,
+            school: entry.school.trim(),
             degree: entry.degree.trim(),
             location: entry.location.trim(),
-            year: entry.year?.trim()
+            year: entry.year?.trim(),
+            vectors: entry.vectors ?? {},
           }]
+        }))
+      },
+
+      updateEducation: (id, field, value) => {
+        get().updateData((current) => ({
+          ...current,
+          education: current.education.map((e) =>
+            e.id === id ? { ...e, [field]: field === 'year' ? (value === '' ? undefined : value) : value } : e
+          )
+        }))
+      },
+
+      updateEducationVectors: (id, vectors) => {
+        get().updateData((current) => ({
+          ...current,
+          education: current.education.map((e) => e.id === id ? { ...e, vectors } : e)
+        }))
+      },
+
+      deleteEducation: (id) => {
+        get().updateData((current) => ({
+          ...current,
+          education: current.education.filter((e) => e.id !== id)
+        }))
+      },
+
+      reorderEducation: (order) => {
+        get().updateData((current) => ({
+          ...current,
+          education: reorderById(current.education, order)
+        }))
+      },
+
+      addCertification: (cert) => {
+        get().updateData((current) => ({
+          ...current,
+          certifications: [...(current.certifications ?? []), {
+            ...cert,
+            name: cert.name.trim(),
+            issuer: cert.issuer.trim(),
+            date: cert.date?.trim(),
+            credential_id: cert.credential_id?.trim(),
+            url: cert.url?.trim(),
+          }]
+        }))
+      },
+
+      updateCertification: (id, field, value) => {
+        get().updateData((current) => ({
+          ...current,
+          certifications: (current.certifications ?? []).map((c) =>
+            c.id === id ? { ...c, [field]: value === '' ? undefined : value } : c
+          )
+        }))
+      },
+
+      updateCertificationVectors: (id, vectors) => {
+        get().updateData((current) => ({
+          ...current,
+          certifications: (current.certifications ?? []).map((c) => c.id === id ? { ...c, vectors } : c)
+        }))
+      },
+
+      deleteCertification: (id) => {
+        get().updateData((current) => ({
+          ...current,
+          certifications: (current.certifications ?? []).filter((c) => c.id !== id)
+        }))
+      },
+
+      reorderCertifications: (order) => {
+        get().updateData((current) => ({
+          ...current,
+          certifications: reorderById(current.certifications ?? [], order)
         }))
       },
     }),
     {
       name: 'vector-resume-data',
-      version: 4,
+      version: 5,
       storage: createJSONStorage(resolveStorage),
       partialize: (state) => ({ data: state.data }),
       migrate: resumeMigration,

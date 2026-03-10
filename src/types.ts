@@ -9,7 +9,6 @@ export const DEFAULT_TARGET_PAGES = 2
 
 export type PriorityByVector = Record<VectorId, ComponentPriority>
 export type TextVariantMap = Partial<Record<VectorId, string>>
-export type VariantSelection = VectorId | 'default'
 export type SkillGroupOrder = { default?: number } & Record<string, number | undefined>
 export type SectionHeaderStyle = 'caps-rule' | 'bold-rule' | 'bold-only' | 'underline'
 export type BulletChar = '•' | '–' | '▸' | 'none'
@@ -184,11 +183,21 @@ export interface EducationEntry {
   location: string
   degree: string
   year?: string
+  vectors: PriorityByVector
+}
+
+export interface CertificationComponent {
+  id: string
+  name: string
+  issuer: string
+  date?: string
+  credential_id?: string
+  url?: string
+  vectors: PriorityByVector
 }
 
 export interface PresetOverrides {
   manualOverrides: Record<string, boolean>
-  variantOverrides: Record<string, VariantSelection>
   bulletOrders: RoleBulletOrderMap
   priorityOverrides?: Array<{
     bulletId: string
@@ -222,9 +231,9 @@ export interface ResumeData {
   roles: RoleComponent[]
   projects: ProjectComponent[]
   education: EducationEntry[]
+  certifications: CertificationComponent[]
   presets?: Preset[]
   manualOverrides?: VectorManualOverrides
-  variantOverrides?: VectorVariantOverrides
   bulletOrders?: VectorBulletOrders
   variables?: VariableRegistry
   _overridesMigrated?: boolean
@@ -233,8 +242,6 @@ export interface ResumeData {
 export type ManualComponentOverrides = Record<string, boolean>
 export type VectorManualOverrides = Record<VectorId | 'all', ManualComponentOverrides>
 
-export type ManualVariantOverrides = Record<string, VariantSelection>
-export type VectorVariantOverrides = Record<VectorId | 'all', ManualVariantOverrides>
 
 export type VariableRegistry = Record<string, string>
 
@@ -277,6 +284,25 @@ export interface AssembledProject {
   priority: IncludedPriority
 }
 
+export interface AssembledEducation {
+  id: string
+  school: string
+  location: string
+  degree: string
+  year?: string
+  priority: IncludedPriority
+}
+
+export interface AssembledCertification {
+  id: string
+  name: string
+  issuer: string
+  date?: string
+  credential_id?: string
+  url?: string
+  priority: IncludedPriority
+}
+
 export interface AssembledResume {
   selectedVector: VectorSelection
   header: ResumeMeta
@@ -285,7 +311,8 @@ export interface AssembledResume {
   skillGroups: AssembledSkillGroup[]
   roles: AssembledRole[]
   projects: AssembledProject[]
-  education: EducationEntry[]
+  education: AssembledEducation[]
+  certifications: AssembledCertification[]
 }
 
 export type EngineWarningCode = 'must_over_budget' | 'over_budget_after_trim'
@@ -298,7 +325,6 @@ export interface EngineWarning {
 export interface AssemblyOptions {
   selectedVector?: VectorSelection
   manualOverrides?: ManualComponentOverrides
-  variantOverrides?: ManualVariantOverrides
   bulletOrderByRole?: RoleBulletOrderMap
   targetPages?: number
   trimToPageBudget?: boolean
@@ -331,6 +357,7 @@ export type AddComponentType =
   | 'bullet'
   | 'role'
   | 'education'
+  | 'certification'
 
 export interface AddComponentPayload {
   text?: string
@@ -340,6 +367,9 @@ export interface AddComponentPayload {
   url?: string
   roleId?: string
   vectors?: PriorityByVector
+  issuer?: string
+  date?: string
+  credential_id?: string
 }
 
 export interface ComponentSuggestion {

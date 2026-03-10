@@ -71,5 +71,15 @@ export const renderResumeAsText = (resume: AssembledResume): string => {
     }
   }
 
+  if (templateResume.certifications.length > 0) {
+    lines.push('')
+    lines.push(section('Certifications'))
+    for (const cert of templateResume.certifications) {
+      const parts = [cert.name, cert.issuer]
+      if (cert.date) parts.push(cert.date)
+      lines.push(`- ${parts.join(' — ')}`)
+    }
+  }
+
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()
 }
