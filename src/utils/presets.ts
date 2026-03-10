@@ -24,12 +24,10 @@ const stableStringify = (value: unknown): string => JSON.stringify(sortObject(va
 
 export const createPresetSnapshot = (
   manualOverrides: Record<string, boolean>,
-  variantOverrides: Record<string, Preset['overrides']['variantOverrides'][string]>,
   bulletOrders: Record<string, string[]>,
   theme: ResumeThemeState | undefined,
 ): PresetOverrides => ({
   manualOverrides: { ...manualOverrides },
-  variantOverrides: { ...variantOverrides },
   bulletOrders: Object.fromEntries(
     Object.entries(bulletOrders).map(([roleId, order]) => [roleId, [...order]]),
   ),

@@ -14,11 +14,10 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
-import { Eye, EyeOff, GripVertical } from 'lucide-react'
+import { Eye, EyeOff, GripVertical, RotateCcw } from 'lucide-react'
 import { useState, memo, useMemo } from 'react'
 import type { ComponentPriority, PriorityByVector, ProjectComponent, VectorDef, VectorSelection } from '../types'
 import { getPriorityForVector } from '../engine/assembler'
-import { componentKeys } from '../utils/componentKeys'
 import { resolveDisplayText } from '../utils/resolveDisplayText'
 import { useSortableItem } from '../hooks/useSortableItem'
 
@@ -27,12 +26,11 @@ interface ProjectListProps {
   vectorDefs: VectorDef[]
   selectedVector: VectorSelection
   includedByKey: Record<string, boolean>
-  variantByKey: Record<string, string | undefined>
   onReorder: (nextOrder: string[]) => void
   onUpdate: (projectId: string, field: 'name' | 'url' | 'text', value: string) => void
   onUpdateVectors: (projectId: string, vectors: PriorityByVector) => void
   onToggleIncluded: (projectId: string, vectors: PriorityByVector) => void
-  onSetVariant: (projectId: string, variant: string | null) => void
+  onResetVariant?: (projectId: string) => void
 }
 
 interface SortableProjectCardProps {
@@ -40,11 +38,11 @@ interface SortableProjectCardProps {
   vectorDefs: VectorDef[]
   selectedVector: VectorSelection
   included: boolean
-  variant?: string
+  hasVariant: boolean
   onUpdate: (id: string, field: 'name' | 'url' | 'text', value: string) => void
   onUpdateVectors: (id: string, vectors: PriorityByVector) => void
   onToggleIncluded: (id: string, vectors: PriorityByVector) => void
-  onSetVariant: (id: string, variant: string | null) => void
+  onResetVariant?: (id: string) => void
 }
 
 function cyclePriority(current: ComponentPriority): ComponentPriority {
@@ -62,16 +60,14 @@ const SortableProjectCard = memo(function SortableProjectCard({
   vectorDefs,
   selectedVector,
   included,
-  variant,
+  hasVariant,
   onUpdate,
   onUpdateVectors,
   onToggleIncluded,
-  onSetVariant,
+  onResetVariant,
 }: SortableProjectCardProps) {
   const { setNodeRef, style, dragHandleProps, isDragging } = useSortableItem(project.id)
   const priority = getPriorityForVector(project.vectors, selectedVector)
-  const variantIds = project.variants ? Object.keys(project.variants) : []
-  const showVariantPicker = variantIds.length > 0
 
   const handlePriorityCycle = () => {
     if (selectedVector === 'all') return
@@ -98,13 +94,13 @@ const SortableProjectCard = memo(function SortableProjectCard({
   }
 
   return (
-    <article 
-      className={`component-card bullet-card ${included ? '' : 'dimmed'} ${isDragging ? 'dragging' : ''}`} 
-      ref={setNodeRef} 
+    <article
+      className={`component-card bullet-card ${included ? '' : 'dimmed'} ${isDragging ? 'dragging' : ''}`}
+      ref={setNodeRef}
       style={style}
     >
       <div className={`priority-strip priority-${priority}`} />
-      
+
       <header className="component-card-header">
         <div className="bullet-title-row">
           <button
@@ -117,9 +113,10 @@ const SortableProjectCard = memo(function SortableProjectCard({
             <GripVertical size={14} />
           </button>
           <h4>Project</h4>
+          {hasVariant && <span className="variant-badge" title="Has vector-specific variant">V</span>}
           {selectedVector !== 'all' && (
-            <button 
-              type="button" 
+            <button
+              type="button"
               className={`priority-quick-toggle ${priority}`}
               onClick={handlePriorityCycle}
               title={`Priority for current vector: ${priority}. Click to cycle.`}
@@ -129,6 +126,17 @@ const SortableProjectCard = memo(function SortableProjectCard({
           )}
         </div>
         <div className="component-card-actions">
+          {hasVariant && onResetVariant && (
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => onResetVariant(project.id)}
+              title="Reset to base text"
+            >
+              <RotateCcw size={14} />
+              Reset
+            </button>
+          )}
           <button
             type="button"
             className="btn-ghost"
@@ -157,37 +165,12 @@ const SortableProjectCard = memo(function SortableProjectCard({
       <textarea
         className="component-input"
         aria-label="Project description"
-        value={resolveDisplayText(project.text, project.variants, variant, selectedVector).displayText}
+        value={resolveDisplayText(project.text, project.variants, selectedVector)}
         onChange={(event) => onUpdate(project.id, 'text', event.target.value)}
       />
 
       <div className="bullet-footer-row">
-        {showVariantPicker ? (
-          <label className="field-label variant-control">
-            Variant
-            <select
-              className="component-input compact"
-              value={variant ?? 'auto'}
-              onChange={(event) =>
-                onSetVariant(
-                  project.id,
-                  event.target.value === 'auto' ? null : event.target.value,
-                )
-              }
-            >
-              <option value="auto">Auto</option>
-              <option value="default">Default</option>
-              {variantIds.map((variantId) => {
-                const vector = vectorDefs.find((item) => item.id === variantId)
-                return (
-                  <option key={variantId} value={variantId}>
-                    {vector?.label ?? variantId}
-                  </option>
-                )
-              })}
-            </select>
-          </label>
-        ) : <div />}
+        <div />
 
         <div className="vector-matrix">
           {vectorDefs.map((vector, idx) => {
@@ -216,12 +199,11 @@ export const ProjectList = memo(function ProjectList({
   vectorDefs,
   selectedVector,
   includedByKey,
-  variantByKey,
   onReorder,
   onUpdate,
   onUpdateVectors,
   onToggleIncluded,
-  onSetVariant,
+  onResetVariant,
 }: ProjectListProps) {
   const projectIds = useMemo(() => projects.map((project) => project.id), [projects])
   const [announcement, setAnnouncement] = useState('')
@@ -257,13 +239,8 @@ export const ProjectList = memo(function ProjectList({
     setAnnouncement(`Dropped project at position ${newIndex + 1}.`)
   }
 
-  // Identity forwarding is correct here because ProjectList.memo handles parent instability,
-  // and we don't need to bake in extra context like roleId here.
-  // We drop the intermediate useCallbacks to simplify.
-
   return (
     <>
-      {/* Visual hidden instruction for DnD handles */}
       <span id="dnd-instructions-projects" className="sr-only">
         To reorder, press Space or Enter to lift, use Arrow keys to move, and Space or Enter to drop. Press Escape to cancel.
       </span>
@@ -281,8 +258,9 @@ export const ProjectList = memo(function ProjectList({
         <SortableContext items={projectIds} strategy={verticalListSortingStrategy}>
           <div className="library-grid">
             {projects.map((project) => {
-              const key = componentKeys.project(project.id)
-              const included = includedByKey[key] ?? getPriorityForVector(project.vectors, selectedVector) !== 'exclude'
+              const key = `project:${project.id}`
+              const included = includedByKey[key] ?? includedByKey[project.id] ?? getPriorityForVector(project.vectors, selectedVector) !== 'exclude'
+              const hasVariant = selectedVector !== 'all' && Boolean(project.variants?.[selectedVector])
               return (
                 <SortableProjectCard
                   key={project.id}
@@ -290,11 +268,11 @@ export const ProjectList = memo(function ProjectList({
                   vectorDefs={vectorDefs}
                   selectedVector={selectedVector}
                   included={included}
-                  variant={variantByKey[key]}
+                  hasVariant={hasVariant}
                   onUpdate={onUpdate}
                   onUpdateVectors={onUpdateVectors}
                   onToggleIncluded={onToggleIncluded}
-                  onSetVariant={onSetVariant}
+                  onResetVariant={onResetVariant}
                 />
               )
             })}

@@ -1,6 +1,6 @@
-import { Eye, EyeOff, Check, X, Wand2 } from 'lucide-react'
+import { Eye, EyeOff, Check, X, Wand2, RotateCcw } from 'lucide-react'
 import { memo, useCallback, useRef } from 'react'
-import type { ComponentPriority, PriorityByVector, TextVariantMap, VectorDef, VectorSelection, ComponentSuggestion } from '../types'
+import type { ComponentPriority, PriorityByVector, VectorDef, VectorSelection, ComponentSuggestion } from '../types'
 import { getPriorityForVector } from '../engine/assembler'
 import { highlightVariables } from '../utils/variableHighlighting'
 
@@ -12,12 +12,11 @@ interface ComponentCardProps {
   vectorDefs: VectorDef[]
   selectedVector: VectorSelection
   included: boolean
-  variants?: TextVariantMap
-  selectedVariant?: string
+  hasVariant?: boolean
   onToggleIncluded: (id: string, vectors: PriorityByVector) => void
-  onVariantChange?: (id: string, variant: string | null) => void
   onBodyChange: (id: string, value: string) => void
   onVectorsChange?: (id: string, nextVectors: PriorityByVector) => void
+  onResetVariant?: (id: string) => void
   suggestion?: ComponentSuggestion
   onAcceptSuggestion?: (id: string, suggestion: ComponentSuggestion) => void
   onIgnoreSuggestion?: (id: string) => void
@@ -41,19 +40,16 @@ export const ComponentCard = memo(function ComponentCard({
   vectorDefs,
   selectedVector,
   included,
-  variants,
-  selectedVariant,
+  hasVariant,
   onToggleIncluded,
-  onVariantChange,
   onBodyChange,
   onVectorsChange,
+  onResetVariant,
   suggestion,
   onAcceptSuggestion,
   onIgnoreSuggestion,
 }: ComponentCardProps) {
   const priority = getPriorityForVector(vectors, selectedVector)
-  const variantEntries = Object.entries(variants ?? {})
-  const showVariantPicker = variantEntries.length > 0 && onVariantChange
   const hasVariables = body.includes('{{')
   const overlayRef = useRef<HTMLDivElement>(null)
 
@@ -90,22 +86,17 @@ export const ComponentCard = memo(function ComponentCard({
     onBodyChange(id, e.target.value)
   }, [id, onBodyChange])
 
-  const handleVariantChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    if (onVariantChange) {
-      onVariantChange(id, e.target.value === 'auto' ? null : e.target.value)
-    }
-  }, [id, onVariantChange])
-
   return (
     <article className={`component-card ${included ? '' : 'dimmed'} ${suggestion ? 'has-suggestion' : ''}`}>
       <div className={`priority-strip priority-${priority}`} />
-      
+
       <header className="component-card-header">
         <div className="bullet-title-row">
           <h4>{title}</h4>
+          {hasVariant && <span className="variant-badge" title="Has vector-specific variant">V</span>}
           {selectedVector !== 'all' && onVectorsChange && (
-            <button 
-              type="button" 
+            <button
+              type="button"
               className={`priority-quick-toggle ${priority}`}
               onClick={handlePriorityCycle}
               title={`Priority for current vector: ${priority}. Click to cycle.`}
@@ -115,6 +106,17 @@ export const ComponentCard = memo(function ComponentCard({
           )}
         </div>
         <div className="component-card-actions">
+          {hasVariant && onResetVariant && (
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => onResetVariant(id)}
+              title="Reset to base text"
+            >
+              <RotateCcw size={14} />
+              Reset
+            </button>
+          )}
           <button type="button" className="btn-ghost" aria-pressed={included} onClick={handleToggle}>
             {included ? <Eye size={14} /> : <EyeOff size={14} />}
             {included ? 'Included' : 'Excluded'}
@@ -143,27 +145,7 @@ export const ComponentCard = memo(function ComponentCard({
       </div>
 
       <div className="bullet-footer-row">
-        {showVariantPicker ? (
-          <label className="field-label variant-control">
-            Variant
-            <select
-              className="component-input compact"
-              value={selectedVariant ?? 'auto'}
-              onChange={handleVariantChange}
-            >
-              <option value="auto">Auto</option>
-              <option value="default">Default</option>
-              {variantEntries.map(([variantId]) => {
-                const vector = vectorDefs.find((item) => item.id === variantId)
-                return (
-                  <option key={variantId} value={variantId}>
-                    {vector?.label ?? variantId}
-                  </option>
-                )
-              })}
-            </select>
-          </label>
-        ) : <div />}
+        <div />
 
         {onVectorsChange && (
           <div className="vector-matrix">
@@ -197,15 +179,15 @@ export const ComponentCard = memo(function ComponentCard({
               Change to {suggestion.recommendedPriority}
             </div>
             <div className="suggestion-buttons">
-              <button 
-                className="btn-secondary btn-xs" 
+              <button
+                className="btn-secondary btn-xs"
                 onClick={() => onIgnoreSuggestion?.(id)}
                 title="Ignore suggestion"
               >
                 <X size={12} />
               </button>
-              <button 
-                className="btn-primary btn-xs" 
+              <button
+                className="btn-primary btn-xs"
                 onClick={() => onAcceptSuggestion?.(id, suggestion)}
                 title="Accept suggestion"
               >

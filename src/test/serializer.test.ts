@@ -224,7 +224,6 @@ education: []
         baseVector: 'backend',
         overrides: {
           manualOverrides: { 'role:acme:bullet:acme-b1': true },
-          variantOverrides: {},
           bulletOrders: { acme: ['acme-b2', 'acme-b1'] },
           theme: {
             preset: 'minimal',

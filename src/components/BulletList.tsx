@@ -13,12 +13,11 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
-import { ChevronRight, Eye, EyeOff, GripVertical, Sparkles, X, Check, Wand2 } from 'lucide-react'
+import { ChevronRight, Eye, EyeOff, GripVertical, RotateCcw, Sparkles, X, Check, Wand2 } from 'lucide-react'
 import { useState, memo, useMemo, useCallback, useRef } from 'react'
-import type { ComponentPriority, PriorityByVector, Role, TextVariantMap, VectorDef, VectorSelection, ComponentSuggestion } from '../types'
+import type { ComponentPriority, PriorityByVector, Role, VectorDef, VectorSelection, ComponentSuggestion } from '../types'
 import { getPriorityForVector } from '../engine/assembler'
 import { resolveDisplayText } from '../utils/resolveDisplayText'
-import { componentKeys } from '../utils/componentKeys'
 import { useSortableItem } from '../hooks/useSortableItem'
 import { highlightVariables } from '../utils/variableHighlighting'
 
@@ -30,15 +29,14 @@ interface BulletListProps {
   canResetOrder: boolean
   onResetOrder: (roleId: string) => void
   includedByKey: Record<string, boolean>
-  variantByKey: Record<string, string | undefined>
   onToggleBullet: (roleId: string, bulletId: string, vectors: PriorityByVector) => void
   onReorder: (roleId: string, nextOrder: string[]) => void
   onChangeBulletText: (roleId: string, bulletId: string, text: string) => void
   onChangeBulletLabel: (roleId: string, bulletId: string, label: string) => void
-  onSetBulletVariant: (roleId: string, bulletId: string, variant: string | null) => void
   onSetBulletVectors: (roleId: string, bulletId: string, vectors: PriorityByVector) => void
   onUpdateRole: (roleId: string, field: 'company' | 'title' | 'dates' | 'location' | 'subtitle', value: string | null) => void
   onReframe: (roleId: string, bulletId: string) => void
+  onResetBulletVariant?: (roleId: string, bulletId: string) => void
   reframeLoadingId: string | null
   aiEnabled: boolean
   suggestions?: Record<string, ComponentSuggestion>
@@ -53,16 +51,15 @@ interface SortableBulletProps {
   vectors: PriorityByVector
   priority: ComponentPriority
   included: boolean
-  variants?: TextVariantMap
-  selectedVariant?: string
+  hasVariant: boolean
   vectorDefs: VectorDef[]
   selectedVector: VectorSelection
   onToggle: (id: string, vectors: PriorityByVector) => void
   onChangeText: (id: string, value: string) => void
   onLabelChange: (id: string, value: string) => void
-  onVariantChange: (id: string, variant: string | null) => void
   onVectorsChange: (id: string, vectors: PriorityByVector) => void
   onReframe: (id: string) => void
+  onResetVariant?: (id: string) => void
   isLoading: boolean
   aiEnabled: boolean
   suggestion?: ComponentSuggestion
@@ -87,16 +84,15 @@ const SortableBullet = memo(function SortableBullet({
   vectors,
   priority,
   included,
-  variants,
-  selectedVariant,
+  hasVariant,
   vectorDefs,
   selectedVector,
   onToggle,
   onChangeText,
   onLabelChange,
-  onVariantChange,
   onVectorsChange,
   onReframe,
+  onResetVariant,
   isLoading,
   aiEnabled,
   suggestion,
@@ -104,8 +100,6 @@ const SortableBullet = memo(function SortableBullet({
   onIgnoreSuggestion,
 }: SortableBulletProps) {
   const { setNodeRef, style, dragHandleProps, isDragging } = useSortableItem(id)
-  const variantEntries = Object.entries(variants ?? {})
-  const showVariantPicker = variantEntries.length > 0
   const hasVariables = text.includes('{{')
   const overlayRef = useRef<HTMLDivElement>(null)
 
@@ -138,13 +132,13 @@ const SortableBullet = memo(function SortableBullet({
   }, [id, suggestion, onAcceptSuggestion])
 
   return (
-    <article 
-      className={`component-card bullet-card ${included ? '' : 'dimmed'} ${isDragging ? 'dragging' : ''} ${suggestion ? 'has-suggestion' : ''}`} 
-      ref={setNodeRef} 
+    <article
+      className={`component-card bullet-card ${included ? '' : 'dimmed'} ${isDragging ? 'dragging' : ''} ${suggestion ? 'has-suggestion' : ''}`}
+      ref={setNodeRef}
       style={style}
     >
       <div className={`priority-strip priority-${priority}`} />
-      
+
       <header className="component-card-header">
         <div className="bullet-title-row">
           <button
@@ -157,9 +151,10 @@ const SortableBullet = memo(function SortableBullet({
             <GripVertical size={14} />
           </button>
           <h4>Bullet</h4>
+          {hasVariant && <span className="variant-badge" title="Has vector-specific variant">V</span>}
           {selectedVector !== 'all' && (
-            <button 
-              type="button" 
+            <button
+              type="button"
               className={`priority-quick-toggle ${priority}`}
               onClick={handlePriorityCycle}
               title={`Priority for current vector: ${priority}. Click to cycle.`}
@@ -169,13 +164,24 @@ const SortableBullet = memo(function SortableBullet({
           )}
         </div>
         <div className="component-card-actions">
-          {aiEnabled && selectedVector !== 'all' && (
+          {hasVariant && onResetVariant && (
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => onResetVariant(id)}
+              title="Reset to base text"
+            >
+              <RotateCcw size={14} />
+              Reset
+            </button>
+          )}
+          {selectedVector !== 'all' && (
             <button
               type="button"
               className="btn-ghost"
               onClick={() => onReframe(id)}
-              disabled={isLoading}
-              title="AI Reframe for Vector"
+              disabled={!aiEnabled || isLoading}
+              title={aiEnabled ? 'AI Reframe for Vector' : 'Configure AI proxy to enable reframing'}
               aria-busy={isLoading}
             >
               <span className="btn-label">
@@ -220,29 +226,9 @@ const SortableBullet = memo(function SortableBullet({
           onChange={(event) => onLabelChange(id, event.target.value)}
         />
       </label>
-      
+
       <div className="bullet-footer-row">
-        {showVariantPicker ? (
-          <label className="field-label variant-control">
-            Variant
-            <select
-              className="component-input compact"
-              value={selectedVariant ?? 'auto'}
-              onChange={(event) => onVariantChange(id, event.target.value === 'auto' ? null : event.target.value)}
-            >
-              <option value="auto">Auto</option>
-              <option value="default">Default</option>
-              {variantEntries.map(([variantId]) => {
-                const vector = vectorDefs.find((item) => item.id === variantId)
-                return (
-                  <option key={variantId} value={variantId}>
-                    {vector?.label ?? variantId}
-                  </option>
-                )
-              })}
-            </select>
-          </label>
-        ) : <div />}
+        <div />
 
         <div className="vector-matrix">
           {vectorDefs.map((vector, idx) => {
@@ -274,15 +260,15 @@ const SortableBullet = memo(function SortableBullet({
               Change to {suggestion.recommendedPriority}
             </div>
             <div className="suggestion-buttons">
-              <button 
-                className="btn-secondary btn-xs" 
+              <button
+                className="btn-secondary btn-xs"
                 onClick={() => onIgnoreSuggestion?.(id)}
                 title="Ignore suggestion"
               >
                 <X size={12} />
               </button>
-              <button 
-                className="btn-primary btn-xs" 
+              <button
+                className="btn-primary btn-xs"
                 onClick={handleAccept}
                 title="Accept suggestion"
               >
@@ -305,15 +291,14 @@ export function BulletList({
   canResetOrder,
   onResetOrder,
   includedByKey,
-  variantByKey,
   onToggleBullet,
   onReorder,
   onChangeBulletText,
   onChangeBulletLabel,
-  onSetBulletVariant,
   onSetBulletVectors,
   onUpdateRole,
   onReframe,
+  onResetBulletVariant,
   reframeLoadingId,
   aiEnabled,
   suggestions = {},
@@ -360,9 +345,9 @@ export function BulletList({
   const handleToggle = useCallback((bulletId: string, vectors: PriorityByVector) => onToggleBullet(role.id, bulletId, vectors), [onToggleBullet, role.id])
   const handleChangeText = useCallback((bulletId: string, text: string) => onChangeBulletText(role.id, bulletId, text), [onChangeBulletText, role.id])
   const handleLabelChange = useCallback((bulletId: string, label: string) => onChangeBulletLabel(role.id, bulletId, label), [onChangeBulletLabel, role.id])
-  const handleVariantChange = useCallback((bulletId: string, variant: string | null) => onSetBulletVariant(role.id, bulletId, variant), [onSetBulletVariant, role.id])
   const handleVectorsChange = useCallback((bulletId: string, vectors: PriorityByVector) => onSetBulletVectors(role.id, bulletId, vectors), [onSetBulletVectors, role.id])
   const handleReframeBound = useCallback((bulletId: string) => onReframe(role.id, bulletId), [onReframe, role.id])
+  const handleResetVariant = useCallback((bulletId: string) => onResetBulletVariant?.(role.id, bulletId), [onResetBulletVariant, role.id])
   const handleAccept = useCallback((bulletId: string, suggestion: ComponentSuggestion) => onAcceptSuggestion?.(role.id, bulletId, suggestion), [onAcceptSuggestion, role.id])
   const handleIgnore = useCallback((bulletId: string) => onIgnoreSuggestion?.(role.id, bulletId), [onIgnoreSuggestion, role.id])
 
@@ -498,30 +483,29 @@ export function BulletList({
             <SortableContext items={bulletIds} strategy={verticalListSortingStrategy}>
               <div className="bullet-list">
                 {role.bullets.map((bullet) => {
-                  const key = componentKeys.bullet(role.id, bullet.id)
+                  const key = `role:${role.id}:bullet:${bullet.id}`
                   const autoIncluded = getPriorityForVector(bullet.vectors, selectedVector) !== 'exclude'
-                  const included = includedByKey[key] ?? autoIncluded
-                  const selectedVariant = variantByKey[key]
+                  const included = includedByKey[key] ?? includedByKey[`role:${role.id}:${bullet.id}`] ?? includedByKey[`bullet:${bullet.id}`] ?? includedByKey[bullet.id] ?? autoIncluded
+                  const hasVariant = selectedVector !== 'all' && Boolean(bullet.variants?.[selectedVector])
 
                   return (
                     <SortableBullet
                       key={bullet.id}
                       id={bullet.id}
                       label={bullet.label}
-                      text={resolveDisplayText(bullet.text, bullet.variants, selectedVariant, selectedVector).displayText}
+                      text={resolveDisplayText(bullet.text, bullet.variants, selectedVector)}
                       vectors={bullet.vectors}
                       priority={getPriorityForVector(bullet.vectors, selectedVector)}
                       included={included}
-                      variants={bullet.variants}
-                      selectedVariant={selectedVariant}
+                      hasVariant={hasVariant}
                       vectorDefs={vectorDefs}
                       selectedVector={selectedVector}
                       onToggle={handleToggle}
                       onChangeText={handleChangeText}
                       onLabelChange={handleLabelChange}
-                      onVariantChange={handleVariantChange}
                       onVectorsChange={handleVectorsChange}
                       onReframe={handleReframeBound}
+                      onResetVariant={handleResetVariant}
                       isLoading={reframeLoadingId === bullet.id}
                       aiEnabled={aiEnabled}
                       suggestion={suggestions[bullet.id]}

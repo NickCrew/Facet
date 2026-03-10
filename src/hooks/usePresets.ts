@@ -4,7 +4,6 @@ import type {
   ResumeData,
   ResumeThemeState,
   Preset,
-  VariantSelection,
   VectorSelection,
 } from '../types'
 import { useResumeStore } from '../store/resumeStore'
@@ -32,7 +31,6 @@ interface UsePresetsArgs {
   data: ResumeData
   selectedVector: VectorSelection
   overridesForVector: Record<string, boolean>
-  variantsForVector: Record<string, VariantSelection>
   activeBulletOrders: Record<string, string[]>
   themeState: ResumeThemeState
   updateData: (fn: (current: ResumeData) => ResumeData) => void
@@ -62,7 +60,6 @@ export function usePresets({
   data,
   selectedVector,
   overridesForVector,
-  variantsForVector,
   activeBulletOrders,
   themeState,
   updateData,
@@ -83,11 +80,10 @@ export function usePresets({
     }
     return createPresetSnapshot(
       overridesForVector,
-      variantsForVector,
       activeBulletOrders ?? {},
       themeState,
     )
-  }, [activePresetId, overridesForVector, variantsForVector, activeBulletOrders, themeState])
+  }, [activePresetId, overridesForVector, activeBulletOrders, themeState])
 
   const presetDirty = useMemo(() => {
     if (!activePreset || !currentPresetSnapshot) {
@@ -102,7 +98,6 @@ export function usePresets({
 
     return createPresetSnapshot(
       resumeState.data.manualOverrides?.[key] ?? {},
-      resumeState.data.variantOverrides?.[key] ?? {},
       resumeState.data.bulletOrders?.[key] ?? {},
       normalizeThemeState(resumeState.data.theme),
     )
@@ -118,9 +113,6 @@ export function usePresets({
       const manualOverrides = { ...(current.manualOverrides ?? {}) }
       manualOverrides[key] = { ...preset.overrides.manualOverrides }
 
-      const variantOverrides = { ...(current.variantOverrides ?? {}) }
-      variantOverrides[key] = { ...preset.overrides.variantOverrides }
-
       const bulletOrders = { ...(current.bulletOrders ?? {}) }
       bulletOrders[key] = Object.fromEntries(
         Object.entries(preset.overrides.bulletOrders).map(([roleId, order]) => [roleId, [...order]]),
@@ -129,7 +121,6 @@ export function usePresets({
       return {
         ...current,
         manualOverrides,
-        variantOverrides,
         bulletOrders,
         roles:
           preset.overrides.priorityOverrides && preset.overrides.priorityOverrides.length > 0

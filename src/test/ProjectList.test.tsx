@@ -35,12 +35,12 @@ describe('ProjectList', () => {
         vectorDefs={mockVectors}
         selectedVector="all"
         includedByKey={{}}
-        variantByKey={{}}
+
         onReorder={vi.fn()}
         onUpdate={vi.fn()}
         onUpdateVectors={vi.fn()}
         onToggleIncluded={vi.fn()}
-        onSetVariant={vi.fn()}
+
       />
     )
 
@@ -58,12 +58,12 @@ describe('ProjectList', () => {
         vectorDefs={mockVectors}
         selectedVector="all"
         includedByKey={{}}
-        variantByKey={{}}
+
         onReorder={vi.fn()}
         onUpdate={vi.fn()}
         onUpdateVectors={vi.fn()}
         onToggleIncluded={vi.fn()}
-        onSetVariant={vi.fn()}
+
       />
     )
 
@@ -78,12 +78,12 @@ describe('ProjectList', () => {
         vectorDefs={mockVectors}
         selectedVector="all"
         includedByKey={{}}
-        variantByKey={{}}
+
         onReorder={vi.fn()}
         onUpdate={vi.fn()}
         onUpdateVectors={vi.fn()}
         onToggleIncluded={onToggle}
-        onSetVariant={vi.fn()}
+
       />
     )
 

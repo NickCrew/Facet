@@ -54,7 +54,7 @@ describe('importMerge', () => {
         baseVector: 'backend',
         overrides: {
           manualOverrides: {},
-          variantOverrides: {},
+
           bulletOrders: {},
         },
       },
@@ -70,7 +70,7 @@ describe('importMerge', () => {
         baseVector: 'platform',
         overrides: {
           manualOverrides: {},
-          variantOverrides: {},
+
           bulletOrders: {},
         },
       },
