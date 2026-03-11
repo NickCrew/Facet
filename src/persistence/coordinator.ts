@@ -57,7 +57,7 @@ export interface PersistenceImportOptions {
 export interface PersistenceWorkspacePatch {
   tenantId?: string | null
   userId?: string | null
-  workspace?: Partial<Omit<FacetWorkspaceSnapshot['workspace'], 'revision' | 'updatedAt'>>
+  workspace?: Partial<Pick<FacetWorkspaceSnapshot['workspace'], 'name'>>
   artifacts?: {
     resume?: Partial<Pick<ResumeArtifactSnapshot, 'payload' | 'revision'>>
     pipeline?: Partial<Pick<PipelineArtifactSnapshot, 'payload' | 'revision'>>
@@ -105,6 +105,46 @@ export interface PersistenceCoordinatorOptions {
 
 const now = () => new Date().toISOString()
 
+const applyArtifactPatch = <TArtifact extends {
+  artifactId: string
+  artifactType: string
+  workspaceId: string
+  schemaVersion: number
+  revision: number
+  updatedAt: string
+  payload: unknown
+}>(
+  current: TArtifact,
+  patch: Partial<TArtifact> | null | undefined,
+  patchedAt = now(),
+): TArtifact => {
+  if (!patch) {
+    return current
+  }
+
+  if (typeof patch !== 'object' || Array.isArray(patch)) {
+    throw new Error('Artifact patch must be an object.')
+  }
+
+  const candidate = patch as Partial<TArtifact>
+  const nextRevision =
+    typeof candidate.revision === 'number' && Number.isFinite(candidate.revision)
+      ? candidate.revision
+      : current.revision
+  const hasPayload = Object.prototype.hasOwnProperty.call(candidate, 'payload')
+  const nextPayload = hasPayload ? (candidate.payload as TArtifact['payload']) : current.payload
+  const changed = nextRevision !== current.revision || nextPayload !== current.payload
+
+  return {
+    // Identity fields intentionally stay anchored to the current artifact so
+    // runtime patches cannot forge artifact ids, types, or workspace scope.
+    ...current,
+    revision: nextRevision,
+    updatedAt: changed ? patchedAt : current.updatedAt,
+    payload: nextPayload,
+  }
+}
+
 export const applyWorkspacePatch = (
   snapshot: FacetWorkspaceSnapshot,
   patch: PersistenceWorkspacePatch,
@@ -122,7 +162,9 @@ export const applyWorkspacePatch = (
   if (patch.workspace) {
     next.workspace = {
       ...next.workspace,
-      ...patch.workspace,
+      ...(typeof patch.workspace.name === 'string'
+        ? { name: patch.workspace.name }
+        : {}),
     }
   }
 
@@ -132,34 +174,34 @@ export const applyWorkspacePatch = (
 
       switch (artifactType as keyof FacetWorkspaceArtifacts) {
         case 'resume':
-          next.artifacts.resume = {
-            ...next.artifacts.resume,
-            ...(artifactPatch as Partial<ResumeArtifactSnapshot>),
-          }
+          next.artifacts.resume = applyArtifactPatch(
+            next.artifacts.resume,
+            artifactPatch as Partial<ResumeArtifactSnapshot>,
+          )
           break
         case 'pipeline':
-          next.artifacts.pipeline = {
-            ...next.artifacts.pipeline,
-            ...(artifactPatch as Partial<PipelineArtifactSnapshot>),
-          }
+          next.artifacts.pipeline = applyArtifactPatch(
+            next.artifacts.pipeline,
+            artifactPatch as Partial<PipelineArtifactSnapshot>,
+          )
           break
         case 'prep':
-          next.artifacts.prep = {
-            ...next.artifacts.prep,
-            ...(artifactPatch as Partial<PrepArtifactSnapshot>),
-          }
+          next.artifacts.prep = applyArtifactPatch(
+            next.artifacts.prep,
+            artifactPatch as Partial<PrepArtifactSnapshot>,
+          )
           break
         case 'coverLetters':
-          next.artifacts.coverLetters = {
-            ...next.artifacts.coverLetters,
-            ...(artifactPatch as Partial<CoverLettersArtifactSnapshot>),
-          }
+          next.artifacts.coverLetters = applyArtifactPatch(
+            next.artifacts.coverLetters,
+            artifactPatch as Partial<CoverLettersArtifactSnapshot>,
+          )
           break
         case 'research':
-          next.artifacts.research = {
-            ...next.artifacts.research,
-            ...(artifactPatch as Partial<ResearchArtifactSnapshot>),
-          }
+          next.artifacts.research = applyArtifactPatch(
+            next.artifacts.research,
+            artifactPatch as Partial<ResearchArtifactSnapshot>,
+          )
           break
         default:
           throw new Error(`Unknown artifact type in patch: ${String(artifactType)}`)
@@ -314,9 +356,10 @@ export const createPersistenceCoordinator = (
           importOptions.mode === 'merge'
             ? await options.backend.loadWorkspaceSnapshot(snapshot.workspace.id)
             : null
-        const resolved = current && options.mergeImportedSnapshot
-          ? options.mergeImportedSnapshot(current, snapshot)
-          : snapshot
+        const resolved =
+          importOptions.mode === 'merge' && options.mergeImportedSnapshot
+            ? options.mergeImportedSnapshot(current, snapshot)
+            : snapshot
 
         await options.backend.saveWorkspaceSnapshot(resolved)
 

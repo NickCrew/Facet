@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultResumeData } from '../store/defaultData'
 import { useCoverLetterStore } from '../store/coverLetterStore'
 import { usePipelineStore } from '../store/pipelineStore'
@@ -9,12 +9,16 @@ import { useResumeStore } from '../store/resumeStore'
 import { useSearchStore } from '../store/searchStore'
 import { resolveStorage } from '../store/storage'
 import { useUiStore } from '../store/uiStore'
+import { cloneValue } from '../persistence/clone'
 import {
   applyWorkspacePatch,
   createInMemoryPersistenceBackend,
   createPersistenceCoordinator,
 } from '../persistence/coordinator'
-import { DEFAULT_LOCAL_WORKSPACE_ID } from '../persistence/contracts'
+import {
+  DEFAULT_LOCAL_WORKSPACE_ID,
+  DEFAULT_LOCAL_WORKSPACE_NAME,
+} from '../persistence/contracts'
 import {
   createLocalPreferencesSnapshotFromStores,
   createWorkspaceSnapshotFromStores,
@@ -25,6 +29,10 @@ import {
 import { assertValidWorkspaceSnapshot } from '../persistence/validation'
 
 describe('persistence foundation', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   beforeEach(() => {
     const storage = resolveStorage()
     for (const key of [
@@ -209,6 +217,17 @@ describe('persistence foundation', () => {
     expect(useResumeStore.getState().data.meta.name).toBe(defaultResumeData.meta.name)
   })
 
+  it('uses local workspace defaults when snapshot helpers receive no explicit request', () => {
+    const workspaceSnapshot = createWorkspaceSnapshotFromStores()
+    const localPreferencesSnapshot = createLocalPreferencesSnapshotFromStores()
+
+    expect(workspaceSnapshot.workspace.id).toBe(DEFAULT_LOCAL_WORKSPACE_ID)
+    expect(workspaceSnapshot.workspace.name).toBe(DEFAULT_LOCAL_WORKSPACE_NAME)
+    expect(workspaceSnapshot.exportedAt).toEqual(expect.any(String))
+    expect(localPreferencesSnapshot.workspaceId).toBe(DEFAULT_LOCAL_WORKSPACE_ID)
+    expect(localPreferencesSnapshot.exportedAt).toEqual(expect.any(String))
+  })
+
   it('captures local-only preferences separately from durable workspace content', () => {
     useUiStore.setState({
       selectedVector: 'backend',
@@ -295,6 +314,99 @@ describe('persistence foundation', () => {
     expect(snapshot.artifacts.pipeline.revision).toBe(0)
   })
 
+  it('preserves workspace identity even when runtime patches attempt to change workspace ids', () => {
+    const snapshot = createWorkspaceSnapshotFromStores({
+      workspaceId: 'ws-stable',
+      workspaceName: 'Stable Workspace',
+      exportedAt: '2026-03-11T12:00:00.000Z',
+    })
+
+    const patched = applyWorkspacePatch(snapshot, {
+      workspace: {
+        name: 'Renamed Workspace',
+        id: 'ws-forged',
+      } as never,
+    })
+
+    expect(patched.workspace.id).toBe('ws-stable')
+    expect(patched.workspace.name).toBe('Renamed Workspace')
+  })
+
+  it('preserves artifact identity fields when runtime patches include unexpected artifact metadata', () => {
+    const snapshot = createWorkspaceSnapshotFromStores({
+      workspaceId: 'ws-identity',
+      exportedAt: '2026-03-11T12:00:00.000Z',
+    })
+
+    const patched = applyWorkspacePatch(snapshot, {
+      artifacts: {
+        resume: {
+          revision: 9,
+          payload: {
+            ...snapshot.artifacts.resume.payload,
+            meta: {
+              ...snapshot.artifacts.resume.payload.meta,
+              name: 'Patched Name',
+            },
+          },
+          artifactId: 'forged-artifact-id',
+          artifactType: 'pipeline',
+          workspaceId: 'other-workspace',
+          schemaVersion: 999,
+          updatedAt: '2020-01-01T00:00:00.000Z',
+        } as never,
+      },
+    })
+
+    expect(patched.artifacts.resume.artifactId).toBe(snapshot.artifacts.resume.artifactId)
+    expect(patched.artifacts.resume.artifactType).toBe('resume')
+    expect(patched.artifacts.resume.workspaceId).toBe('ws-identity')
+    expect(patched.artifacts.resume.schemaVersion).toBe(snapshot.artifacts.resume.schemaVersion)
+    expect(patched.artifacts.resume.updatedAt).not.toBe(snapshot.artifacts.resume.updatedAt)
+    expect(patched.artifacts.resume.revision).toBe(9)
+    expect(patched.artifacts.resume.payload.meta.name).toBe('Patched Name')
+  })
+
+  it('treats empty patches as immutable no-ops and rejects unknown artifact keys', () => {
+    const snapshot = createWorkspaceSnapshotFromStores({
+      workspaceId: 'ws-empty',
+      exportedAt: '2026-03-11T12:00:00.000Z',
+    })
+
+    const unchanged = applyWorkspacePatch(snapshot, {})
+    expect(unchanged).toEqual(snapshot)
+    expect(unchanged).not.toBe(snapshot)
+
+    expect(() =>
+      applyWorkspacePatch(
+        snapshot,
+        {
+          artifacts: {
+            bogus: { revision: 1 },
+          } as never,
+        },
+      ),
+    ).toThrow(/Unknown artifact type/)
+
+    expect(() =>
+      applyWorkspacePatch(
+        snapshot,
+        {
+          artifacts: {
+            resume: 42 as never,
+          },
+        },
+      ),
+    ).toThrow(/Artifact patch must be an object/)
+
+    const withNullArtifactPatch = applyWorkspacePatch(snapshot, {
+      artifacts: {
+        resume: null as never,
+      },
+    })
+    expect(withNullArtifactPatch.artifacts.resume).toEqual(snapshot.artifacts.resume)
+  })
+
   it('provides a backend-agnostic persistence coordinator', async () => {
     const backend = createInMemoryPersistenceBackend()
     const coordinator = createPersistenceCoordinator({
@@ -327,6 +439,33 @@ describe('persistence foundation', () => {
     expect(bootstrapped.status.phase).toBe('ready')
   })
 
+  it('returns defensive status clones and loads persisted workspaces directly', async () => {
+    const backend = createInMemoryPersistenceBackend()
+    const seeded = createWorkspaceSnapshotFromStores({
+      workspaceId: 'ws-load',
+      workspaceName: 'Loaded Workspace',
+      exportedAt: '2026-03-11T12:00:00.000Z',
+    })
+    backend.saveWorkspaceSnapshot(seeded)
+
+    const coordinator = createPersistenceCoordinator({
+      backend,
+      readWorkspaceSnapshot: createWorkspaceSnapshotFromStores,
+    })
+
+    const loaded = await coordinator.loadWorkspace('ws-load')
+    expect(loaded?.workspace.name).toBe('Loaded Workspace')
+
+    const firstStatus = coordinator.getStatus()
+    firstStatus.phase = 'error'
+    firstStatus.activeWorkspaceId = 'tampered'
+
+    const secondStatus = coordinator.getStatus()
+    expect(secondStatus.phase).toBe('ready')
+    expect(secondStatus.activeWorkspaceId).toBe('ws-load')
+    expect(secondStatus.lastHydratedAt).toEqual(expect.any(String))
+  })
+
   it('increments revision from the persisted snapshot, not from the patch payload', async () => {
     const backend = createInMemoryPersistenceBackend()
     const coordinator = createPersistenceCoordinator({
@@ -351,17 +490,18 @@ describe('persistence foundation', () => {
 
   it('imports validated workspace snapshots in replace and merge modes', async () => {
     const backend = createInMemoryPersistenceBackend()
+    const mergeImportedSnapshot = vi.fn((current, imported) => ({
+      ...(current ?? imported),
+      ...imported,
+      workspace: {
+        ...imported.workspace,
+        name: `${current?.workspace.name ?? 'current'} + ${imported.workspace.name}`,
+      },
+    }))
     const coordinator = createPersistenceCoordinator({
       backend,
       readWorkspaceSnapshot: createWorkspaceSnapshotFromStores,
-      mergeImportedSnapshot: (current, imported) => ({
-        ...(current ?? imported),
-        ...imported,
-        workspace: {
-          ...imported.workspace,
-          name: `${current?.workspace.name ?? 'current'} + ${imported.workspace.name}`,
-        },
-      }),
+      mergeImportedSnapshot,
     })
 
     const imported = createWorkspaceSnapshotFromStores({
@@ -373,6 +513,7 @@ describe('persistence foundation', () => {
 
     const replaced = await coordinator.importWorkspaceSnapshot(imported, { mode: 'replace' })
     expect(replaced.workspace.name).toBe('Imported Workspace')
+    expect(mergeImportedSnapshot).not.toHaveBeenCalled()
 
     const merged = await coordinator.importWorkspaceSnapshot(
       {
@@ -385,6 +526,7 @@ describe('persistence foundation', () => {
       { mode: 'merge' },
     )
     expect(merged.workspace.name).toBe('Imported Workspace + Merged Workspace')
+    expect(mergeImportedSnapshot).toHaveBeenCalledTimes(1)
   })
 
   it('surfaces coordinator errors for invalid imports and failing backends', async () => {
@@ -435,6 +577,7 @@ describe('persistence foundation', () => {
       ),
     ).rejects.toThrow(/expected 1, got 999/)
     expect(saveCalls).toBe(0)
+    expect(validationCoordinator.getStatus().phase).toBe('idle')
 
     await expect(
       mergeCoordinator.importWorkspaceSnapshot(
@@ -459,6 +602,8 @@ describe('persistence foundation', () => {
   it('validates workspace snapshot edge cases directly', () => {
     expect(() => assertValidWorkspaceSnapshot(null)).toThrow(/must be an object/)
     expect(() => assertValidWorkspaceSnapshot([])).toThrow(/must be an object/)
+    expect(() => assertValidWorkspaceSnapshot(undefined)).toThrow(/must be an object/)
+    expect(() => assertValidWorkspaceSnapshot(42)).toThrow(/must be an object/)
     expect(() =>
       assertValidWorkspaceSnapshot({
         snapshotVersion: 1,
@@ -476,7 +621,7 @@ describe('persistence foundation', () => {
         snapshotVersion: 1,
         workspace: { id: 'ws-1' },
       }),
-    ).toThrow(/must include artifacts/)
+    ).toThrow(/valid workspace metadata/)
 
     const valid = createWorkspaceSnapshotFromStores({
       workspaceId: 'ws-1',
@@ -516,6 +661,41 @@ describe('persistence foundation', () => {
         },
       }),
     ).toThrow(/missing artifacts.resume.payload/)
+    expect(() =>
+      assertValidWorkspaceSnapshot({
+        ...valid,
+        workspace: {
+          ...valid.workspace,
+          revision: 'bad',
+        },
+      }),
+    ).toThrow(/valid workspace metadata/)
+    expect(() =>
+      assertValidWorkspaceSnapshot({
+        ...valid,
+        artifacts: {
+          ...valid.artifacts,
+          pipeline: {
+            ...valid.artifacts.pipeline,
+            schemaVersion: 'bad',
+          },
+        },
+      }),
+    ).toThrow(/invalid artifacts.pipeline metadata/)
+    expect(() =>
+      assertValidWorkspaceSnapshot({
+        ...valid,
+        artifacts: {
+          ...valid.artifacts,
+          pipeline: {
+            ...valid.artifacts.pipeline,
+            payload: {
+              entries: null,
+            },
+          },
+        },
+      }),
+    ).toThrow(/invalid artifacts.pipeline.payload.entries/)
   })
 
   it('loads missing workspaces as null while leaving the coordinator ready', async () => {
@@ -580,5 +760,62 @@ describe('persistence foundation', () => {
     ).rejects.toThrow('save failed')
     expect(coordinator.getStatus().phase).toBe('error')
     expect(coordinator.getStatus().lastError).toBe('save failed')
+  })
+
+  it('clones primitives and exercises the JSON fallback path explicitly', () => {
+    expect(cloneValue(42)).toBe(42)
+    expect(cloneValue('facet')).toBe('facet')
+    expect(cloneValue(null)).toBeNull()
+    expect(cloneValue(true)).toBe(true)
+
+    vi.stubGlobal('structuredClone', undefined)
+
+    const original = {
+      nested: { count: 1 },
+      createdAt: new Date('2026-03-11T12:00:00.000Z'),
+      optional: undefined as string | undefined,
+    }
+    const cloned = cloneValue(original) as typeof original & { createdAt: string }
+
+    expect(cloned).toEqual({
+      nested: { count: 1 },
+      createdAt: '2026-03-11T12:00:00.000Z',
+    })
+
+    cloned.nested.count = 2
+    expect(original.nested.count).toBe(1)
+  })
+
+  it('keeps the in-memory backend isolated across save, load, list, and delete', async () => {
+    const backend = createInMemoryPersistenceBackend()
+    const first = createWorkspaceSnapshotFromStores({
+      workspaceId: 'ws-1',
+      workspaceName: 'First',
+      exportedAt: '2026-03-11T12:00:00.000Z',
+    })
+    const second = createWorkspaceSnapshotFromStores({
+      workspaceId: 'ws-2',
+      workspaceName: 'Second',
+      exportedAt: '2026-03-11T12:05:00.000Z',
+    })
+
+    backend.saveWorkspaceSnapshot(first)
+    backend.saveWorkspaceSnapshot(second)
+    first.workspace.name = 'Mutated after save'
+
+    const loaded = await backend.loadWorkspaceSnapshot('ws-1')
+    expect(loaded?.workspace.name).toBe('First')
+
+    const listed = await backend.listWorkspaceSnapshots?.()
+    expect(listed).toHaveLength(2)
+    if (listed?.[0]) {
+      listed[0].workspace.name = 'Mutated listed copy'
+    }
+
+    const loadedAgain = await backend.loadWorkspaceSnapshot('ws-1')
+    expect(loadedAgain?.workspace.name).toBe('First')
+
+    await backend.deleteWorkspaceSnapshot?.('ws-1')
+    expect(await backend.loadWorkspaceSnapshot('ws-1')).toBeNull()
   })
 })

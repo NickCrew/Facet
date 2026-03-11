@@ -46,3 +46,31 @@ The current app persists several independent Zustand stores. The migration map i
 The coordinator and backend interfaces in `coordinator.ts` are intentionally
 backend-agnostic so the next phases can add IndexedDB and server-backed
 persistence without rewriting the client contract.
+
+## Validation scope
+
+`assertValidWorkspaceSnapshot()` validates more than the snapshot envelope:
+
+- workspace metadata shape
+- artifact metadata shape
+- the top-level payload shape for each artifact
+
+This is still a boundary validator, not a full domain-schema validator. Its job
+is to reject clearly corrupted or mismatched imports before they reach store
+hydration. Deeper field normalization remains the responsibility of the store
+migration and artifact-specific layers.
+
+## Snapshot adapter boundary
+
+`snapshot.ts` is intentionally the only Phase 1 module that reads directly from
+Zustand stores. Treat it as a temporary adapter layer between app state and the
+persistence contracts.
+
+Future persistence work should preserve this split:
+
+- stores own domain editing behavior and local migrations
+- snapshot builders translate store state into durable artifacts and local preferences
+- the coordinator works with snapshot readers/writers and backends, not store singletons
+
+That keeps the current store coupling isolated so a future sync-aware repository
+can replace these readers without rewriting the coordinator contract.
