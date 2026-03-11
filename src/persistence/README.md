@@ -1,0 +1,48 @@
+# Persistence Foundation
+
+This module defines the first persistence-layer contract for Facet without changing
+today's runtime behavior.
+
+## Durable workspace snapshot
+
+`createWorkspaceSnapshotFromStores()` captures the durable workspace artifacts that
+should remain portable across devices and future storage backends:
+
+- resume data
+- pipeline entries
+- prep decks
+- cover letter templates
+- research profile, requests, and runs
+
+The snapshot intentionally carries `tenantId` and `userId` placeholders even in the
+local-only phase so the contract does not need to change shape when server-backed
+multi-tenant persistence arrives.
+
+## Local-only preferences
+
+`createLocalPreferencesSnapshotFromStores()` captures state that should remain
+device-local instead of becoming part of a synced tenant workspace:
+
+- UI preferences from `uiStore`
+- pipeline sorting preferences
+- the currently selected prep deck
+
+This makes the boundary explicit: durable content travels with the workspace,
+while view state stays local.
+
+## Legacy migration plan
+
+The current app persists several independent Zustand stores. The migration map in
+`snapshot.ts` defines how those legacy keys feed the new model:
+
+- `vector-resume-data` -> durable resume artifact
+- `facet-pipeline-data` -> durable pipeline entries plus local pipeline preferences
+- `facet-prep-workspace` -> durable prep decks plus local prep preference
+- `facet-prep-data` -> durable prep artifact legacy import path
+- `facet-cover-letter-data` -> durable cover letter artifact
+- `facet-search-data` -> durable research artifact
+- `vector-resume-ui` -> local-only UI preferences
+
+The coordinator and backend interfaces in `coordinator.ts` are intentionally
+backend-agnostic so the next phases can add IndexedDB and server-backed
+persistence without rewriting the client contract.

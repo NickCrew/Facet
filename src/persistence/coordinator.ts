@@ -1,0 +1,340 @@
+import type {
+  CoverLettersArtifactSnapshot,
+  PipelineArtifactSnapshot,
+  PrepArtifactSnapshot,
+  ResearchArtifactSnapshot,
+  ResumeArtifactSnapshot,
+  FacetWorkspaceArtifacts,
+  FacetWorkspaceSnapshot,
+} from './contracts'
+import { cloneValue } from './clone'
+import { assertValidWorkspaceSnapshot } from './validation'
+
+export type PersistenceBackendKind =
+  | 'localStorage'
+  | 'indexeddb'
+  | 'remote'
+  | 'filesystem'
+  | 'memory'
+  | 'custom'
+
+export type PersistenceStatusPhase =
+  | 'idle'
+  | 'bootstrapping'
+  | 'ready'
+  | 'saving'
+  | 'saved'
+  | 'offline'
+  | 'conflict'
+  | 'error'
+
+export interface PersistenceStatus {
+  phase: PersistenceStatusPhase
+  backend: PersistenceBackendKind
+  activeWorkspaceId: string | null
+  lastHydratedAt: string | null
+  lastSavedAt: string | null
+  lastError: string | null
+}
+
+export interface PersistenceBootstrapResult {
+  snapshot: FacetWorkspaceSnapshot | null
+  status: PersistenceStatus
+}
+
+export interface PersistenceSnapshotRequest {
+  workspaceId?: string
+  workspaceName?: string
+  tenantId?: string | null
+  userId?: string | null
+  exportedAt?: string
+}
+
+export interface PersistenceImportOptions {
+  mode: 'replace' | 'merge'
+}
+
+export interface PersistenceWorkspacePatch {
+  tenantId?: string | null
+  userId?: string | null
+  workspace?: Partial<Omit<FacetWorkspaceSnapshot['workspace'], 'revision' | 'updatedAt'>>
+  artifacts?: {
+    resume?: Partial<Pick<ResumeArtifactSnapshot, 'payload' | 'revision'>>
+    pipeline?: Partial<Pick<PipelineArtifactSnapshot, 'payload' | 'revision'>>
+    prep?: Partial<Pick<PrepArtifactSnapshot, 'payload' | 'revision'>>
+    coverLetters?: Partial<Pick<CoverLettersArtifactSnapshot, 'payload' | 'revision'>>
+    research?: Partial<Pick<ResearchArtifactSnapshot, 'payload' | 'revision'>>
+  }
+}
+
+export interface PersistenceBackend {
+  kind: PersistenceBackendKind
+  loadWorkspaceSnapshot: (workspaceId: string) => Promise<FacetWorkspaceSnapshot | null> | FacetWorkspaceSnapshot | null
+  saveWorkspaceSnapshot: (snapshot: FacetWorkspaceSnapshot) => Promise<void> | void
+  deleteWorkspaceSnapshot?: (workspaceId: string) => Promise<void> | void
+  listWorkspaceSnapshots?: () => Promise<FacetWorkspaceSnapshot[]> | FacetWorkspaceSnapshot[]
+}
+
+export interface PersistenceCoordinator {
+  // Bootstraps coordinator status from the persisted backend snapshot, if present.
+  bootstrap: (workspaceId: string) => Promise<PersistenceBootstrapResult>
+  loadWorkspace: (workspaceId: string) => Promise<FacetWorkspaceSnapshot | null>
+  // saveWorkspacePatch is a read-then-write flow. Callers that need concurrency
+  // protection must layer optimistic locking or backend serialization above it.
+  saveWorkspacePatch: (workspaceId: string, patch: PersistenceWorkspacePatch) => Promise<FacetWorkspaceSnapshot>
+  // exportWorkspaceSnapshot always reflects live in-memory store state, not a backend round-trip.
+  exportWorkspaceSnapshot: (request?: PersistenceSnapshotRequest) => Promise<FacetWorkspaceSnapshot>
+  importWorkspaceSnapshot: (
+    snapshot: FacetWorkspaceSnapshot,
+    options?: PersistenceImportOptions,
+  ) => Promise<FacetWorkspaceSnapshot>
+  getStatus: () => PersistenceStatus
+}
+
+export interface PersistenceCoordinatorOptions {
+  backend: PersistenceBackend
+  // When no backend snapshot exists yet, the first patch save snapshots the
+  // current in-memory workspace state through this reader and applies the patch
+  // on top of that baseline.
+  readWorkspaceSnapshot: (request?: PersistenceSnapshotRequest) => FacetWorkspaceSnapshot
+  mergeImportedSnapshot?: (
+    current: FacetWorkspaceSnapshot | null,
+    imported: FacetWorkspaceSnapshot,
+  ) => FacetWorkspaceSnapshot
+}
+
+const now = () => new Date().toISOString()
+
+export const applyWorkspacePatch = (
+  snapshot: FacetWorkspaceSnapshot,
+  patch: PersistenceWorkspacePatch,
+): FacetWorkspaceSnapshot => {
+  const next = cloneValue(snapshot)
+
+  if (patch.tenantId !== undefined) {
+    next.tenantId = patch.tenantId
+  }
+
+  if (patch.userId !== undefined) {
+    next.userId = patch.userId
+  }
+
+  if (patch.workspace) {
+    next.workspace = {
+      ...next.workspace,
+      ...patch.workspace,
+    }
+  }
+
+  if (patch.artifacts) {
+    for (const [artifactType, artifactPatch] of Object.entries(patch.artifacts)) {
+      if (!artifactPatch) continue
+
+      switch (artifactType as keyof FacetWorkspaceArtifacts) {
+        case 'resume':
+          next.artifacts.resume = {
+            ...next.artifacts.resume,
+            ...(artifactPatch as Partial<ResumeArtifactSnapshot>),
+          }
+          break
+        case 'pipeline':
+          next.artifacts.pipeline = {
+            ...next.artifacts.pipeline,
+            ...(artifactPatch as Partial<PipelineArtifactSnapshot>),
+          }
+          break
+        case 'prep':
+          next.artifacts.prep = {
+            ...next.artifacts.prep,
+            ...(artifactPatch as Partial<PrepArtifactSnapshot>),
+          }
+          break
+        case 'coverLetters':
+          next.artifacts.coverLetters = {
+            ...next.artifacts.coverLetters,
+            ...(artifactPatch as Partial<CoverLettersArtifactSnapshot>),
+          }
+          break
+        case 'research':
+          next.artifacts.research = {
+            ...next.artifacts.research,
+            ...(artifactPatch as Partial<ResearchArtifactSnapshot>),
+          }
+          break
+        default:
+          throw new Error(`Unknown artifact type in patch: ${String(artifactType)}`)
+      }
+    }
+  }
+
+  return next
+}
+
+export const createInMemoryPersistenceBackend = (): PersistenceBackend => {
+  const snapshots = new Map<string, FacetWorkspaceSnapshot>()
+
+  return {
+    kind: 'memory',
+    loadWorkspaceSnapshot: (workspaceId) => {
+      const existing = snapshots.get(workspaceId)
+      return existing ? cloneValue(existing) : null
+    },
+    saveWorkspaceSnapshot: (snapshot) => {
+      snapshots.set(snapshot.workspace.id, cloneValue(snapshot))
+    },
+    deleteWorkspaceSnapshot: (workspaceId) => {
+      snapshots.delete(workspaceId)
+    },
+    listWorkspaceSnapshots: () =>
+      Array.from(snapshots.values()).map((snapshot) => cloneValue(snapshot)),
+  }
+}
+
+export const createPersistenceCoordinator = (
+  options: PersistenceCoordinatorOptions,
+): PersistenceCoordinator => {
+  // Phase 1 intentionally returns snapshots to the caller. Hydrating Zustand
+  // stores from these snapshots belongs to the next migration slice.
+  let status: PersistenceStatus = {
+    phase: 'idle',
+    backend: options.backend.kind,
+    activeWorkspaceId: null,
+    lastHydratedAt: null,
+    lastSavedAt: null,
+    lastError: null,
+  }
+
+  const setStatus = (patch: Partial<PersistenceStatus>) => {
+    status = {
+      ...status,
+      ...patch,
+    }
+  }
+
+  return {
+    bootstrap: async (workspaceId) => {
+      setStatus({
+        phase: 'bootstrapping',
+        activeWorkspaceId: workspaceId,
+        lastError: null,
+      })
+
+      try {
+        const snapshot = await options.backend.loadWorkspaceSnapshot(workspaceId)
+        const hydratedAt = snapshot ? now() : status.lastHydratedAt
+
+        setStatus({
+          phase: 'ready',
+          lastHydratedAt: hydratedAt,
+        })
+
+        return {
+          snapshot,
+          status: cloneValue(status),
+        }
+      } catch (error) {
+        setStatus({
+          phase: 'error',
+          lastError: error instanceof Error ? error.message : 'Failed to bootstrap persistence',
+        })
+        throw error
+      }
+    },
+
+    loadWorkspace: async (workspaceId) => {
+      try {
+        const result = await options.backend.loadWorkspaceSnapshot(workspaceId)
+        setStatus({
+          activeWorkspaceId: workspaceId,
+          lastHydratedAt: result ? now() : status.lastHydratedAt,
+          phase: 'ready',
+          lastError: null,
+        })
+        return result
+      } catch (error) {
+        setStatus({
+          activeWorkspaceId: workspaceId,
+          phase: 'error',
+          lastError: error instanceof Error ? error.message : 'Failed to load workspace',
+        })
+        throw error
+      }
+    },
+
+    saveWorkspacePatch: async (workspaceId, patch) => {
+      setStatus({
+        activeWorkspaceId: workspaceId,
+        phase: 'saving',
+        lastError: null,
+      })
+
+      try {
+        const current =
+          (await options.backend.loadWorkspaceSnapshot(workspaceId)) ??
+          options.readWorkspaceSnapshot({ workspaceId })
+        const next = applyWorkspacePatch(current, patch)
+        next.workspace.revision = current.workspace.revision + 1
+        next.workspace.updatedAt = now()
+        await options.backend.saveWorkspaceSnapshot(next)
+
+        setStatus({
+          phase: 'saved',
+          lastSavedAt: now(),
+        })
+
+        return next
+      } catch (error) {
+        setStatus({
+          phase: 'error',
+          lastError: error instanceof Error ? error.message : 'Failed to save workspace patch',
+        })
+        throw error
+      }
+    },
+
+    exportWorkspaceSnapshot: async (request) => {
+      return options.readWorkspaceSnapshot(request)
+    },
+
+    importWorkspaceSnapshot: async (snapshot, importOptions = { mode: 'replace' }) => {
+      assertValidWorkspaceSnapshot(snapshot)
+
+      if (importOptions.mode === 'merge' && !options.mergeImportedSnapshot) {
+        throw new Error('Merge import requires mergeImportedSnapshot to be configured.')
+      }
+
+      setStatus({
+        activeWorkspaceId: snapshot.workspace.id,
+        phase: 'saving',
+        lastError: null,
+      })
+
+      try {
+        const current =
+          importOptions.mode === 'merge'
+            ? await options.backend.loadWorkspaceSnapshot(snapshot.workspace.id)
+            : null
+        const resolved = current && options.mergeImportedSnapshot
+          ? options.mergeImportedSnapshot(current, snapshot)
+          : snapshot
+
+        await options.backend.saveWorkspaceSnapshot(resolved)
+
+        setStatus({
+          phase: 'saved',
+          lastSavedAt: now(),
+        })
+
+        return resolved
+      } catch (error) {
+        setStatus({
+          phase: 'error',
+          lastError: error instanceof Error ? error.message : 'Failed to import workspace snapshot',
+        })
+        throw error
+      }
+    },
+
+    getStatus: () => cloneValue(status),
+  }
+}
