@@ -2,10 +2,12 @@
 
 import { beforeEach, describe, expect, it } from 'vitest'
 import { usePrepStore } from '../store/prepStore'
+import { resolveStorage } from '../store/storage'
 
 describe('prepStore', () => {
   beforeEach(() => {
-    localStorage.clear()
+    resolveStorage().removeItem('facet-prep-workspace')
+    resolveStorage().removeItem('facet-prep-data')
     usePrepStore.setState({ decks: [], activeDeckId: null })
   })
 

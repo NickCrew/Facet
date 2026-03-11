@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Outlet, Link, useRouterState } from '@tanstack/react-router'
-import { Layers, ListChecks, BookOpen, FileText, HelpCircle, Moon, Sun, Monitor } from 'lucide-react'
+import { Layers, ListChecks, Search, BookOpen, FileText, HelpCircle, Moon, Sun, Monitor } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { FacetGemMark } from './FacetWordmark'
 
@@ -9,6 +9,7 @@ const CURRENT_YEAR = new Date().getFullYear()
 const NAV_ITEMS = [
   { to: '/build' as const, icon: Layers, label: 'Build' },
   { to: '/pipeline' as const, icon: ListChecks, label: 'Pipeline' },
+  { to: '/research' as const, icon: Search, label: 'Research' },
   { to: '/prep' as const, icon: BookOpen, label: 'Prep' },
   { to: '/letters' as const, icon: FileText, label: 'Letters' },
 ] as const

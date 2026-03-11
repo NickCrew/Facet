@@ -6,6 +6,7 @@ import { PrepPage } from '../routes/prep/PrepPage'
 import { usePipelineStore } from '../store/pipelineStore'
 import { usePrepStore } from '../store/prepStore'
 import { useResumeStore } from '../store/resumeStore'
+import { resolveStorage } from '../store/storage'
 import { defaultResumeData } from '../store/defaultData'
 
 vi.mock('@tanstack/react-router', () => ({
@@ -15,7 +16,8 @@ vi.mock('@tanstack/react-router', () => ({
 describe('PrepPage', () => {
   beforeEach(() => {
     vi.stubEnv('VITE_ANTHROPIC_PROXY_URL', 'https://ai.example/proxy')
-    localStorage.clear()
+    resolveStorage().removeItem('facet-prep-workspace')
+    resolveStorage().removeItem('vector-resume-data')
     usePrepStore.setState({ decks: [], activeDeckId: null })
     useResumeStore.setState({
       data: JSON.parse(JSON.stringify(defaultResumeData)),

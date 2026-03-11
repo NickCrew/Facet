@@ -5,6 +5,7 @@ import { BuildPage } from './routes/build/BuildPage'
 import { PipelinePage } from './routes/pipeline/PipelinePage'
 import { PrepPage } from './routes/prep/PrepPage'
 import { LettersPage } from './routes/letters/LettersPage'
+import { ResearchPage } from './routes/research/ResearchPage'
 
 const LazyHelpPage = lazy(() => import('./routes/help/HelpPage').then((m) => ({ default: m.HelpPage })))
 
@@ -32,6 +33,12 @@ const pipelineRoute = createRoute({
   component: PipelinePage,
 })
 
+const researchRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/research',
+  component: ResearchPage,
+})
+
 const prepRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/prep',
@@ -55,7 +62,15 @@ const helpRoute = createRoute({
   component: LazyHelpPage,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, buildRoute, pipelineRoute, prepRoute, lettersRoute, helpRoute])
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  buildRoute,
+  pipelineRoute,
+  researchRoute,
+  prepRoute,
+  lettersRoute,
+  helpRoute,
+])
 
 export const router = createRouter({
   routeTree,

@@ -6,12 +6,14 @@ import { LettersPage } from '../routes/letters/LettersPage'
 import { useCoverLetterStore } from '../store/coverLetterStore'
 import { usePipelineStore } from '../store/pipelineStore'
 import { useResumeStore } from '../store/resumeStore'
+import { resolveStorage } from '../store/storage'
 import { defaultResumeData } from '../store/defaultData'
 
 describe('LettersPage', () => {
   beforeEach(() => {
     vi.stubEnv('VITE_ANTHROPIC_PROXY_URL', 'https://ai.example/proxy')
-    localStorage.clear()
+    resolveStorage().removeItem('facet-cover-letter-data')
+    resolveStorage().removeItem('vector-resume-data')
     useCoverLetterStore.setState({ templates: [] })
     useResumeStore.setState({
       data: JSON.parse(JSON.stringify(defaultResumeData)),

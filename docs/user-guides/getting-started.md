@@ -36,8 +36,16 @@ For full project details, see the [README](../../README.md).
 
 ## Interface Overview
 
-Facet uses a two-panel layout with a vector selector bar at the top and a status bar at
-the bottom.
+Facet uses a route-based workspace with a persistent sidebar for the main surfaces:
+
+- **Build** -- assemble and edit your resume.
+- **Pipeline** -- track opportunities and statuses.
+- **Research** -- infer a search profile, run AI-assisted job searches, and push matches into the pipeline.
+- **Prep** -- generate or curate interview preparation decks.
+- **Letters** -- draft and refine cover letters from pipeline context.
+
+The Build route uses a two-panel layout with a vector selector bar at the top and a
+status bar at the bottom.
 
 ```mermaid
 graph TB

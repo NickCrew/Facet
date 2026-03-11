@@ -24,14 +24,21 @@ import { useUiStore } from './uiStore'
 
 const MAX_HISTORY = 50
 
+let legacyUiStoreRaw: string | null = null
+if (typeof globalThis.localStorage !== 'undefined' && typeof globalThis.localStorage.getItem === 'function') {
+  try {
+    legacyUiStoreRaw = globalThis.localStorage.getItem('vector-resume-ui')
+  } catch {
+    legacyUiStoreRaw = null
+  }
+}
+
 /**
  * ⚠️ Cache legacy UI store data for migration before hydration race condition.
  * We capture this at module load time to ensure we have the data before uiStore 
  * version bump wipes it.
  */
-const legacyUiStoreSnapshot = typeof globalThis.localStorage !== 'undefined' 
-  ? globalThis.localStorage.getItem('vector-resume-ui')
-  : null
+const legacyUiStoreSnapshot = legacyUiStoreRaw
 
 interface ResumeState {
   data: ResumeData
@@ -123,6 +130,8 @@ const normalizePriorityMap = (value: unknown): PriorityByVector => {
   )
 }
 
+type PersistedRecord = Record<string, unknown>
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration handles raw persisted state with unknown shape
 export function resumeMigration(persistedState: any, version: number, legacyUiData: string | null = legacyUiStoreSnapshot) {
   if (version < 2 && !persistedState.data._overridesMigrated) {
@@ -156,7 +165,7 @@ export function resumeMigration(persistedState: any, version: number, legacyUiDa
   // Idempotent — safe to run on all versions; only acts if fields are missing.
   if (version < 4 && persistedState.data) {
     if (persistedState.data.education) {
-      persistedState.data.education = persistedState.data.education.map((e: any) => {
+      persistedState.data.education = persistedState.data.education.map((e: PersistedRecord) => {
         if (!e.id) {
           return { ...e, id: createId('edu') }
         }
@@ -164,7 +173,7 @@ export function resumeMigration(persistedState: any, version: number, legacyUiDa
       })
     }
     if (persistedState.data.roles) {
-      persistedState.data.roles = persistedState.data.roles.map((r: any) => {
+      persistedState.data.roles = persistedState.data.roles.map((r: PersistedRecord) => {
         if (!r.vectors) {
           return { ...r, vectors: {} }
         }
@@ -176,7 +185,7 @@ export function resumeMigration(persistedState: any, version: number, legacyUiDa
   // v4 → v5: backfill EducationEntry.vectors and initialize certifications
   if (version < 5 && persistedState.data) {
     if (persistedState.data.education) {
-      persistedState.data.education = persistedState.data.education.map((e: any) => {
+      persistedState.data.education = persistedState.data.education.map((e: PersistedRecord) => {
         if (!e.vectors) {
           return { ...e, vectors: {} }
         }
@@ -191,74 +200,89 @@ export function resumeMigration(persistedState: any, version: number, legacyUiDa
   // v5 -> v6: collapse legacy four-tier priority values into include/exclude
   if (version < 6 && persistedState.data) {
     if (persistedState.data.target_lines) {
-      persistedState.data.target_lines = persistedState.data.target_lines.map((line: any) => ({
+      persistedState.data.target_lines = persistedState.data.target_lines.map((line: PersistedRecord) => ({
         ...line,
         vectors: normalizePriorityMap(line.vectors),
       }))
     }
     if (persistedState.data.profiles) {
-      persistedState.data.profiles = persistedState.data.profiles.map((profile: any) => ({
+      persistedState.data.profiles = persistedState.data.profiles.map((profile: PersistedRecord) => ({
         ...profile,
         vectors: normalizePriorityMap(profile.vectors),
       }))
     }
     if (persistedState.data.skill_groups) {
-      persistedState.data.skill_groups = persistedState.data.skill_groups.map((group: any) => ({
-        ...group,
-        vectors: group.vectors && typeof group.vectors === 'object'
-          ? Object.fromEntries(
-              Object.entries(group.vectors).map(([vectorId, config]) => [
-                vectorId,
-                {
-                  ...(config as Record<string, unknown>),
-                  priority: normalizePriorityValue((config as Record<string, unknown>).priority),
-                },
-              ]),
-            )
-          : group.vectors,
-      }))
+      persistedState.data.skill_groups = persistedState.data.skill_groups.map((group: PersistedRecord) => {
+        const vectors =
+          group.vectors && typeof group.vectors === 'object'
+            ? Object.fromEntries(
+                Object.entries(group.vectors as PersistedRecord).map(([vectorId, config]) => [
+                  vectorId,
+                  {
+                    ...(config as PersistedRecord),
+                    priority: normalizePriorityValue((config as PersistedRecord).priority),
+                  },
+                ]),
+              )
+            : group.vectors
+
+        return {
+          ...group,
+          vectors,
+        }
+      })
     }
     if (persistedState.data.roles) {
-      persistedState.data.roles = persistedState.data.roles.map((role: any) => ({
+      persistedState.data.roles = persistedState.data.roles.map((role: PersistedRecord) => ({
         ...role,
         vectors: normalizePriorityMap(role.vectors),
-        bullets: (role.bullets ?? []).map((bullet: any) => ({
-          ...bullet,
-          vectors: normalizePriorityMap(bullet.vectors),
-        })),
+        bullets: Array.isArray(role.bullets)
+          ? role.bullets.map((bullet: PersistedRecord) => ({
+              ...bullet,
+              vectors: normalizePriorityMap(bullet.vectors),
+            }))
+          : [],
       }))
     }
     if (persistedState.data.projects) {
-      persistedState.data.projects = persistedState.data.projects.map((project: any) => ({
+      persistedState.data.projects = persistedState.data.projects.map((project: PersistedRecord) => ({
         ...project,
         vectors: normalizePriorityMap(project.vectors),
       }))
     }
     if (persistedState.data.education) {
-      persistedState.data.education = persistedState.data.education.map((entry: any) => ({
+      persistedState.data.education = persistedState.data.education.map((entry: PersistedRecord) => ({
         ...entry,
         vectors: normalizePriorityMap(entry.vectors),
       }))
     }
     if (persistedState.data.certifications) {
-      persistedState.data.certifications = persistedState.data.certifications.map((cert: any) => ({
+      persistedState.data.certifications = persistedState.data.certifications.map((cert: PersistedRecord) => ({
         ...cert,
         vectors: normalizePriorityMap(cert.vectors),
       }))
     }
     if (persistedState.data.presets) {
-      persistedState.data.presets = persistedState.data.presets.map((preset: any) => ({
-        ...preset,
-        overrides: {
-          ...(preset.overrides ?? {}),
-          priorityOverrides: Array.isArray(preset.overrides?.priorityOverrides)
-            ? preset.overrides.priorityOverrides.map((override: any) => ({
-                ...override,
-                priority: normalizePriorityValue(override.priority),
-              }))
-            : preset.overrides?.priorityOverrides,
-        },
-      }))
+      persistedState.data.presets = persistedState.data.presets.map((preset: PersistedRecord) => {
+        const overrides =
+          preset.overrides && typeof preset.overrides === 'object'
+            ? (preset.overrides as PersistedRecord)
+            : {}
+        const priorityOverrides = Array.isArray(overrides.priorityOverrides)
+          ? overrides.priorityOverrides.map((override: PersistedRecord) => ({
+              ...override,
+              priority: normalizePriorityValue(override.priority),
+            }))
+          : overrides.priorityOverrides
+
+        return {
+          ...preset,
+          overrides: {
+            ...overrides,
+            priorityOverrides,
+          },
+        }
+      })
     }
   }
 
