@@ -1,5 +1,6 @@
 export * from './contracts'
 export * from './clone'
 export * from './coordinator'
+export * from './remoteBackend'
 export * from './snapshot'
 export * from './validation'

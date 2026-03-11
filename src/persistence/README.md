@@ -47,6 +47,33 @@ The coordinator and backend interfaces in `coordinator.ts` are intentionally
 backend-agnostic so the next phases can add IndexedDB and server-backed
 persistence without rewriting the client contract.
 
+## Authenticated backend mode
+
+`createRemotePersistenceBackend()` implements the same `PersistenceBackend`
+interface as the local in-memory and browser-backed adapters. That is the key
+Phase 2 contract:
+
+- local-only mode uses a local backend implementation with the same coordinator
+- authenticated mode swaps in the remote backend without changing coordinator
+  call sites
+- server responses are treated as authoritative for revision and timestamp
+  metadata when saves succeed
+
+The current proxy exposes:
+
+- `GET /api/persistence/workspaces/:workspaceId`
+- `PUT /api/persistence/workspaces/:workspaceId`
+
+These routes require:
+
+- `Authorization: Bearer <token>`
+- `X-Proxy-API-Key: <proxy key>`
+
+Server-side auth resolves the actor from configured bearer tokens and checks
+workspace membership on the server. The request body snapshot may suggest
+tenant, user, or workspace identity values, but the server rewrites those to
+its own authoritative scope before saving.
+
 ## Validation scope
 
 `assertValidWorkspaceSnapshot()` validates more than the snapshot envelope:

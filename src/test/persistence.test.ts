@@ -536,7 +536,7 @@ describe('persistence foundation', () => {
         loadWorkspaceSnapshot: () => {
           throw new Error('load failed')
         },
-        saveWorkspaceSnapshot: () => undefined,
+        saveWorkspaceSnapshot: (snapshot) => snapshot,
       },
       readWorkspaceSnapshot: createWorkspaceSnapshotFromStores,
     })
@@ -560,8 +560,9 @@ describe('persistence foundation', () => {
       backend: {
         kind: 'memory',
         loadWorkspaceSnapshot: () => null,
-        saveWorkspaceSnapshot: () => {
+        saveWorkspaceSnapshot: (snapshot) => {
           saveCalls += 1
+          return snapshot
         },
       },
       readWorkspaceSnapshot: createWorkspaceSnapshotFromStores,
@@ -716,7 +717,7 @@ describe('persistence foundation', () => {
         loadWorkspaceSnapshot: () => {
           throw new Error('load failed')
         },
-        saveWorkspaceSnapshot: () => undefined,
+        saveWorkspaceSnapshot: (snapshot) => snapshot,
       },
       readWorkspaceSnapshot: createWorkspaceSnapshotFromStores,
     })

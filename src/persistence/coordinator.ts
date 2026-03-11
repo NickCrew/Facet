@@ -70,7 +70,11 @@ export interface PersistenceWorkspacePatch {
 export interface PersistenceBackend {
   kind: PersistenceBackendKind
   loadWorkspaceSnapshot: (workspaceId: string) => Promise<FacetWorkspaceSnapshot | null> | FacetWorkspaceSnapshot | null
-  saveWorkspaceSnapshot: (snapshot: FacetWorkspaceSnapshot) => Promise<void> | void
+  // Backends must either fully persist and return the authoritative saved
+  // snapshot or throw. Partial saves should surface as errors instead.
+  saveWorkspaceSnapshot: (
+    snapshot: FacetWorkspaceSnapshot,
+  ) => Promise<FacetWorkspaceSnapshot> | FacetWorkspaceSnapshot
   deleteWorkspaceSnapshot?: (workspaceId: string) => Promise<void> | void
   listWorkspaceSnapshots?: () => Promise<FacetWorkspaceSnapshot[]> | FacetWorkspaceSnapshot[]
 }
@@ -138,6 +142,8 @@ const applyArtifactPatch = <TArtifact extends {
   return {
     // Identity fields intentionally stay anchored to the current artifact so
     // runtime patches cannot forge artifact ids, types, or workspace scope.
+    // Revisions remain patchable because higher layers may supply optimistic or
+    // server-authored revision values while still preserving artifact identity.
     ...current,
     revision: nextRevision,
     updatedAt: changed ? patchedAt : current.updatedAt,
@@ -223,6 +229,7 @@ export const createInMemoryPersistenceBackend = (): PersistenceBackend => {
     },
     saveWorkspaceSnapshot: (snapshot) => {
       snapshots.set(snapshot.workspace.id, cloneValue(snapshot))
+      return cloneValue(snapshot)
     },
     deleteWorkspaceSnapshot: (workspaceId) => {
       snapshots.delete(workspaceId)
@@ -317,14 +324,14 @@ export const createPersistenceCoordinator = (
         const next = applyWorkspacePatch(current, patch)
         next.workspace.revision = current.workspace.revision + 1
         next.workspace.updatedAt = now()
-        await options.backend.saveWorkspaceSnapshot(next)
+        const saved = await options.backend.saveWorkspaceSnapshot(next)
 
         setStatus({
           phase: 'saved',
           lastSavedAt: now(),
         })
 
-        return next
+        return saved
       } catch (error) {
         setStatus({
           phase: 'error',
@@ -361,14 +368,14 @@ export const createPersistenceCoordinator = (
             ? options.mergeImportedSnapshot(current, snapshot)
             : snapshot
 
-        await options.backend.saveWorkspaceSnapshot(resolved)
+        const saved = await options.backend.saveWorkspaceSnapshot(resolved)
 
         setStatus({
           phase: 'saved',
           lastSavedAt: now(),
         })
 
-        return resolved
+        return saved
       } catch (error) {
         setStatus({
           phase: 'error',
