@@ -1,4 +1,8 @@
 import type { ResumeData, JdAnalysisResult, JdBulletAdjustment } from '../types'
+import { callLlmProxy, extractJsonBlock, JsonExtractionError } from './llmProxy'
+
+/** Model used for JD analysis — structured extraction, speed matters. */
+const JD_ANALYSIS_MODEL = 'haiku'
 
 export interface PreparedJobDescription {
   content: string
@@ -18,7 +22,6 @@ export interface ReframedBulletResult {
 }
 
 const MAX_JD_WORDS = 800
-const REQUEST_TIMEOUT_MS = 30000
 
 export const prepareJobDescription = (raw: string): PreparedJobDescription => {
   const words = raw.split(/\s+/).filter((w) => w.length > 0)
@@ -41,99 +44,6 @@ export function sanitizeEndpointUrl(value: string) {
     return url.toString()
   } catch {
     return ''
-  }
-}
-
-class JsonExtractionError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'JsonExtractionError'
-  }
-}
-
-/**
- * Robustly extract a JSON block from LLM output that might contain markdown or preamble.
- */
-function extractJsonBlock(text: string): string {
-  // Look for ```json ... ``` blocks
-  const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/)
-  if (jsonMatch?.[1]) {
-    return jsonMatch[1].trim()
-  }
-
-  // Look for any { ... } block
-  const firstBrace = text.indexOf('{')
-  const lastBrace = text.lastIndexOf('}')
-  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-    return text.slice(firstBrace, lastBrace + 1)
-  }
-
-  throw new JsonExtractionError('Could not find JSON block in AI response.')
-}
-
-const callLlmProxy = async (
-  endpoint: string,
-  systemPrompt: string,
-  userPrompt: string,
-  options: JdAnalysisRequestOptions = {},
-): Promise<string> => {
-  const controller = new AbortController()
-  const timeoutId = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(options.apiKey ? { 'X-API-Key': options.apiKey } : {}),
-      },
-      body: JSON.stringify({
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-        temperature: 0,
-      }),
-      signal: controller.signal,
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`AI proxy error (${response.status}): ${errorText.slice(0, 100)}`)
-    }
-
-    const payload = (await response.json()) as unknown
-    const payloadRecord = payload as Record<string, unknown>
-
-    // Support OpenAI-style { choices: [{ message: { content: '...' } }] } (Format 1)
-    if (Array.isArray(payloadRecord.choices)) {
-      const choice = payloadRecord.choices[0] as Record<string, unknown>
-      const message = choice.message as Record<string, unknown>
-      if (typeof message?.content === 'string') {
-        return message.content
-      }
-    }
-
-    // Support simple { analysis: { ... } } or { reframed: '...' } (Format 2)
-    if (payloadRecord.analysis || payloadRecord.reframed) {
-      return JSON.stringify(payloadRecord)
-    }
-
-    // Anthropic-style { content: [{ type: 'text', text: '...json...' }] } (Format 3)
-    const content = Array.isArray(payloadRecord.content) ? payloadRecord.content : []
-    const text = content.find((part) => part && typeof part === 'object' && (part as { type?: unknown }).type === 'text')
-    const rawText = text && typeof (text as { text?: unknown }).text === 'string' ? (text as { text: string }).text : ''
-
-    if (!rawText) {
-      throw new Error('AI response schema was invalid.')
-    }
-
-    return rawText
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`AI request timed out after ${REQUEST_TIMEOUT_MS}ms.`)
-    }
-    throw error
-  } finally {
-    globalThis.clearTimeout(timeoutId)
   }
 }
 
@@ -160,13 +70,17 @@ ${options.strategy ? `Positioning Strategy: "${options.strategy}"` : ''}
 
 Respond in JSON only.`
 
-  const rawResponse = await callLlmProxy(endpoint, systemPrompt, userPrompt, options)
-  
+  const rawResponse = await callLlmProxy(endpoint, systemPrompt, userPrompt, {
+    model: JD_ANALYSIS_MODEL,
+    temperature: 0,
+    apiKey: options.apiKey,
+  })
+
   try {
     const extracted = extractJsonBlock(rawResponse)
     const json = JSON.parse(extracted) as any
     const parsed = json.analysis || json
-    
+
     if (typeof parsed.reframed !== 'string' || typeof parsed.reasoning !== 'string') {
       throw new Error('Invalid reframe response schema.')
     }
@@ -277,7 +191,11 @@ ${JSON.stringify(context, null, 2)}
 
 Analyze how to best position this candidate for the JD. Respond in JSON only.`
 
-  const rawResponse = await callLlmProxy(endpoint, systemPrompt, userPrompt, options)
+  const rawResponse = await callLlmProxy(endpoint, systemPrompt, userPrompt, {
+    model: JD_ANALYSIS_MODEL,
+    temperature: 0,
+    apiKey: options.apiKey,
+  })
   return parseJdAnalysisResponseWithKnownBullets(rawResponse, data)
 }
 

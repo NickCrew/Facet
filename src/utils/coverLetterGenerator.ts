@@ -1,7 +1,9 @@
 import type { CoverLetterParagraph } from '../types/coverLetter'
 import type { ResumeMeta, ResumeVector } from '../types'
+import { callLlmProxy, extractJsonBlock, JsonExtractionError, isString } from './llmProxy'
 
-const REQUEST_TIMEOUT_MS = 45000
+/** Model used for cover letters — needs creative, polished prose. */
+const COVER_LETTER_MODEL = 'sonnet'
 
 interface CoverLetterGenerationPayload {
   name: string
@@ -37,83 +39,6 @@ export interface CoverLetterGenerationResult {
   greeting: string
   signOff: string
   paragraphs: GeneratedCoverLetterParagraph[]
-}
-
-class JsonExtractionError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'JsonExtractionError'
-  }
-}
-
-function extractJsonBlock(text: string): string {
-  const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/)
-  if (jsonMatch?.[1]) {
-    return jsonMatch[1].trim()
-  }
-
-  const firstBrace = text.indexOf('{')
-  const lastBrace = text.lastIndexOf('}')
-  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-    return text.slice(firstBrace, lastBrace + 1)
-  }
-
-  throw new JsonExtractionError('Could not find JSON block in AI response.')
-}
-
-async function callLlmProxy(endpoint: string, systemPrompt: string, userPrompt: string) {
-  const controller = new AbortController()
-  const timeoutId = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-        temperature: 0.3,
-      }),
-      signal: controller.signal,
-    })
-
-    if (!response.ok) {
-      throw new Error(`AI proxy error (${response.status}): ${(await response.text()).slice(0, 160)}`)
-    }
-
-    const payload = (await response.json()) as Record<string, unknown>
-    if (Array.isArray(payload.choices)) {
-      const choice = payload.choices[0] as Record<string, unknown>
-      const message = choice.message as Record<string, unknown>
-      if (typeof message?.content === 'string') {
-        return message.content
-      }
-    }
-
-    if (Array.isArray(payload.content)) {
-      const textPart = payload.content.find(
-        (part) => part && typeof part === 'object' && (part as { type?: unknown }).type === 'text',
-      ) as { text?: string } | undefined
-      if (typeof textPart?.text === 'string') {
-        return textPart.text
-      }
-    }
-
-    return JSON.stringify(payload)
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`AI request timed out after ${REQUEST_TIMEOUT_MS}ms.`)
-    }
-    throw error
-  } finally {
-    globalThis.clearTimeout(timeoutId)
-  }
-}
-
-function isString(value: unknown): value is string {
-  return typeof value === 'string'
 }
 
 function buildHeader(meta: ResumeMeta): string {
@@ -191,7 +116,10 @@ ${JSON.stringify(request.resumeContext, null, 2)}
 
 Return JSON only.`
 
-  const rawResponse = await callLlmProxy(endpoint, systemPrompt, userPrompt)
+  const rawResponse = await callLlmProxy(endpoint, systemPrompt, userPrompt, {
+    model: COVER_LETTER_MODEL,
+    timeoutMs: 45000,
+  })
 
   let parsed: CoverLetterGenerationPayload
   try {
