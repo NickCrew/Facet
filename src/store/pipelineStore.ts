@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { createJSONStorage, persist } from 'zustand/middleware'
 import type {
   PipelineEntry,
   PipelineStatus,
@@ -12,7 +11,6 @@ import {
   stripDurableMetadataPatch,
   touchDurableMetadata,
 } from './durableMetadata'
-import { resolveStorage } from './storage'
 import { createId } from '../utils/idUtils'
 
 interface PipelineFilters {
@@ -75,9 +73,7 @@ export const migratePipelineState = (persistedState: unknown) => {
   }
 }
 
-export const usePipelineStore = create<PipelineState>()(
-  persist(
-    (set, get) => ({
+export const usePipelineStore = create<PipelineState>()((set, get) => ({
       entries: [],
       sortField: 'tier',
       sortDir: 'asc',
@@ -163,17 +159,4 @@ export const usePipelineStore = create<PipelineState>()(
       },
 
       exportEntries: () => get().entries,
-    }),
-    {
-      name: 'facet-pipeline-data',
-      version: 2,
-      storage: createJSONStorage(resolveStorage),
-      partialize: (state) => ({
-        entries: state.entries,
-        sortField: state.sortField,
-        sortDir: state.sortDir,
-      }),
-      migrate: migratePipelineState,
-    }
-  )
-)
+    }))

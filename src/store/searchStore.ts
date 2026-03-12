@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { createJSONStorage, persist } from 'zustand/middleware'
 import type {
   SearchInterviewPrefs,
   SearchProfile,
@@ -16,7 +15,6 @@ import {
   stripDurableMetadataPatch,
   touchDurableMetadata,
 } from './durableMetadata'
-import { resolveStorage } from './storage'
 
 type SearchProfileInput = Omit<SearchProfile, 'id' | 'inferredAt'> &
   Partial<Pick<SearchProfile, 'id' | 'inferredAt'>>
@@ -93,9 +91,7 @@ export const migrateSearchState = (persistedState: unknown) => {
   }
 }
 
-export const useSearchStore = create<SearchState>()(
-  persist(
-    (set, get) => ({
+export const useSearchStore = create<SearchState>()((set, get) => ({
       profile: null,
       requests: [],
       runs: [],
@@ -235,17 +231,4 @@ export const useSearchStore = create<SearchState>()(
 
       getRunsForRequest: (requestId) =>
         get().runs.filter((run) => run.requestId === requestId),
-    }),
-    {
-      name: 'facet-search-data',
-      version: 2,
-      storage: createJSONStorage(resolveStorage),
-      partialize: (state) => ({
-        profile: state.profile,
-        requests: state.requests,
-        runs: state.runs,
-      }),
-      migrate: migrateSearchState,
-    },
-  ),
-)
+    }))

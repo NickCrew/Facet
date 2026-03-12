@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Outlet, Link, useRouterState } from '@tanstack/react-router'
 import { Layers, ListChecks, Search, BookOpen, FileText, HelpCircle, Moon, Sun, Monitor } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
+import { getPersistenceRuntime, usePersistenceRuntimeStore } from '../persistence/runtime'
 import { FacetGemMark } from './FacetWordmark'
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -16,6 +17,7 @@ const NAV_ITEMS = [
 
 export function AppShell() {
   const { appearance, setAppearance } = useUiStore()
+  const persistenceState = usePersistenceRuntimeStore()
   const routerState = useRouterState()
   const currentPath = routerState.location.pathname
 
@@ -34,10 +36,26 @@ export function AppShell() {
     root.setAttribute('data-theme', appearance)
   }, [appearance])
 
+  useEffect(() => {
+    void getPersistenceRuntime().start().catch((error) => {
+      console.error('[persistence-runtime]', error)
+    })
+  }, [])
+
   const cycleAppearance = () =>
     setAppearance(
       appearance === 'system' ? 'light' : appearance === 'light' ? 'dark' : 'system',
     )
+
+  const syncLabelByPhase: Partial<Record<typeof persistenceState.status.phase, string>> = {
+    saving: 'Saving',
+    saved: 'Saved',
+    error: 'Sync error',
+    offline: 'Offline',
+  }
+  const syncLabel =
+    syncLabelByPhase[persistenceState.status.phase] ??
+    (persistenceState.hydrated ? 'Ready' : 'Starting')
 
   return (
     <div className="app-root">
@@ -90,11 +108,24 @@ export function AppShell() {
 
       <div className="app-content-column">
         <div className="app-main">
-          <Outlet />
+          {persistenceState.hydrated ? (
+            <Outlet />
+          ) : (
+            <div role="status" aria-live="polite">
+              Loading workspace...
+            </div>
+          )}
         </div>
 
         <footer className="app-footer">
           <span>&copy; {CURRENT_YEAR} Nicholas Crew Ferguson</span>
+          <span
+            role="status"
+            aria-live="polite"
+            title={persistenceState.status.lastSavedAt ?? undefined}
+          >
+            Sync: {syncLabel}
+          </span>
           <nav className="app-footer-links" aria-label="Footer links">
             <Link to="/help">Docs</Link>
             <a href="https://github.com/NickCrew/Facet" target="_blank" rel="noopener noreferrer">

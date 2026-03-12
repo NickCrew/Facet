@@ -1,12 +1,10 @@
 import { create } from 'zustand'
-import { createJSONStorage, persist } from 'zustand/middleware'
 import type { CoverLetterTemplate } from '../types/coverLetter'
 import {
   ensureDurableMetadata,
   stripDurableMetadataPatch,
   touchDurableMetadata,
 } from './durableMetadata'
-import { resolveStorage } from './storage'
 
 interface CoverLetterState {
   templates: CoverLetterTemplate[]
@@ -47,9 +45,7 @@ export const migrateCoverLetterState = (persistedState: unknown) => {
   }
 }
 
-export const useCoverLetterStore = create<CoverLetterState>()(
-  persist(
-    (set) => ({
+export const useCoverLetterStore = create<CoverLetterState>()((set) => ({
       templates: [],
 
       addTemplate: (template) => {
@@ -84,15 +80,4 @@ export const useCoverLetterStore = create<CoverLetterState>()(
           templates: templates.map((template) => normalizeTemplate(template)),
         })
       },
-    }),
-    {
-      name: 'facet-cover-letter-data',
-      version: 2,
-      storage: createJSONStorage(resolveStorage),
-      partialize: (state) => ({
-        templates: state.templates,
-      }),
-      migrate: migrateCoverLetterState,
-    }
-  )
-)
+    }))

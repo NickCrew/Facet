@@ -18,7 +18,13 @@ import {
 import {
   DEFAULT_LOCAL_WORKSPACE_ID,
   DEFAULT_LOCAL_WORKSPACE_NAME,
+  type FacetLocalPreferencesSnapshot,
 } from '../persistence/contracts'
+import {
+  applyLocalPreferencesSnapshotToStores,
+  applyWorkspaceSnapshotToStores,
+  hydrateStoresFromLegacyStorage,
+} from '../persistence/hydration'
 import {
   createLocalPreferencesSnapshotFromStores,
   createWorkspaceSnapshotFromStores,
@@ -28,24 +34,30 @@ import {
 } from '../persistence/snapshot'
 import { assertValidWorkspaceSnapshot } from '../persistence/validation'
 
+const LEGACY_KEYS = [
+  'vector-resume-data',
+  'vector-resume-ui',
+  'facet-pipeline-data',
+  'facet-prep-workspace',
+  'facet-prep-data',
+  'facet-cover-letter-data',
+  'facet-search-data',
+]
+
+const clearLegacyStorage = () => {
+  const storage = resolveStorage()
+  for (const key of LEGACY_KEYS) {
+    storage.removeItem(key)
+  }
+}
+
 describe('persistence foundation', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
   beforeEach(() => {
-    const storage = resolveStorage()
-    for (const key of [
-      'vector-resume-data',
-      'vector-resume-ui',
-      'facet-pipeline-data',
-      'facet-prep-workspace',
-      'facet-prep-data',
-      'facet-cover-letter-data',
-      'facet-search-data',
-    ]) {
-      storage.removeItem(key)
-    }
+    clearLegacyStorage()
 
     useResumeStore.setState({
       data: defaultResumeData,
@@ -83,6 +95,7 @@ describe('persistence foundation', () => {
       comparisonVector: null,
       tourCompleted: false,
     })
+    clearLegacyStorage()
   })
 
   it('captures only durable workspace artifacts in the unified snapshot', () => {
@@ -260,6 +273,138 @@ describe('persistence foundation', () => {
     expect(snapshot.ui).not.toHaveProperty('comparisonVector')
   })
 
+  it('hydrates workspace artifacts into stores without sharing snapshot references', () => {
+    const snapshot = createWorkspaceSnapshotFromStores({
+      workspaceId: 'ws-1',
+      workspaceName: 'Workspace One',
+      exportedAt: '2026-03-11T12:00:00.000Z',
+    })
+
+    snapshot.artifacts.resume.payload.meta.name = 'Hydrated Name'
+    snapshot.artifacts.pipeline.payload.entries = [
+      {
+        id: 'pipe-1',
+        company: 'Acme',
+        role: 'Staff Engineer',
+        tier: '1',
+        status: 'screening',
+        comp: '',
+        url: '',
+        contact: '',
+        vectorId: 'backend',
+        jobDescription: '',
+        presetId: null,
+        resumeVariant: 'default',
+        positioning: '',
+        skillMatch: '',
+        nextStep: '',
+        notes: '',
+        appMethod: 'direct-apply',
+        response: 'none',
+        daysToResponse: null,
+        rounds: null,
+        format: [],
+        rejectionStage: '',
+        rejectionReason: '',
+        offerAmount: '',
+        dateApplied: '2026-03-11',
+        dateClosed: '',
+        lastAction: '2026-03-11',
+        createdAt: '2026-03-11',
+        history: [{ date: '2026-03-11', note: 'Created' }],
+      },
+    ]
+    snapshot.artifacts.prep.payload.decks = [
+      {
+        id: 'deck-1',
+        title: 'Prep Deck',
+        company: 'Acme',
+        role: 'Staff Engineer',
+        vectorId: 'backend',
+        pipelineEntryId: 'pipe-1',
+        updatedAt: '2026-03-11T12:00:00.000Z',
+        cards: [],
+      },
+    ]
+    snapshot.artifacts.coverLetters.payload.templates = [
+      {
+        id: 'letter-1',
+        name: 'Default',
+        header: 'Header',
+        greeting: 'Hello',
+        paragraphs: [],
+        signOff: 'Thanks',
+      },
+    ]
+    snapshot.artifacts.research.payload.profile = {
+      id: 'profile-1',
+      skills: [],
+      vectors: [],
+      workSummary: [],
+      openQuestions: [],
+      constraints: {
+        compensation: '',
+        locations: [],
+        clearance: '',
+        companySize: '',
+      },
+      filters: {
+        prioritize: [],
+        avoid: [],
+      },
+      interviewPrefs: {
+        strongFit: [],
+        redFlags: [],
+      },
+      inferredAt: '2026-03-11T12:00:00.000Z',
+      inferredFromResumeVersion: 1,
+    }
+
+    applyWorkspaceSnapshotToStores(snapshot)
+
+    useResumeStore.getState().updateMetaField('name', 'Mutated In Store')
+
+    expect(useResumeStore.getState().data.meta.name).toBe('Mutated In Store')
+    expect(usePipelineStore.getState().entries).toHaveLength(1)
+    expect(usePrepStore.getState().activeDeckId).toBe('deck-1')
+    expect(useCoverLetterStore.getState().templates).toHaveLength(1)
+    expect(useSearchStore.getState().profile?.id).toBe('profile-1')
+    expect(snapshot.artifacts.resume.payload.meta.name).toBe('Hydrated Name')
+  })
+
+  it('hydrates local preferences into UI, pipeline, and prep stores', () => {
+    const snapshot: FacetLocalPreferencesSnapshot = {
+      snapshotVersion: 1,
+      workspaceId: 'ws-1',
+      ui: {
+        selectedVector: 'backend',
+        panelRatio: 0.6,
+        appearance: 'dark',
+        viewMode: 'live',
+        showHeatmap: true,
+        showDesignHealth: true,
+        suggestionModeActive: true,
+        tourCompleted: true,
+      },
+      pipeline: {
+        sortField: 'company',
+        sortDir: 'desc',
+      },
+      prep: {
+        activeDeckId: 'deck-1',
+      },
+      exportedAt: '2026-03-11T12:00:00.000Z',
+    }
+
+    applyLocalPreferencesSnapshotToStores(snapshot)
+
+    expect(useUiStore.getState().appearance).toBe('dark')
+    expect(useUiStore.getState().selectedVector).toBe('backend')
+    expect(usePipelineStore.getState().sortField).toBe('company')
+    expect(usePipelineStore.getState().sortDir).toBe('desc')
+    expect(usePrepStore.getState().activeDeckId).toBe('deck-1')
+  })
+
   it('documents the migration map from legacy storage keys', () => {
     expect(DURABLE_PERSISTENCE_BOUNDARIES.map((entry) => entry.source)).toEqual([
       'resumeStore.data',
@@ -312,6 +457,12 @@ describe('persistence foundation', () => {
     expect(snapshot.userId).toBeNull()
     expect(snapshot.workspace.name).toBe('Facet Local Workspace')
     expect(snapshot.artifacts.pipeline.revision).toBe(0)
+  })
+
+  it('returns false when no legacy persisted storage is present', () => {
+    expect(hydrateStoresFromLegacyStorage()).toBe(false)
+    expect(useResumeStore.getState().data).toEqual(defaultResumeData)
+    expect(usePipelineStore.getState().entries).toEqual([])
   })
 
   it('preserves workspace identity even when runtime patches attempt to change workspace ids', () => {

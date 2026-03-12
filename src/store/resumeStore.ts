@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { createJSONStorage, persist } from 'zustand/middleware'
 import type {
   PriorityByVector,
   ResumeData,
@@ -16,7 +15,6 @@ import type {
   ComponentPriority,
 } from '../types'
 import { defaultResumeData } from './defaultData'
-import { resolveStorage } from './storage'
 import { reorderSkillGroupForSelection } from '../utils/skillGroupVectors'
 import { reorderById } from '../utils/reorderById'
 import { createId } from '../utils/idUtils'
@@ -308,9 +306,7 @@ export function resumeMigration(persistedState: any, version: number, legacyUiDa
   return persistedState
 }
 
-export const useResumeStore = create<ResumeState>()(
-  persist(
-    (set, get) => ({
+export const useResumeStore = create<ResumeState>()((set, get) => ({
       data: normalizeResumeData(defaultResumeData),
       past: [],
       future: [],
@@ -889,13 +885,4 @@ export const useResumeStore = create<ResumeState>()(
           certifications: reorderById(current.certifications ?? [], order)
         }))
       },
-    }),
-    {
-      name: 'vector-resume-data',
-      version: 7,
-      storage: createJSONStorage(resolveStorage),
-      partialize: (state) => ({ data: state.data }),
-      migrate: resumeMigration,
-    },
-  ),
-)
+    }))

@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { createJSONStorage, persist } from 'zustand/middleware'
 import type { PrepCard, PrepDeck, PrepCategory } from '../types/prep'
 import {
   ensureDurableMetadata,
@@ -9,7 +8,6 @@ import {
 import { resolveStorage } from './storage'
 import { createId } from '../utils/idUtils'
 
-const STORAGE_KEY = 'facet-prep-workspace'
 const LEGACY_STORAGE_KEY = 'facet-prep-data'
 
 const now = () => new Date().toISOString()
@@ -180,10 +178,8 @@ export const migratePrepState = (persistedState: unknown) => {
   }
 }
 
-export const usePrepStore = create<PrepState>()(
-  persist(
-    (set, get) => ({
-      decks: loadLegacyDecks(),
+export const usePrepStore = create<PrepState>()((set, get) => ({
+      decks: [],
       activeDeckId: null,
 
       setActiveDeck: (deckId) => set({ activeDeckId: deckId }),
@@ -307,20 +303,6 @@ export const usePrepStore = create<PrepState>()(
       },
 
       exportDecks: () => get().decks,
-    }),
-    {
-      name: STORAGE_KEY,
-      version: 2,
-      storage: createJSONStorage(resolveStorage),
-      migrate: migratePrepState,
-      onRehydrateStorage: () => (state) => {
-        if (!state) return
-        if (!state.activeDeckId && state.decks.length > 0) {
-          state.setActiveDeck(state.decks[0].id)
-        }
-      },
-    },
-  ),
-)
+    }))
 
 export const DEFAULT_PREP_CARD_CATEGORY: PrepCategory = 'behavioral'
