@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Process: AI-Powered Job Search and Interview Prep Methodology</title>
+<meta name="description" content="How I used AI to build a structured interview preparation system, from candidate profiling to company-specific cheat sheets.">
+<meta name="author" content="Nicholas Ferguson">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23080b12'/><text x='6' y='23' font-family='monospace' font-size='20' font-weight='bold' fill='%2338a0ff'>NF</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..800;1,6..72,300..800&family=DM+Mono:wght@400;500&family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg: #080b12;
+  --surface: #0d1219;
+  --surface-2: #111821;
+  --border: #1a2233;
+  --border-hover: #253044;
+  --accent: #5ba4d9;
+  --accent-dim: rgba(91,164,217,0.1);
+  --accent-ghost: rgba(91,164,217,0.04);
+  --text: #c8d2dc;
+  --text-bright: #e4eaf0;
+  --text-muted: #7a8fa6;
+  --text-dim: #4e6580;
+  --white: #f0f4f8;
+  --serif: 'Newsreader', Georgia, serif;
+  --sans: 'DM Sans', -apple-system, sans-serif;
+  --mono: 'DM Mono', ui-monospace, monospace;
+  --amber: #e5a820;
+  --amber-dim: rgba(229,168,32,0.12);
+  --amber-ghost: rgba(229,168,32,0.04);
+  --green: #18c760;
+  --green-dim: rgba(24,199,96,0.12);
+  --green-ghost: rgba(24,199,96,0.04);
+  --magenta: #d946a8;
+  --magenta-dim: rgba(217,70,168,0.12);
+  --magenta-ghost: rgba(217,70,168,0.04);
+}
+
+html { scroll-behavior: smooth }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: rgba(91,164,217,0.25); color: var(--white) }
+
+.page { max-width: 720px; margin: 0 auto; padding: 0 28px }
+
+/* ── Hero ── */
+.hero {
+  padding: 80px 0 56px;
+  border-bottom: 1px solid var(--border);
+}
+
+.hero-name {
+  font-family: var(--serif);
+  font-size: 42px;
+  font-weight: 400;
+  color: var(--white);
+  letter-spacing: -0.5px;
+  line-height: 1.15;
+  margin-bottom: 12px;
+}
+
+.hero-label {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+  margin-bottom: 28px;
+}
+
+.hero-intro {
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--text);
+  max-width: 620px;
+}
+
+.hero-links {
+  display: flex;
+  gap: 16px;
+  margin-top: 32px;
+  flex-wrap: wrap;
+}
+
+.hero-link {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero-link:hover { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-ghost) }
+.hero-link svg { opacity: 0.6 }
+.hero-link:hover svg { opacity: 1 }
+
+/* ── Section Nav ── */
+.section-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(8,11,18,0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.section-nav::-webkit-scrollbar { display: none }
+
+.section-nav-inner {
+  display: flex;
+  gap: 0;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 28px;
+}
+
+.section-nav a {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  color: var(--text-dim);
+  text-decoration: none;
+  padding: 14px 16px;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.section-nav a:hover, .section-nav a.active { color: var(--accent); border-bottom-color: var(--accent) }
+
+/* ── Sections ── */
+.section { padding: 56px 0; border-bottom: 1px solid var(--border) }
+.section:last-child { border-bottom: none }
+
+.section-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.section-heading {
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 400;
+  color: var(--white);
+  margin-bottom: 6px;
+  line-height: 1.25;
+}
+
+.section-subhead {
+  font-size: 15px;
+  color: var(--text-muted);
+  margin-bottom: 32px;
+  line-height: 1.65;
+  max-width: 600px;
+}
+
+/* ── Prose ── */
+.prose { font-size: 15px; line-height: 1.75; color: var(--text) }
+.prose p { margin-bottom: 18px }
+.prose strong { color: var(--text-bright); font-weight: 500 }
+
+/* ── Pipeline Diagram ── */
+.pipeline {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 32px;
+  margin: 0 0 32px;
+}
+
+.pipeline-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.pipeline-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.pipeline-inputs {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.pipeline-input {
+  background: var(--bg);
+  border: 1px solid var(--text-dim);
+  border-radius: 4px;
+  padding: 8px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.pipeline-arrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 0;
+}
+
+.pipeline-phase {
+  width: 100%;
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 14px 18px;
+}
+
+.pipeline-phase-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.pipeline-phase-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.pipeline-phase-name {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.pipeline-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pipeline-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+
+/* Phase colors */
+.p1 { border: 1.5px solid var(--accent) }
+.p1 .pipeline-phase-num { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(91,164,217,0.2) }
+.p1 .pipeline-phase-name { color: var(--accent) }
+.p1 .pipeline-tag { background: var(--accent-ghost); border: 1px solid var(--accent-dim); color: var(--accent) }
+
+.p2 { border: 1.5px solid var(--amber) }
+.p2 .pipeline-phase-num { background: var(--amber-ghost); color: var(--amber); border: 1px solid rgba(229,168,32,0.2) }
+.p2 .pipeline-phase-name { color: var(--amber) }
+.p2 .pipeline-tag { background: var(--amber-ghost); border: 1px solid var(--amber-dim); color: var(--amber) }
+
+.p3 { border: 1.5px solid var(--green) }
+.p3 .pipeline-phase-num { background: var(--green-ghost); color: var(--green); border: 1px solid rgba(24,199,96,0.2) }
+.p3 .pipeline-phase-name { color: var(--green) }
+.p3 .pipeline-tag { background: var(--green-ghost); border: 1px solid var(--green-dim); color: var(--green) }
+
+.p4 { border: 1.5px solid var(--magenta) }
+.p4 .pipeline-phase-num { background: var(--magenta-ghost); color: var(--magenta); border: 1px solid rgba(217,70,168,0.2) }
+.p4 .pipeline-phase-name { color: var(--magenta) }
+.p4 .pipeline-tag { background: var(--magenta-ghost); border: 1px solid var(--magenta-dim); color: var(--magenta) }
+
+.pipeline-result {
+  margin-top: 4px;
+  background: var(--accent);
+  color: var(--bg);
+  border-radius: 6px;
+  padding: 10px 24px;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+}
+
+/* ── Insight Box ── */
+.insight-box {
+  background: var(--accent-ghost);
+  border: 1px solid var(--accent-dim);
+  border-radius: 6px;
+  padding: 28px;
+  margin: 24px 0;
+}
+
+.insight-box h3 {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 400;
+  color: var(--white);
+  margin-bottom: 14px;
+}
+
+.insight-box p {
+  font-size: 15px;
+  color: var(--text-muted);
+  line-height: 1.75;
+  margin-bottom: 14px;
+}
+
+.insight-box p:last-child { margin-bottom: 0 }
+
+/* ── Phase Cards ── */
+.phase-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 24px;
+  margin-bottom: 16px;
+  transition: border-color 0.3s;
+}
+
+.phase-card:hover { border-color: var(--border-hover) }
+
+.phase-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.phase-card-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.phase-card-num.c1 { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(91,164,217,0.2) }
+.phase-card-num.c2 { background: var(--amber-ghost); color: var(--amber); border: 1px solid rgba(229,168,32,0.2) }
+.phase-card-num.c3 { background: var(--green-ghost); color: var(--green); border: 1px solid rgba(24,199,96,0.2) }
+.phase-card-num.c4 { background: var(--magenta-ghost); color: var(--magenta); border: 1px solid rgba(217,70,168,0.2) }
+
+.phase-card-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-bright);
+}
+
+.phase-card-body {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+.phase-card-body strong { color: var(--text-bright); font-weight: 500 }
+
+/* ── Output Row ── */
+.output-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.output-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px 14px;
+}
+
+.output-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+
+.output-label.c1 { color: var(--accent) }
+.output-label.c2 { color: var(--amber) }
+.output-label.c3 { color: var(--green) }
+.output-label.c4 { color: var(--magenta) }
+
+.output-value {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+/* ── Angle Table ── */
+.angle-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0 0;
+  font-size: 13px;
+}
+
+.angle-table th {
+  text-align: left;
+  padding: 9px 12px;
+  background: var(--bg);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+
+.angle-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid rgba(26,34,51,0.5);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.angle-table td:first-child {
+  color: var(--accent);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ── Tags ── */
+.tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.tag {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+
+.tag.c3 { background: var(--green-ghost); border: 1px solid var(--green-dim); color: var(--green) }
+
+/* ── Tools Grid ── */
+.tools-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.tool-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 22px;
+}
+
+.tool-card h4 {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-bright);
+  margin-bottom: 8px;
+}
+
+.tool-card p {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* ── Footer ── */
+.footer {
+  padding: 40px 0;
+  text-align: center;
+}
+
+.footer p {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 14px;
+}
+
+.footer-links {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+}
+
+.footer-links a {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.footer-links a:hover { color: var(--accent) }
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .hero-name { font-size: 30px }
+  .section-heading { font-size: 24px }
+  .output-row { grid-template-columns: 1fr }
+  .tools-grid { grid-template-columns: 1fr }
+  .page { padding: 0 20px }
+  .section-nav-inner { padding: 0 20px }
+  .pipeline { padding: 20px }
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════ HERO ════════════ -->
+<div class="page">
+  <div class="hero">
+    <h1 class="hero-name">The Process</h1>
+    <div class="hero-label">AI-Powered Interview Prep</div>
+    <p class="hero-intro">
+      How I used Claude to build a structured interview preparation system, from candidate profiling to company-specific cheat sheets. A 4-phase pipeline where each step's output feeds the next.
+    </p>
+    <div class="hero-links">
+      <a href="index.html" class="hero-link">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>
+        Portfolio
+      </a>
+      <a href="https://github.com/NickCrew/Facet" class="hero-link" target="_blank" rel="noopener">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub
+      </a>
+      <a href="https://nickcrew.github.io/Facet" class="hero-link" target="_blank" rel="noopener">
+        <i class="fa-solid fa-gem" style="font-size:12px;opacity:0.6"></i>
+        Facet
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════ NAV ════════════ -->
+<div class="section-nav">
+  <div class="section-nav-inner">
+    <a href="#overview">Overview</a>
+    <a href="#profiling">Phase 1</a>
+    <a href="#research">Phase 2</a>
+    <a href="#studyguide">Phase 3</a>
+    <a href="#perlisting">Phase 4</a>
+    <a href="#tools">Tools</a>
+  </div>
+</div>
+
+<!-- ════════════ CONTENT ════════════ -->
+<div class="page">
+
+  <!-- OVERVIEW -->
+  <div class="section" id="overview">
+    <div class="section-label">Why This Exists</div>
+    <div class="section-heading">Structured context beats raw intelligence</div>
+    <div class="section-subhead">Most engineers approach interview prep the same way: review their resume, practice LeetCode, Google some behavioral questions. The problem isn't effort. It's structure. You get generic preparation for specific situations.</div>
+
+    <div class="prose">
+      <p>I took a different approach: a 4-phase pipeline where each step's output feeds the next, building compound context that makes every downstream artifact sharper.</p>
+    </div>
+
+    <div class="pipeline">
+      <div class="pipeline-label">Pipeline Architecture</div>
+      <div class="pipeline-flow">
+        <div class="pipeline-inputs">
+          <div class="pipeline-input">📄 Resume</div>
+          <div class="pipeline-input">📋 Tech Docs</div>
+          <div class="pipeline-input">📂 Project READMEs</div>
+        </div>
+        <div class="pipeline-arrow" style="color:var(--accent)">↓</div>
+        <div class="pipeline-phase p1">
+          <div class="pipeline-phase-header">
+            <span class="pipeline-phase-num">1</span>
+            <span class="pipeline-phase-name">Candidate Profiling</span>
+          </div>
+          <div class="pipeline-tags">
+            <span class="pipeline-tag">Archetype</span>
+            <span class="pipeline-tag">2-3 Angles</span>
+            <span class="pipeline-tag">Strength/Gap Analysis</span>
+          </div>
+        </div>
+        <div class="pipeline-arrow" style="color:var(--accent)">archetype + angles + gaps ↓</div>
+        <div class="pipeline-phase p2">
+          <div class="pipeline-phase-header">
+            <span class="pipeline-phase-num">2</span>
+            <span class="pipeline-phase-name">Market Research</span>
+          </div>
+          <div class="pipeline-tags">
+            <span class="pipeline-tag">Deep Research</span>
+            <span class="pipeline-tag">Interview Formats</span>
+            <span class="pipeline-tag">Stack Overlap</span>
+          </div>
+        </div>
+        <div class="pipeline-arrow" style="color:var(--amber)">20+ targets + formats ↓</div>
+        <div class="pipeline-phase p3">
+          <div class="pipeline-phase-header">
+            <span class="pipeline-phase-num">3</span>
+            <span class="pipeline-phase-name">General Study Guide</span>
+          </div>
+          <div class="pipeline-tags">
+            <span class="pipeline-tag">Variant Scripts</span>
+            <span class="pipeline-tag">Deep Dives</span>
+            <span class="pipeline-tag">Interactive Prep Page</span>
+          </div>
+        </div>
+        <div class="pipeline-arrow" style="color:var(--green)">reusable prep artifacts ↓</div>
+        <div class="pipeline-phase p4">
+          <div class="pipeline-phase-header">
+            <span class="pipeline-phase-num">4</span>
+            <span class="pipeline-phase-name">Per-Listing Analysis</span>
+          </div>
+          <div class="pipeline-tags">
+            <span class="pipeline-tag">Fit Map</span>
+            <span class="pipeline-tag">Gap Framing</span>
+            <span class="pipeline-tag">Company-Specific Tips</span>
+          </div>
+        </div>
+        <div style="color:var(--accent);font-size:18px;margin-top:4px">↓</div>
+        <div class="pipeline-result">🎯 Interview Ready</div>
+      </div>
+    </div>
+
+    <div class="insight-box">
+      <h3>The core insight</h3>
+      <p>An AI with your resume can give you generic interview advice. An AI with your resume, technical documentation, candidate profile, market research, and gap analysis can give you a prepared answer for the exact question a specific company is likely to ask about the exact gap in your profile for their exact role.</p>
+      <p>The compound context is the product. Each phase builds on the last.</p>
+    </div>
+  </div>
+
+  <!-- PHASE 1 -->
+  <div class="section" id="profiling">
+    <div class="section-label">Phase 1</div>
+    <div class="section-heading">Candidate Profiling</div>
+    <div class="section-subhead">Before you can prepare for interviews, you need to understand what you're selling. Most engineers skip this and jump to "help me prep," which is why they get generic advice.</div>
+
+    <div class="phase-card">
+      <div class="phase-card-header">
+        <span class="phase-card-num c1">1</span>
+        <span class="phase-card-title">Feed everything you have</span>
+      </div>
+      <div class="phase-card-body">Resume, technical references, architecture decision records, project docs, design docs. The more context, the sharper the output. I provided ~170 pages of technical references across four platforms. The technical docs were the highest-signal input. They contained architecture decisions, performance benchmarks, and tradeoff discussions that a resume can't capture.</div>
+    </div>
+
+    <div class="phase-card">
+      <div class="phase-card-header">
+        <span class="phase-card-num c1">1</span>
+        <span class="phase-card-title">Identify your archetype</span>
+      </div>
+      <div class="phase-card-body">Not your title. The <strong>pattern</strong> of how you work. Mine came back as <strong>"Builder"</strong>: the engineer who gets dropped into a situation where something needs to exist and doesn't, then ships it end-to-end. That pattern held across both companies. It's a more useful framing than "Senior Platform Engineer" because it tells a story about how I operate, not just what my title was.</div>
+    </div>
+
+    <div class="phase-card">
+      <div class="phase-card-header">
+        <span class="phase-card-num c1">1</span>
+        <span class="phase-card-title">Define 2-3 angles</span>
+      </div>
+      <div class="phase-card-body">Different ways to frame the same experience depending on who you're talking to.</div>
+      <table class="angle-table">
+        <tr><th>Angle</th><th>Headline</th><th>Best For</th></tr>
+        <tr><td>Security Platform</td><td>"I build security infrastructure: edge sensors, fleet management, threat intelligence"</td><td>WAF/AppSec, security startups, detection engineering</td></tr>
+        <tr><td>Platform / DevEx</td><td>"I treat infrastructure as a product: build systems, developer tooling, self-service platforms"</td><td>DevTools, IDP, observability, platform teams</td></tr>
+        <tr><td>SRE / Infrastructure</td><td>"I find the bottleneck, build the system that removes it, then hand it off"</td><td>Infrastructure, reliability, cloud platforms</td></tr>
+      </table>
+    </div>
+
+    <div class="output-row">
+      <div class="output-box"><div class="output-label c1">Output</div><div class="output-value">Archetype identification</div></div>
+      <div class="output-box"><div class="output-label c1">Output</div><div class="output-value">2-3 positioning angles</div></div>
+      <div class="output-box"><div class="output-label c1">Output</div><div class="output-value">Strength/gap analysis with gap framings</div></div>
+    </div>
+  </div>
+
+  <!-- PHASE 2 -->
+  <div class="section" id="research">
+    <div class="section-label">Phase 2</div>
+    <div class="section-heading">Market Research</div>
+    <div class="section-subhead">Identify target companies where your profile has a genuine competitive advantage, not just companies that are hiring, but companies whose interview process and culture reward what you specifically bring.</div>
+
+    <div class="phase-card">
+      <div class="phase-card-header">
+        <span class="phase-card-num c2">2</span>
+        <span class="phase-card-title">Two research passes</span>
+      </div>
+      <div class="phase-card-body"><strong>Pass 1: Builder-friendly interviews.</strong> Companies with take-home assessments, paid work trials, portfolio reviews. If your strength is demonstrable output, optimize for formats that let you demonstrate it.<br><br><strong>Pass 2: Stack and domain overlap.</strong> Companies where your specific technical experience maps directly to their product or infrastructure.</div>
+    </div>
+
+    <div class="phase-card">
+      <div class="phase-card-header">
+        <span class="phase-card-num c2">2</span>
+        <span class="phase-card-title">Per-company intelligence</span>
+      </div>
+      <div class="phase-card-body">For each target: specific open roles, documented interview process, AI culture signals, stack overlap analysis, competitive advantage narrative, compensation range, and application tips specific to their process. The research identified 20+ targets ranked by signal convergence, not just "who's hiring" but "where does my profile win."</div>
+    </div>
+
+    <div class="output-row">
+      <div class="output-box"><div class="output-label c2">Output</div><div class="output-value">20+ ranked target companies</div></div>
+      <div class="output-box"><div class="output-label c2">Output</div><div class="output-value">Interview format analysis per company</div></div>
+      <div class="output-box"><div class="output-label c2">Output</div><div class="output-value">Competitive advantage narratives</div></div>
+    </div>
+  </div>
+
+  <!-- PHASE 3 -->
+  <div class="section" id="studyguide">
+    <div class="section-label">Phase 3</div>
+    <div class="section-heading">General Study Guide</div>
+    <div class="section-subhead">Build a reusable preparation artifact. Something you can open 10 minutes before any interview and quickly navigate to the relevant talking points. This is the 80% that's company-agnostic.</div>
+
+    <div class="phase-card">
+      <div class="phase-card-header">
+        <span class="phase-card-num c3">3</span>
+        <span class="phase-card-title">Variant scripts, not single answers</span>
+      </div>
+      <div class="phase-card-body">"Tell me about yourself" has <strong>three versions</strong> (Platform, Security, and Builder), each leading with different experience and tuned to different company types. You pick the variant based on who you're talking to. Each script is annotated with a "Best for" callout naming specific companies from the research.</div>
+    </div>
+
+    <div class="phase-card">
+      <div class="phase-card-header">
+        <span class="phase-card-num c3">3</span>
+        <span class="phase-card-title">Navigable under pressure</span>
+      </div>
+      <div class="phase-card-body">Built as an <strong>interactive web page</strong>: grid of clickable tiles, floating header nav, modal system, keyboard shortcuts. Click a tile, get the modal with your talking points, arrow-key to the next section. 25+ sections covering openers, project deep dives, behavioral variants, and a key numbers reference. Designed for the literal moment you're sitting in a waiting room.</div>
+      <div class="tags">
+        <span class="tag c3">Grid Layout</span>
+        <span class="tag c3">Modal System</span>
+        <span class="tag c3">Variant Tabs</span>
+        <span class="tag c3">Keyboard Nav</span>
+        <span class="tag c3">Floating Header</span>
+      </div>
+    </div>
+
+    <div class="output-row">
+      <div class="output-box"><div class="output-label c3">Output</div><div class="output-value">Interactive study guide (HTML)</div></div>
+      <div class="output-box"><div class="output-label c3">Output</div><div class="output-value">Variant scripts per angle × question</div></div>
+      <div class="output-box"><div class="output-label c3">Output</div><div class="output-value">Project deep dives + key numbers</div></div>
+    </div>
+  </div>
+
+  <!-- PHASE 4 -->
+  <div class="section" id="perlisting">
+    <div class="section-label">Phase 4</div>
+    <div class="section-heading">Per-Listing Analysis</div>
+    <div class="section-subhead">For each specific job listing, produce a targeted analysis: how your profile maps to their requirements, where you're strong, where you're thin, and how to talk about the thin spots. The 20% that's company-specific, but the highest-signal 20%.</div>
+
+    <div class="phase-card">
+      <div class="phase-card-header">
+        <span class="phase-card-num c4">4</span>
+        <span class="phase-card-title">Fit map</span>
+      </div>
+      <div class="phase-card-body">Map each stated requirement to your actual experience. For each: the requirement, your relevant evidence, fit level (Strong / Partial / Gap), and if it's a gap, <strong>prepared framing that's honest but redirects to adjacent strength</strong>. "You don't have Go, here's how to handle it" is more useful than pretending the gap doesn't exist.</div>
+    </div>
+
+    <div class="phase-card">
+      <div class="phase-card-header">
+        <span class="phase-card-num c4">4</span>
+        <span class="phase-card-title">Interview tips + company hooks</span>
+      </div>
+      <div class="phase-card-body"><strong>Likely questions</strong> based on the gaps in your profile for this specific role. <strong>Interview tips</strong> tailored to their known process: take-home strategy, pair programming approach, system design framing. <strong>Company hooks</strong>: specific things to mention that show you've done homework on this company. Not "I like your mission." Specific technical decisions they've made that you have an informed opinion on.</div>
+    </div>
+
+    <div class="output-row">
+      <div class="output-box"><div class="output-label c4">Output</div><div class="output-value">Fit map with gap framings</div></div>
+      <div class="output-box"><div class="output-label c4">Output</div><div class="output-value">Predicted hard questions + answers</div></div>
+      <div class="output-box"><div class="output-label c4">Output</div><div class="output-value">Company-specific cheat sheet</div></div>
+    </div>
+  </div>
+
+  <!-- TOOLS -->
+  <div class="section" id="tools">
+    <div class="section-label">Built With</div>
+    <div class="section-heading">Tools & Meta</div>
+    <div class="section-subhead">This entire system (the research, the study guide, the methodology, and this page) was built in a Claude Project over about a week of focused iteration.</div>
+
+    <div class="tools-grid">
+      <div class="tool-card">
+        <h4>Claude Projects</h4>
+        <p>Persistent context across conversations. Resume, tech docs, research outputs all in one project. Each conversation builds on the accumulated context from previous phases.</p>
+      </div>
+      <div class="tool-card">
+        <h4>Deep Research</h4>
+        <p>Long-running research tasks with citation for Phase 2 market research. Two separate passes identifying 20+ target companies with interview format analysis.</p>
+      </div>
+      <div class="tool-card">
+        <h4>Artifacts</h4>
+        <p>Interactive study guide built and iterated in-conversation. HTML/CSS/JS generated, reviewed, and refined across multiple sessions. Grid layout, modals, variant tabs.</p>
+      </div>
+      <div class="tool-card">
+        <h4>The Meta</h4>
+        <p>Using AI to prepare for interviews about AI-augmented development. This page, the study guide, and the portfolio site are all artifacts of the same methodology being described.</p>
+      </div>
+    </div>
+
+    <div class="insight-box">
+      <h3>Total time: ~1 week</h3>
+      <p>Deliverables: an interactive study guide opened before every interview, a research doc with 20+ target companies, a repeatable process for per-company analysis, and this methodology writeup. The study guide has been the highest-ROI artifact. Having the right variant of "tell me about yourself" pre-loaded based on whether you're talking to a security company or a platform company is the difference between a good first impression and a generic one.</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- ════════════ FOOTER ════════════ -->
+<div class="page">
+  <div class="footer">
+    <p>Built by Nicholas Ferguson, February 2026. The irony of using AI to prepare for interviews about AI-augmented development is not lost on me.</p>
+    <div class="footer-links">
+      <a href="index.html">Portfolio</a>
+      <a href="https://github.com/NickCrew/Facet" target="_blank" rel="noopener"><i class="fa-solid fa-gem" style="margin-right:6px;font-size:10px;opacity:0.7"></i>Facet</a>
+      <a href="https://github.com/NickCrew" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://linkedin.com/in/ncferguson" target="_blank" rel="noopener">LinkedIn</a>
+    </div>
+  </div>
+</div>
+
+<script>
+const sections = document.querySelectorAll('.section[id]');
+const navLinks = document.querySelectorAll('.section-nav a');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      navLinks.forEach(l => l.classList.remove('active'));
+      const active = document.querySelector(`.section-nav a[href="#${entry.target.id}"]`);
+      if (active) active.classList.add('active');
+    }
+  });
+}, { rootMargin: '-40% 0px -60% 0px' });
+sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>

@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Facet — Vector-Based Resume Platform</title>
+<meta name="description" content="Same diamond. Different face. A modular resume engine that lets you maintain one source of truth and generate targeted variants for every opportunity.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 42'><defs><clipPath id='u'><path d='M0 0H34V42L0 21Z'/></clipPath><clipPath id='l'><path d='M0 21L34 42V42H0Z'/></clipPath></defs><g clip-path='url(%23u)'><path d='M4 2H28V10H13V18H24V26H13V40H4Z' fill='%236cb8e8'/></g><g clip-path='url(%23l)'><path d='M4 2H28V10H13V18H24V26H13V40H4Z' fill='%232d6a96'/></g></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200..700&family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,300..700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10;
+    --bg-raised: #12151c;
+    --border: #252a36;
+    --border-hover: #333a4a;
+    --text: #e8ecf2;
+    --text-secondary: #9aa8b8;
+    --muted: #6b7a8d;
+    --accent: #5ba4d9;
+    --accent-light: #6cb8e8;
+    --accent-dark: #2d6a96;
+    --accent-deep: #1e5a82;
+    --accent-glow: #7ac4f0;
+    --accent-surface: #3d88b8;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: var(--border) var(--bg); }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', -apple-system, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .mono { font-family: 'DM Mono', monospace; }
+
+  /* ═══ FACET CUT BACKGROUND ═══ */
+  .cut-bg {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+  }
+  .cut-bg::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -10%;
+    width: 55%;
+    height: 100%;
+    background: linear-gradient(215deg, rgba(91, 164, 217, 0.03) 0%, transparent 60%);
+    transform: skewX(-8deg);
+  }
+  .cut-bg::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(108, 184, 232, 0.06), transparent);
+  }
+
+  /* Subtle grid */
+  .grid-overlay {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 80px 80px;
+    opacity: 0.08;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ═══ REVEAL ═══ */
+  .reveal {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+  .reveal-d1 { transition-delay: 0.1s; }
+  .reveal-d2 { transition-delay: 0.2s; }
+  .reveal-d3 { transition-delay: 0.3s; }
+  .reveal-d4 { transition-delay: 0.4s; }
+  .reveal-d5 { transition-delay: 0.5s; }
+
+  /* ═══ LAYOUT ═══ */
+  .container { max-width: 1000px; margin: 0 auto; padding: 0 40px; position: relative; z-index: 1; }
+  section { padding: 100px 0; }
+
+  /* ═══ HERO ═══ */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    position: relative;
+  }
+
+  /* Diagonal cut across hero — the facet motif */
+  .hero-cut {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 45%;
+    height: 100%;
+    background: linear-gradient(215deg, rgba(91, 164, 217, 0.04) 0%, transparent 70%);
+    clip-path: polygon(30% 0, 100% 0, 100% 100%, 0% 100%);
+    pointer-events: none;
+  }
+  .hero-cut::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 30%;
+    width: 1px;
+    height: 100%;
+    background: linear-gradient(180deg, transparent, rgba(108, 184, 232, 0.08), rgba(108, 184, 232, 0.12), rgba(108, 184, 232, 0.08), transparent);
+  }
+
+  /* Large ghost gem in the cut area */
+  .hero-ghost-gem {
+    position: absolute;
+    right: 8%;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0.025;
+    pointer-events: none;
+  }
+
+  .hero-content { max-width: 560px; }
+
+  .hero-lockup {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-bottom: 28px;
+  }
+
+  .hero-lockup .wordmark {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 300;
+    font-size: 52px;
+    color: var(--text);
+    letter-spacing: -0.5px;
+    line-height: 1;
+  }
+
+  .hero-tagline {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 32px;
+  }
+
+  .hero-desc {
+    font-size: 17px;
+    color: var(--text-secondary);
+    line-height: 1.75;
+    margin-bottom: 40px;
+    max-width: 480px;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border-radius: 4px;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .btn-primary:hover {
+    background: var(--accent-light);
+    border-color: var(--accent-light);
+  }
+  .btn-secondary {
+    background: var(--bg-raised);
+    color: var(--text);
+    border-color: var(--border);
+  }
+  .btn-secondary:hover {
+    border-color: var(--border-hover);
+    background: #181c26;
+  }
+  .btn .arrow {
+    opacity: 0.5;
+    transition: opacity 0.3s, transform 0.3s;
+  }
+  .btn:hover .arrow {
+    opacity: 1;
+    transform: translateX(2px);
+  }
+
+  /* ═══ CONCEPT SECTION ═══ */
+  .concept-section { border-top: 1px solid var(--border); }
+
+  .section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 40px;
+  }
+
+  .concept-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 2px;
+    margin-bottom: 40px;
+  }
+
+  .concept-card {
+    background: var(--bg-raised);
+    padding: 32px 28px;
+    position: relative;
+    transition: background 0.3s;
+  }
+  .concept-card:hover { background: #161a24; }
+  .concept-card:first-child { border-radius: 8px 0 0 8px; }
+  .concept-card:last-child { border-radius: 0 8px 8px 0; }
+
+  .concept-number {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    margin-bottom: 14px;
+    opacity: 0.6;
+  }
+
+  .concept-card h3 {
+    font-family: 'Outfit', sans-serif;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .concept-card p {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* ═══ FEATURES ═══ */
+  .features-section { border-top: 1px solid var(--border); }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .feature-card {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 24px;
+    transition: border-color 0.3s;
+  }
+  .feature-card:hover { border-color: var(--border-hover); }
+
+  .feature-card .badge {
+    display: inline-block;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: rgba(91, 164, 217, 0.1);
+    padding: 3px 8px;
+    border-radius: 3px;
+    margin-bottom: 10px;
+  }
+
+  .feature-card h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .feature-card p {
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* ═══ WORKFLOW SECTION ═══ */
+  .workflow-section { border-top: 1px solid var(--border); }
+
+  .workflow-steps {
+    display: flex;
+    gap: 0;
+    align-items: stretch;
+  }
+
+  .workflow-step {
+    flex: 1;
+    padding: 28px 24px;
+    background: var(--bg-raised);
+    position: relative;
+  }
+  .workflow-step:first-child { border-radius: 8px 0 0 8px; }
+  .workflow-step:last-child { border-radius: 0 8px 8px 0; }
+  .workflow-step + .workflow-step { border-left: 1px solid var(--border); }
+
+  .workflow-step .step-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 24px;
+    font-weight: 500;
+    color: var(--accent);
+    opacity: 0.3;
+    margin-bottom: 12px;
+  }
+
+  .workflow-step h3 {
+    font-family: 'Outfit', sans-serif;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .workflow-step p {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  /* Arrow connectors */
+  .workflow-step + .workflow-step::before {
+    content: '→';
+    position: absolute;
+    left: -7px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    color: var(--accent);
+    opacity: 0.3;
+    background: var(--bg-raised);
+    padding: 2px 0;
+    z-index: 2;
+  }
+
+  /* ═══ TERMINAL PREVIEW ═══ */
+  .terminal {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-top: 48px;
+  }
+
+  .terminal-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .terminal-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  .terminal-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-left: 8px;
+  }
+
+  .terminal-body {
+    padding: 20px 22px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    line-height: 2;
+  }
+
+  .t-muted { color: var(--muted); }
+  .t-cmd { color: var(--text); }
+  .t-accent { color: var(--accent-light); }
+  .t-ok { color: #4eca6a; }
+  .t-dim { color: #4a5568; }
+
+  /* ═══ TECH STRIP ═══ */
+  .tech-section { border-top: 1px solid var(--border); }
+
+  .tech-grid {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .tech-tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    padding: 6px 14px;
+    border-radius: 3px;
+    transition: border-color 0.3s;
+  }
+  .tech-tag:hover { border-color: var(--border-hover); }
+
+  /* ═══ CTA ═══ */
+  .cta-section {
+    border-top: 1px solid var(--border);
+    text-align: center;
+  }
+
+  .cta-section h2 {
+    font-family: 'Outfit', sans-serif;
+    font-size: 32px;
+    font-weight: 500;
+    letter-spacing: -0.5px;
+    margin-bottom: 12px;
+  }
+
+  .cta-section p {
+    color: var(--text-secondary);
+    max-width: 440px;
+    margin: 0 auto 32px;
+  }
+
+  /* ═══ FOOTER ═══ */
+  footer {
+    padding: 40px 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .footer-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .footer-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .footer-links { display: flex; gap: 20px; }
+  .footer-links a {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    text-decoration: none;
+    transition: color 0.3s;
+  }
+  .footer-links a:hover { color: var(--text); }
+
+  /* ═══ CORNER BRACKETS ═══ */
+  .bracket {
+    position: fixed;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .bracket svg { stroke: var(--accent); opacity: 0.08; }
+  .bracket-tl { top: 24px; left: 24px; }
+  .bracket-br { bottom: 24px; right: 24px; }
+
+  /* ═══ RESPONSIVE ═══ */
+  @media (max-width: 768px) {
+    .container { padding: 0 24px; }
+    section { padding: 64px 0; }
+    .hero { min-height: auto; padding: 100px 0 60px; }
+    .hero-cut, .hero-ghost-gem { display: none; }
+    .hero-lockup .wordmark { font-size: 38px; }
+    .concept-grid { grid-template-columns: 1fr; }
+    .concept-card { border-radius: 0 !important; }
+    .concept-card:first-child { border-radius: 8px 8px 0 0 !important; }
+    .concept-card:last-child { border-radius: 0 0 8px 8px !important; }
+    .features-grid { grid-template-columns: 1fr; }
+    .workflow-steps { flex-direction: column; }
+    .workflow-step { border-radius: 0 !important; }
+    .workflow-step:first-child { border-radius: 8px 8px 0 0 !important; }
+    .workflow-step:last-child { border-radius: 0 0 8px 8px !important; }
+    .workflow-step + .workflow-step { border-left: none; border-top: 1px solid var(--border); }
+    .workflow-step + .workflow-step::before { display: none; }
+    .footer-inner { flex-direction: column; gap: 12px; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<div class="grid-overlay"></div>
+<div class="cut-bg"></div>
+
+<!-- Corner brackets -->
+<div class="bracket bracket-tl">
+  <svg width="40" height="40" fill="none"><polyline points="2,16 2,2 16,2" stroke-width="1.5"/></svg>
+</div>
+<div class="bracket bracket-br">
+  <svg width="40" height="40" fill="none"><polyline points="24,38 38,38 38,24" stroke-width="1.5"/></svg>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     HERO
+     ═══════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="hero-cut"></div>
+
+  <!-- Ghost gem watermark -->
+  <div class="hero-ghost-gem">
+    <svg viewBox="0 0 22 32" width="320" height="460" fill="none">
+      <path d="M6 2 H16 L20 9 H2 Z" fill="#5ba4d9"/>
+      <path d="M2 9 L11 31 L11 9 Z" fill="#1e5a82"/>
+      <path d="M20 9 L11 31 L11 9 Z" fill="#3d88b8"/>
+    </svg>
+  </div>
+
+  <div class="container">
+    <div class="hero-content">
+      <!-- Facet lockup: F-mark icon + "acet" -->
+      <div class="hero-lockup reveal">
+        <svg width="44" height="55" viewBox="0 0 34 42" fill="none">
+          <defs>
+            <clipPath id="hero-u"><path d="M0 0 H34 V42 L0 21 Z"/></clipPath>
+            <clipPath id="hero-l"><path d="M0 21 L34 42 V42 H0 Z"/></clipPath>
+          </defs>
+          <g clip-path="url(#hero-u)"><path d="M4 2 H28 V10 H13 V18 H24 V26 H13 V40 H4 Z" fill="#6cb8e8"/></g>
+          <g clip-path="url(#hero-l)"><path d="M4 2 H28 V10 H13 V18 H24 V26 H13 V40 H4 Z" fill="#2d6a96"/></g>
+          <line x1="0" y1="21" x2="34" y2="42" stroke="#7ac4f0" stroke-width="0.5" opacity="0.4"/>
+        </svg>
+        <span class="wordmark">acet</span>
+      </div>
+
+      <div class="hero-tagline reveal reveal-d1">Same diamond · Different face</div>
+
+      <p class="hero-desc reveal reveal-d2">
+        A vector-based resume engine. Maintain one source of truth, define targeting
+        vectors for each role type, and generate pixel-perfect PDFs that show the right
+        facet of your experience — every time.
+      </p>
+
+      <div class="hero-actions reveal reveal-d3">
+        <a href="#" class="btn btn-primary">View on GitHub <span class="arrow">→</span></a>
+        <a href="#features" class="btn btn-secondary">See Features</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════
+     CONCEPT — The Three Ideas
+     ═══════════════════════════════════════════════════ -->
+<section class="concept-section">
+  <div class="container">
+    <div class="section-label reveal">The idea</div>
+
+    <div class="concept-grid reveal reveal-d1">
+      <div class="concept-card">
+        <div class="concept-number">01</div>
+        <h3>One diamond</h3>
+        <p>All your experience, skills, and accomplishments live in a single structured data source. No copy-pasting between files.</p>
+      </div>
+      <div class="concept-card">
+        <div class="concept-number">02</div>
+        <h3>Many facets</h3>
+        <p>Define vectors — targeting profiles that control which bullets surface, what order they appear, and how skills are weighted.</p>
+      </div>
+      <div class="concept-card">
+        <div class="concept-number">03</div>
+        <h3>Cut to fit</h3>
+        <p>Generate a tailored resume for each opportunity. Same truth, different face. Every version is consistent, current, and precise.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════
+     FEATURES
+     ═══════════════════════════════════════════════════ -->
+<section class="features-section" id="features">
+  <div class="container">
+    <div class="section-label reveal">Features</div>
+
+    <div class="features-grid">
+      <div class="feature-card reveal reveal-d1">
+        <div class="badge">Core</div>
+        <h3>Vector Targeting</h3>
+        <p>Per-vector bullet ordering, priority overrides, and skill group routing. Each vector is a lens that reveals the most relevant slice of your experience.</p>
+      </div>
+      <div class="feature-card reveal reveal-d2">
+        <div class="badge">Render</div>
+        <h3>Typst PDF Engine</h3>
+        <p>WASM-powered Typst rendering produces pixel-perfect PDFs with bundled fonts. True WYSIWYG preview — what you see is what gets downloaded.</p>
+      </div>
+      <div class="feature-card reveal reveal-d3">
+        <div class="badge">Design</div>
+        <h3>Theme System</h3>
+        <p>8 built-in presets with per-token overrides for fonts, spacing, margins, colors, and layout. Density controls for one-step global tightening or loosening.</p>
+      </div>
+      <div class="feature-card reveal reveal-d4">
+        <div class="badge">AI</div>
+        <h3>JD Analysis</h3>
+        <p>Paste a job description, get targeted suggestions for vector tuning, bullet reordering, and priority shifts. Apply selectively and save as a new variant.</p>
+      </div>
+      <div class="feature-card reveal reveal-d5">
+        <div class="badge">Data</div>
+        <h3>Import / Export</h3>
+        <p>Round-trippable JSON with replace and merge modes. Schema validation with actionable error reporting. Your data is always portable.</p>
+      </div>
+      <div class="feature-card reveal reveal-d5">
+        <div class="badge">State</div>
+        <h3>Saved Variants</h3>
+        <p>Named presets with dirty-state tracking. Save your carefully tuned configurations and switch between them instantly.</p>
+      </div>
+    </div>
+
+    <!-- Terminal demo -->
+    <div class="terminal reveal">
+      <div class="terminal-bar">
+        <div class="terminal-dot" style="background:#ff5f56;"></div>
+        <div class="terminal-dot" style="background:#ffbd2e;"></div>
+        <div class="terminal-dot" style="background:#27c93f;"></div>
+        <span class="terminal-title">facet — vector assembly</span>
+      </div>
+      <div class="terminal-body">
+        <div><span class="t-dim">// Load resume data, select a vector</span></div>
+        <div><span class="t-accent">vector</span><span class="t-muted">:</span> <span class="t-cmd">"platform-engineer"</span></div>
+        <div><span class="t-accent">bullets</span><span class="t-muted">:</span> <span class="t-cmd">38 active / 64 total</span> <span class="t-muted">(filtered by vector priority)</span></div>
+        <div><span class="t-accent">skills </span><span class="t-muted">:</span> <span class="t-cmd">Rust, TypeScript, Kubernetes, Terraform</span> <span class="t-muted">(3 groups routed)</span></div>
+        <div><span class="t-accent">theme </span><span class="t-muted">:</span> <span class="t-cmd">ferguson-v12</span> <span class="t-muted">@ density 0</span></div>
+        <div style="margin-top:8px;"><span class="t-ok">✓</span> <span class="t-cmd">PDF rendered — 1.0 pages (98.4% fill)</span></div>
+        <div><span class="t-ok">✓</span> <span class="t-cmd">Ferguson_Resume_PlatformEngineer.pdf</span> <span class="t-muted">ready</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════
+     WORKFLOW
+     ═══════════════════════════════════════════════════ -->
+<section class="workflow-section">
+  <div class="container">
+    <div class="section-label reveal">Workflow</div>
+
+    <div class="workflow-steps reveal reveal-d1">
+      <div class="workflow-step">
+        <div class="step-num">01</div>
+        <h3>Load your data</h3>
+        <p>Import structured resume JSON or build from scratch. One canonical source for everything.</p>
+      </div>
+      <div class="workflow-step">
+        <div class="step-num">02</div>
+        <h3>Define vectors</h3>
+        <p>Create targeting profiles — platform eng, backend, security, DevOps. Each one surfaces different content.</p>
+      </div>
+      <div class="workflow-step">
+        <div class="step-num">03</div>
+        <h3>Tune &amp; preview</h3>
+        <p>Reorder bullets, adjust priorities, pick a theme. WYSIWYG preview shows the real PDF in real time.</p>
+      </div>
+      <div class="workflow-step">
+        <div class="step-num">04</div>
+        <h3>Export</h3>
+        <p>Download pixel-perfect PDF, copy plain text for forms, or export Markdown. Save the config as a preset.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════
+     TECH STACK
+     ═══════════════════════════════════════════════════ -->
+<section class="tech-section">
+  <div class="container">
+    <div class="section-label reveal">Built with</div>
+    <div class="tech-grid reveal reveal-d1">
+      <span class="tech-tag">React 19</span>
+      <span class="tech-tag">TypeScript</span>
+      <span class="tech-tag">Zustand</span>
+      <span class="tech-tag">Vite</span>
+      <span class="tech-tag">TanStack Router</span>
+      <span class="tech-tag">Typst WASM</span>
+      <span class="tech-tag">DM Sans + Outfit</span>
+    </div>
+    <div style="margin-top:24px;" class="reveal reveal-d2">
+      <span class="mono" style="font-size:11px; color:var(--muted); letter-spacing:1px;">OPEN SOURCE · AGPL LICENSED</span>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════
+     CTA
+     ═══════════════════════════════════════════════════ -->
+<section class="cta-section">
+  <div class="container">
+    <div class="reveal">
+      <!-- Gem mark centered -->
+      <svg viewBox="0 0 22 32" width="32" height="46" fill="none" style="margin-bottom:20px; opacity:0.6;">
+        <path d="M6 2 H16 L20 9 H2 Z" fill="#5ba4d9"/>
+        <path d="M8 3.5 H14 L16.5 8 H5.5 Z" fill="#6cb8e8" opacity="0.25"/>
+        <path d="M2 9 L11 31 L11 9 Z" fill="#1e5a82"/>
+        <path d="M20 9 L11 31 L11 9 Z" fill="#3d88b8"/>
+        <line x1="1.5" y1="9" x2="20.5" y2="9" stroke="#6cb8e8" stroke-width="0.5" opacity="0.5"/>
+        <line x1="11" y1="2" x2="11" y2="31" stroke="#6cb8e8" stroke-width="0.35" opacity="0.25"/>
+      </svg>
+    </div>
+    <h2 class="reveal reveal-d1">Stop rewriting your resume.</h2>
+    <p class="reveal reveal-d2">
+      Write it once. Target it everywhere.
+    </p>
+    <div class="reveal reveal-d3" style="display:flex; gap:14px; justify-content:center; flex-wrap:wrap;">
+      <a href="#" class="btn btn-primary">GitHub <span class="arrow">→</span></a>
+      <a href="#" class="btn btn-secondary">Documentation</a>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════
+     FOOTER
+     ═══════════════════════════════════════════════════ -->
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-text">
+        <span style="display:inline-flex; align-items:center; gap:6px;">
+          <svg width="12" height="15" viewBox="0 0 34 42" fill="none">
+            <defs>
+              <clipPath id="ft-u"><path d="M0 0 H34 V42 L0 21 Z"/></clipPath>
+              <clipPath id="ft-l"><path d="M0 21 L34 42 V42 H0 Z"/></clipPath>
+            </defs>
+            <g clip-path="url(#ft-u)"><path d="M4 2 H28 V10 H13 V18 H24 V26 H13 V40 H4 Z" fill="#6cb8e8"/></g>
+            <g clip-path="url(#ft-l)"><path d="M4 2 H28 V10 H13 V18 H24 V26 H13 V40 H4 Z" fill="#2d6a96"/></g>
+          </svg>
+          Facet · Same diamond. Different face.
+        </span>
+      </div>
+      <div class="footer-links">
+        <a href="#">GitHub</a>
+        <a href="#">atlascrew.dev</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) entry.target.classList.add('visible');
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+});
+</script>
+
+</body>
+</html>
