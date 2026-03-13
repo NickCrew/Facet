@@ -1,138 +1,182 @@
-# Facet Feature Reference (Current)
+# Facet Feature Reference
 
 ## Purpose
-This document reflects the currently shipped feature surface in Facet and points to the primary implementation files.
+This document reflects the currently shipped feature surface in Facet and points to
+the primary implementation files for each area.
 
 ## Scope
 Current production-facing capabilities:
-- JSON import/export with replace and merge flows
-- Per-vector bullet ordering and reset controls
-- Skill group vector routing (priority, order, optional content override)
-- Typst-powered PDF rendering, preview, and download (DOCX removed)
-- Theme system: presets, token overrides, visual preset gallery, and density step controls
-- Saved variants with dirty-state tracking
-- JD analysis with selective apply and variant save
-- Plain text and Markdown output actions
+
+- Route-based workspace shell with Build, Pipeline, Research, Prep, Letters, and Help views
+- Resume build workspace with import/export, component editing, vector include/exclude controls,
+  JD analysis, live preview, PDF export, text output, presets, and theme editing
+- Job pipeline tracking with filters, sorting, analytics, JSON import/export, and handoff into
+  Build and Prep flows
+- AI-assisted research profile inference and job search runs with result triage and pipeline push
+- Interview prep decks with search/filtering, practice mode, JSON import/export, and AI generation
+- Cover letter template editing and AI-assisted draft generation
+- Persistence runtime with local hydration, sync status, encrypted backups, optional file save/load,
+  and backup reminders
 
 ## Feature Behavior
 
-### 1) JSON Import/Export
-- Import supports text paste and file upload.
-- Validation reports schema issues with actionable errors.
-- Import mode supports `Replace All` and `Merge`.
-- Merge preserves existing content where possible and adds new content by id.
-- Export produces a round-trippable JSON payload.
+### 1) Application Shell and Navigation
+- The app uses a route-based shell rather than a single `App.tsx` entry screen.
+- `/` redirects to `/build`.
+- Main navigation exposes Build, Pipeline, Research, Prep, Letters, and Help.
+- The shell shows persistence startup/sync status and opens the backup workflow.
+- Appearance mode cycles between system, light, and dark.
 
 Primary files:
-- `src/components/ImportExport.tsx`
-- `src/engine/importMerge.ts`
-- `src/engine/serializer.ts`
-- `src/App.tsx`
-
-### 2) Per-Vector Bullet Ordering
-- Bullet order is stored per vector with a default fallback.
-- Reordering in one vector does not reorder other vectors.
-- UI shows custom-order indicators and reset controls.
-- Global and per-role reset actions clear vector-specific order overrides.
-
-Primary files:
-- `src/utils/bulletOrder.ts`
+- `src/router.tsx`
+- `src/components/AppShell.tsx`
 - `src/store/uiStore.ts`
-- `src/components/BulletList.tsx`
+- `src/routes/help/HelpPage.tsx`
+
+### 2) Build Workspace
+- Resume editing remains the core workspace.
+- Users can edit metadata, target lines, profiles, projects, bullets, education,
+  certifications, variables, and vector mappings.
+- The component library supports add/edit/reorder flows plus include/exclude controls.
+- Import/export supports text paste and file upload with replace and merge modes.
+- Presets can be saved, loaded, and deleted, with dirty-state tracking.
+- JD analysis supports selective apply and AI-assisted bullet reframing when an
+  endpoint is configured.
+- Output includes live preview, Typst PDF rendering/download, plain text, Markdown,
+  and bundle export.
+- Theme editing supports presets, token overrides, template/layout controls, and
+  density adjustments.
+
+Primary files:
+- `src/routes/build/BuildPage.tsx`
 - `src/components/ComponentLibrary.tsx`
-- `src/engine/assembler.ts`
-
-### 3) Skill Group Vector Routing
-- Skill groups support per-vector priority, order, and optional content override.
-- Assembly uses vector-specific settings with fallback behavior.
-- Editor UI exposes default and per-vector controls.
-
-Primary files:
-- `src/utils/skillGroupVectors.ts`
-- `src/components/SkillGroupList.tsx`
-- `src/engine/assembler.ts`
-- `src/engine/serializer.ts`
-- `src/types.ts`
-
-### 4) PDF Rendering (Typst)
-- Resume output is rendered directly to PDF with Typst WASM.
-- Preview shows the actual rendered PDF (WYSIWYG) in an iframe.
-- Download uses the last rendered blob and names files as `{Name}_Resume_{Vector}.pdf`.
-- PDF metadata and link rendering are generated from assembled resume data.
-- Bundled fonts are loaded lazily and embedded for consistent rendering.
-
-Primary files:
-- `src/utils/typstRenderer.ts`
-- `src/templates/resume.typ`
-- `src/hooks/usePdfPreview.ts`
-- `src/components/PdfPreview.tsx`
-- `src/utils/pdfFormatting.ts`
-
-### 5) Theme System
-- Theme preset picker plus per-token overrides (fonts, sizes, spacing, margins, colors, layout).
-- Visual preset gallery shows mini style previews and click-to-apply cards.
-- Density controls provide one-step global spacing updates (`Tighten` / `Loosen`).
-- Presets include:
-  - `ferguson-v12`
-  - `clean-modern`
-  - `classic-serif`
-  - `minimal`
-  - `editorial`
-  - `executive-serif`
-  - `modern-contrast`
-  - `signal-clean`
-- Theme font options include Inter, DM Sans, Source Serif 4, PT Serif, IBM Plex Sans, IBM Plex Serif, Newsreader, and DM Mono.
-
-Primary files:
-- `src/themes/theme.ts`
+- `src/components/ImportExport.tsx`
 - `src/components/ThemeEditorPanel.tsx`
-- `src/App.tsx`
-- `src/index.css`
-
-### 6) Presets
-- Users can save, load, and delete named presets.
-- Loading restores selected vector and associated override state.
-- Dirty-state indicator shows divergence from the active preset.
-- Presets persist and round-trip via JSON import/export.
-
-Primary files:
-- `src/hooks/usePresets.ts`
-- `src/utils/presets.ts`
-- `src/App.tsx`
-- `src/engine/serializer.ts`
+- `src/components/LivePreview.tsx`
+- `src/components/PdfPreview.tsx`
+- `src/engine/assembler.ts`
 - `src/engine/importMerge.ts`
-
-### 7) JD Analysis
-- Users can paste job descriptions and run analysis via configured endpoint.
-- Results support selective apply (vector, target line, and bullet-level priority changes).
-- Applied analysis can be saved as a new preset.
-- Missing/invalid endpoint and request errors degrade gracefully.
-
-Primary files:
+- `src/engine/serializer.ts`
+- `src/themes/theme.ts`
 - `src/utils/jdAnalyzer.ts`
-- `src/App.tsx`
-- `src/components/StatusBar.tsx`
-
-### 8) Text Outputs
-- Plain text and Markdown outputs are generated from assembled resume data.
-- These serve as fallback export formats for form fill and docs workflows.
-
-Primary files:
 - `src/utils/textRenderer.ts`
 - `src/utils/markdownRenderer.ts`
-- `src/App.tsx`
+- `src/utils/typstRenderer.ts`
+- `src/templates/resume.typ`
+
+### 3) Pipeline Tracking
+- Pipeline entries capture company, role, URL, compensation, status, notes, job
+  description, vector linkage, and activity history.
+- Users can add/edit/delete entries, filter by tier/status/search, and sort by
+  multiple columns.
+- Analytics provide pipeline summaries without leaving the page.
+- Pipeline JSON can be imported/exported, and legacy local data can be migrated.
+- Pipeline entries can hand off into Build analysis and Prep generation flows.
+
+Primary files:
+- `src/routes/pipeline/PipelinePage.tsx`
+- `src/routes/pipeline/PipelineFilters.tsx`
+- `src/routes/pipeline/PipelineTable.tsx`
+- `src/routes/pipeline/PipelineAnalytics.tsx`
+- `src/routes/pipeline/PasteJdModal.tsx`
+- `src/store/pipelineStore.ts`
+- `src/utils/pipelineImport.ts`
+- `src/store/handoffStore.ts`
+
+### 4) Research
+- Research can infer a search profile from resume data when AI is configured.
+- Search requests track vector priorities, filters, and exclusions.
+- Search runs persist status, logs, token usage, and grouped results.
+- Closed/rejected pipeline companies are automatically excluded from future requests.
+- Users can push promising results directly into the pipeline and jump back into Build.
+
+Primary files:
+- `src/routes/research/ResearchPage.tsx`
+- `src/routes/research/researchUtils.ts`
+- `src/store/searchStore.ts`
+- `src/utils/searchExecutor.ts`
+- `src/utils/searchProfileInference.ts`
+
+### 5) Prep
+- Prep decks organize interview material by company, role, vector, and linked
+  pipeline entry.
+- Users can create blank decks, edit cards, duplicate/remove cards, filter by
+  category/vector/query, and import/export deck JSON.
+- Practice mode supports rehearsal against the active deck.
+- AI generation builds a prep deck from the selected pipeline entry, vector, job
+  description, company research, and assembled resume context.
+
+Primary files:
+- `src/routes/prep/PrepPage.tsx`
+- `src/routes/prep/PrepCardGrid.tsx`
+- `src/routes/prep/PrepPracticeMode.tsx`
+- `src/routes/prep/PrepSearch.tsx`
+- `src/store/prepStore.ts`
+- `src/utils/prepGenerator.ts`
+- `src/utils/prepImport.ts`
+
+### 6) Letters
+- Cover letter workspaces are template-based.
+- Users can create, edit, and delete reusable templates with paragraph-level vector
+  controls.
+- AI generation can create a new draft from the selected pipeline opportunity, vector,
+  company research, and assembled resume context.
+- Generated and manual templates persist in the cover letter store.
+
+Primary files:
+- `src/routes/letters/LettersPage.tsx`
+- `src/store/coverLetterStore.ts`
+- `src/utils/coverLetterGenerator.ts`
+- `src/components/VectorPriorityEditor.tsx`
+
+### 7) Persistence, Backup, and Sync
+- The app starts through a shared persistence runtime before rendering the main workspace.
+- Durable workspace content includes resume data, pipeline entries, prep decks,
+  cover letter templates, and research state.
+- Local-only preferences stay separate from synced workspace content.
+- The shell exposes sync state in the footer.
+- Encrypted workspace backup export/import uses passphrase-based WebCrypto.
+- Supported browsers can save/load backups through File System Access; other browsers
+  use download/upload fallback.
+- Backup reminders appear when local changes are newer than the most recent file backup.
+- The persistence contract is tenant-aware and can swap between local and remote backends.
+
+Primary files:
+- `src/components/AppShell.tsx`
+- `src/components/WorkspaceBackupDialog.tsx`
+- `src/components/WorkspaceBackupReminder.tsx`
+- `src/persistence/runtime.ts`
+- `src/persistence/hydration.ts`
+- `src/persistence/contracts.ts`
+- `src/persistence/coordinator.ts`
+- `src/persistence/backupBundle.ts`
+- `src/persistence/fileSystemAccess.ts`
+- `src/persistence/backupReminder.ts`
+- `src/persistence/remoteBackend.ts`
+- `src/persistence/README.md`
 
 ## Data Model Notes
-- `ResumeData.theme?: ResumeThemeState`
-- `ResumeData.presets?: Preset[]`
-- `PresetOverrides` include manual overrides, variant overrides, bullet ordering, optional priority overrides, and optional theme snapshot.
-- Skill groups support vector-specific config (`priority`, `order`, optional `content`).
-- Assembly result includes integer page estimates and fractional usage for budget threshold UI.
+- Durable workspace artifacts include:
+  - resume data
+  - pipeline entries
+  - prep decks
+  - cover letter templates
+  - research profile, requests, and runs
+- Local-only preferences include UI appearance/state, backup reminder settings,
+  pipeline sorting preferences, and the active prep deck selection.
+- Workspace snapshots intentionally carry `tenantId`, `userId`, and `workspace`
+  identity fields so the persistence contract does not need to change shape for
+  hosted multi-tenant backends.
+- Resume build data still carries theme state, presets, manual overrides,
+  bullet-order overrides, and variable substitutions.
 
 ## Runtime Configuration
-- JD analysis is enabled via `VITE_ANTHROPIC_PROXY_URL`.
-- Endpoint must be valid HTTP/HTTPS.
-- Embedded credentials in endpoint URLs are rejected.
+- Build-time AI features are enabled via `VITE_ANTHROPIC_PROXY_URL`.
+- This affects JD analysis/reframing, research profile inference/search, prep
+  generation, and cover letter generation.
+- Invalid or unsafe endpoint values are sanitized/rejected before requests run.
+- Authenticated remote persistence uses the proxy/backend contract documented in
+  `src/persistence/README.md`.
 
 ## Verification
 Run:
@@ -153,10 +197,17 @@ npm run build
 ```
 
 ## Test Coverage Pointers
-- `src/test/typstRenderer.test.ts`
-- `src/test/usePdfPreview.test.tsx`
-- `src/test/theme.test.ts`
-- `src/test/ThemeEditorPanel.test.tsx`
-- `src/test/jdAnalyzer.test.ts`
 - `src/test/importMerge.test.ts`
 - `src/test/serializer.test.ts`
+- `src/test/jdAnalyzer.test.ts`
+- `src/test/ThemeEditorPanel.test.tsx`
+- `src/test/usePdfPreview.test.tsx`
+- `src/test/typstRenderer.test.ts`
+- `src/test/ResearchPage.test.tsx`
+- `src/test/PrepPage.test.tsx`
+- `src/test/PrepPracticeMode.test.tsx`
+- `src/test/LettersPage.test.tsx`
+- `src/test/persistence.test.ts`
+- `src/test/persistenceRuntime.test.ts`
+- `src/test/WorkspaceBackupDialog.test.tsx`
+- `src/test/WorkspaceBackupReminder.test.tsx`
