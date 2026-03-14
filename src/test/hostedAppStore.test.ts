@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { FacetApiError } from '../utils/facetApiErrors'
 import { buildWorkspaceSnapshot } from './fixtures/workspaceSnapshot'
 
 const hostedSessionMocks = vi.hoisted(() => ({
@@ -119,6 +120,24 @@ describe('hostedAppStore', () => {
     })
   })
 
+  it('treats hosted auth API failures as auth-required bootstrap state', async () => {
+    hostedAccountClientMocks.fetchHostedAccountContext.mockRejectedValue(
+      new FacetApiError('Hosted session expired (401)', {
+        status: 401,
+        code: 'auth_required',
+      }),
+    )
+    const { useHostedAppStore } = await import('../store/hostedAppStore')
+
+    await useHostedAppStore.getState().bootstrap()
+
+    expect(useHostedAppStore.getState()).toMatchObject({
+      bootstrapStatus: 'auth-required',
+      lastErrorCode: 'auth_required',
+      lastError: 'Hosted session expired (401)',
+    })
+  })
+
   it('resets to local-ready state when deployment mode is self-hosted', async () => {
     hostedSessionMocks.getFacetDeploymentMode.mockReturnValue('self-hosted')
     const { useHostedAppStore } = await import('../store/hostedAppStore')
@@ -165,6 +184,24 @@ describe('hostedAppStore', () => {
       workspaces: [],
       selectedWorkspaceId: null,
       lastError: 'Hosted account lookup failed',
+    })
+  })
+
+  it('retains billing-state bootstrap failures distinctly from generic errors', async () => {
+    hostedAccountClientMocks.fetchHostedAccountContext.mockRejectedValue(
+      new FacetApiError('Hosted billing state unavailable (500)', {
+        status: 500,
+        code: 'billing_state_error',
+      }),
+    )
+    const { useHostedAppStore } = await import('../store/hostedAppStore')
+
+    await useHostedAppStore.getState().bootstrap()
+
+    expect(useHostedAppStore.getState()).toMatchObject({
+      bootstrapStatus: 'error',
+      lastErrorCode: 'billing_state_error',
+      lastError: 'Hosted billing state unavailable (500)',
     })
   })
 
@@ -251,6 +288,26 @@ describe('hostedAppStore', () => {
       'Hosted directory refresh failed',
     )
     expect(useHostedAppStore.getState().lastError).toBe('Hosted directory refresh failed')
+  })
+
+  it('stores offline refresh failures with a structured error code', async () => {
+    const { useHostedAppStore } = await import('../store/hostedAppStore')
+    await useHostedAppStore.getState().bootstrap()
+
+    hostedAccountClientMocks.listHostedWorkspaces.mockRejectedValue(
+      new FacetApiError('Facet could not reach the network.', {
+        status: 0,
+        code: 'offline',
+      }),
+    )
+
+    await expect(useHostedAppStore.getState().refresh()).rejects.toThrow(
+      'Facet could not reach the network.',
+    )
+    expect(useHostedAppStore.getState()).toMatchObject({
+      lastError: 'Facet could not reach the network.',
+      lastErrorCode: 'offline',
+    })
   })
 
   it('updates workspace directory state for create, rename, and delete mutations', async () => {

@@ -34,8 +34,15 @@ import {
   mergeWorkspaceSnapshots,
   scopeWorkspaceSnapshotToWorkspace,
 } from './workspaceImportMerge'
+import { isFacetApiError } from '../utils/facetApiErrors'
 
 const DEFAULT_SAVE_DEBOUNCE_MS = 150
+
+const resolveRuntimeFailurePhase = (error: unknown): PersistenceStatus['phase'] =>
+  isFacetApiError(error) && error.code === 'offline' ? 'offline' : 'error'
+
+const resolveRuntimeFailureMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback
 
 export interface PersistenceRuntimeState {
   hydrated: boolean
@@ -181,9 +188,11 @@ export const createPersistenceRuntime = (
         syncRuntimeState({
           status: {
             ...coordinator.getStatus(),
-            phase: 'error',
-            lastError:
-              error instanceof Error ? error.message : 'Failed to persist workspace runtime',
+            phase: resolveRuntimeFailurePhase(error),
+            lastError: resolveRuntimeFailureMessage(
+              error,
+              'Failed to persist workspace runtime',
+            ),
           },
         })
       })
@@ -267,9 +276,11 @@ export const createPersistenceRuntime = (
             hydrated: false,
             status: {
               ...coordinator.getStatus(),
-              phase: 'error',
-              lastError:
-                error instanceof Error ? error.message : 'Failed to bootstrap persistence runtime',
+              phase: resolveRuntimeFailurePhase(error),
+              lastError: resolveRuntimeFailureMessage(
+                error,
+                'Failed to bootstrap persistence runtime',
+              ),
             },
           })
           throw error

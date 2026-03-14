@@ -1,6 +1,7 @@
 import type { PersistenceBackend } from './coordinator'
 import type { FacetWorkspaceSnapshot } from './contracts'
 import { assertValidWorkspaceSnapshot } from './validation'
+import { readFacetApiError, toFacetApiError } from '../utils/facetApiErrors'
 
 const DEFAULT_PROXY_API_KEY = 'facet-local-proxy'
 
@@ -32,18 +33,17 @@ export const createRemotePersistenceBackend = (
         'X-Proxy-API-Key': options.proxyApiKey ?? DEFAULT_PROXY_API_KEY,
         ...(init.headers ?? {}),
       },
+    }).catch((error) => {
+      throw toFacetApiError(error, 'Persistence request failed.')
     })
   }
 
   const parseSnapshotResponse = async (response: Response) => {
-    const payload = (await response.json()) as Partial<RemotePersistenceApiResponse> & {
-      error?: string
-    }
-
     if (!response.ok) {
-      throw new Error(payload.error ?? `Persistence API error (${response.status})`)
+      throw await readFacetApiError(response, 'Persistence request failed.')
     }
 
+    const payload = (await response.json()) as Partial<RemotePersistenceApiResponse>
     assertValidWorkspaceSnapshot(payload.snapshot)
     return payload.snapshot
   }

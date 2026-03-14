@@ -26,6 +26,7 @@ import {
   getPersistenceRuntime,
   usePersistenceRuntimeStore,
 } from '../persistence/runtime'
+import { FacetApiError } from '../utils/facetApiErrors'
 import { buildWorkspaceSnapshot } from './fixtures/workspaceSnapshot'
 
 const LEGACY_KEYS = [
@@ -662,6 +663,37 @@ describe('persistence runtime', () => {
     expect(usePersistenceRuntimeStore.getState().status.phase).toBe('error')
     expect(usePersistenceRuntimeStore.getState().status.lastError).toBe(
       'Failed to persist workspace runtime',
+    )
+
+    runtime.dispose()
+  })
+
+  it('surfaces offline status when autosave loses the network', async () => {
+    vi.useFakeTimers()
+    const backing = createInMemoryPersistenceBackend()
+    const workspaceBackend: PersistenceBackend = {
+      ...backing,
+      saveWorkspaceSnapshot: async () => {
+        throw new FacetApiError('Facet could not reach the network.', {
+          status: 0,
+          code: 'offline',
+        })
+      },
+    }
+
+    const runtime = createPersistenceRuntime({
+      backend: workspaceBackend,
+      localPreferencesBackend: createInMemoryLocalPreferencesBackend(),
+      saveDebounceMs: 10,
+    })
+
+    await runtime.start()
+    useResumeStore.getState().updateMetaField('name', 'Offline Draft')
+    await vi.advanceTimersByTimeAsync(10)
+
+    expect(usePersistenceRuntimeStore.getState().status.phase).toBe('offline')
+    expect(usePersistenceRuntimeStore.getState().status.lastError).toBe(
+      'Facet could not reach the network.',
     )
 
     runtime.dispose()

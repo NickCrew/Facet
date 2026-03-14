@@ -9,6 +9,7 @@ import type {
 } from './contracts'
 import { cloneValue } from './clone'
 import { assertValidWorkspaceSnapshot } from './validation'
+import { isFacetApiError } from '../utils/facetApiErrors'
 
 export type PersistenceBackendKind =
   | 'localStorage'
@@ -108,6 +109,12 @@ export interface PersistenceCoordinatorOptions {
 }
 
 const now = () => new Date().toISOString()
+
+const resolvePersistenceFailurePhase = (error: unknown): PersistenceStatusPhase =>
+  isFacetApiError(error) && error.code === 'offline' ? 'offline' : 'error'
+
+const resolvePersistenceFailureMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback
 
 const applyArtifactPatch = <TArtifact extends {
   artifactId: string
@@ -283,8 +290,8 @@ export const createPersistenceCoordinator = (
         }
       } catch (error) {
         setStatus({
-          phase: 'error',
-          lastError: error instanceof Error ? error.message : 'Failed to bootstrap persistence',
+          phase: resolvePersistenceFailurePhase(error),
+          lastError: resolvePersistenceFailureMessage(error, 'Failed to bootstrap persistence'),
         })
         throw error
       }
@@ -303,8 +310,8 @@ export const createPersistenceCoordinator = (
       } catch (error) {
         setStatus({
           activeWorkspaceId: workspaceId,
-          phase: 'error',
-          lastError: error instanceof Error ? error.message : 'Failed to load workspace',
+          phase: resolvePersistenceFailurePhase(error),
+          lastError: resolvePersistenceFailureMessage(error, 'Failed to load workspace'),
         })
         throw error
       }
@@ -334,8 +341,8 @@ export const createPersistenceCoordinator = (
         return saved
       } catch (error) {
         setStatus({
-          phase: 'error',
-          lastError: error instanceof Error ? error.message : 'Failed to save workspace patch',
+          phase: resolvePersistenceFailurePhase(error),
+          lastError: resolvePersistenceFailureMessage(error, 'Failed to save workspace patch'),
         })
         throw error
       }
@@ -378,8 +385,8 @@ export const createPersistenceCoordinator = (
         return saved
       } catch (error) {
         setStatus({
-          phase: 'error',
-          lastError: error instanceof Error ? error.message : 'Failed to import workspace snapshot',
+          phase: resolvePersistenceFailurePhase(error),
+          lastError: resolvePersistenceFailureMessage(error, 'Failed to import workspace snapshot'),
         })
         throw error
       }

@@ -23,6 +23,7 @@ import {
 } from '../persistence/runtime'
 import { createRemotePersistenceBackend } from '../persistence/remoteBackend'
 import { useHostedAppStore } from '../store/hostedAppStore'
+import { isFacetApiError } from '../utils/facetApiErrors'
 import { getHostedPersistenceEndpoint } from '../utils/hostedApi'
 import { FacetGemMark } from './FacetWordmark'
 import { HostedWorkspaceDialog } from './HostedWorkspaceDialog'
@@ -51,6 +52,7 @@ export function AppShell() {
     'idle' | 'loading' | 'ready' | 'error'
   >('idle')
   const [hostedRuntimeError, setHostedRuntimeError] = useState<string | null>(null)
+  const [hostedRuntimeErrorCode, setHostedRuntimeErrorCode] = useState<string | null>(null)
   const [activeHostedWorkspaceId, setActiveHostedWorkspaceId] = useState<string | null>(null)
   const [hostedRuntimeRetryToken, setHostedRuntimeRetryToken] = useState(0)
   const configuredHostedWorkspaceKeyRef = useRef<string | null>(null)
@@ -155,6 +157,7 @@ export function AppShell() {
     const startHostedRuntime = async () => {
       setHostedRuntimePhase('loading')
       setHostedRuntimeError(null)
+      setHostedRuntimeErrorCode(null)
       setActiveHostedWorkspaceId(null)
       useHostedAppStore.getState().clearError()
 
@@ -192,6 +195,7 @@ export function AppShell() {
         configuredHostedWorkspaceKeyRef.current = workspaceKey
         setHostedRuntimePhase('ready')
         setHostedRuntimeError(null)
+        setHostedRuntimeErrorCode(null)
         setActiveHostedWorkspaceId(selectedHostedWorkspace.workspaceId)
         setWorkspaceDialogOpen(false)
       }
@@ -200,12 +204,14 @@ export function AppShell() {
     void startHostedRuntime().catch((error) => {
       const message =
         error instanceof Error ? error.message : 'Failed to start hosted workspace sync.'
+      const errorCode = isFacetApiError(error) ? error.code : null
       console.error('[hosted-runtime]', error)
       configuredHostedWorkspaceKeyRef.current = null
-      useHostedAppStore.getState().reportError(message)
+      useHostedAppStore.getState().reportError(message, errorCode)
       if (!cancelled) {
         setHostedRuntimePhase('error')
         setHostedRuntimeError(message)
+        setHostedRuntimeErrorCode(errorCode)
         setActiveHostedWorkspaceId(null)
       }
     })
@@ -257,6 +263,15 @@ export function AppShell() {
     setWorkspaceDialogOpen(false)
   }
 
+  const handleHostedBootstrapRetry = () =>
+    void useHostedAppStore.getState().bootstrap({
+      localMigrationSnapshot: hostedApp.localMigrationSnapshot,
+    })
+
+  const handleSessionRefresh = () => {
+    window.location.reload()
+  }
+
   const syncLabelByPhase: Partial<Record<typeof persistenceState.status.phase, string>> = {
     saving: 'Saving',
     saved: 'Saved',
@@ -297,27 +312,53 @@ export function AppShell() {
           <div>
             <strong>Hosted sign-in required</strong>
             <p>{hostedApp.lastError ?? 'Sign in to your hosted account to load your workspaces.'}</p>
+            <div className="hosted-workspace-state-actions">
+              <button
+                className="btn-secondary"
+                type="button"
+                onClick={handleSessionRefresh}
+              >
+                Refresh Session
+              </button>
+            </div>
           </div>
         </div>
       )
     }
 
     if (hostedApp.bootstrapStatus === 'error') {
+      const isBillingStateError = hostedApp.lastErrorCode === 'billing_state_error'
+      const isOffline = hostedApp.lastErrorCode === 'offline'
       return (
         <div className="hosted-workspace-state-card" role="alert">
           <HardDrive size={20} />
           <div>
-            <strong>Hosted bootstrap failed</strong>
+            <strong>
+              {isBillingStateError
+                ? 'Hosted billing state unavailable'
+                : isOffline
+                  ? 'You appear to be offline'
+                  : 'Hosted bootstrap failed'}
+            </strong>
             <p>{hostedApp.lastError ?? 'We could not load your hosted account.'}</p>
-            <button
-              className="btn-secondary"
-              type="button"
-              onClick={() => void useHostedAppStore.getState().bootstrap({
-                localMigrationSnapshot: hostedApp.localMigrationSnapshot,
-              })}
-            >
-              Retry Hosted Bootstrap
-            </button>
+            <div className="hosted-workspace-state-actions">
+              <button
+                className="btn-secondary"
+                type="button"
+                onClick={handleHostedBootstrapRetry}
+              >
+                Retry Hosted Bootstrap
+              </button>
+              {isBillingStateError ? (
+                <button
+                  className="btn-ghost"
+                  type="button"
+                  onClick={handleSessionRefresh}
+                >
+                  Refresh Billing State
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       )
@@ -370,19 +411,44 @@ export function AppShell() {
     }
 
     if (hostedRuntimePhase === 'error') {
+      const isAuthError = hostedRuntimeErrorCode === 'auth_required'
+      const isOffline = hostedRuntimeErrorCode === 'offline'
       return (
         <div className="hosted-workspace-state-card" role="alert">
           <HardDrive size={20} />
           <div>
-            <strong>Hosted workspace sync failed</strong>
+            <strong>
+              {isAuthError
+                ? 'Hosted session expired'
+                : isOffline
+                  ? 'Hosted sync is offline'
+                  : 'Hosted workspace sync failed'}
+            </strong>
             <p>{hostedRuntimeError ?? 'We could not load the selected hosted workspace.'}</p>
             <div className="hosted-workspace-state-actions">
+              {isAuthError ? (
+                <button
+                  className="btn-secondary"
+                  type="button"
+                  onClick={handleSessionRefresh}
+                >
+                  Refresh Session
+                </button>
+              ) : (
+                <button
+                  className="btn-secondary"
+                  type="button"
+                  onClick={() => setHostedRuntimeRetryToken((current) => current + 1)}
+                >
+                  Retry Hosted Workspace
+                </button>
+              )}
               <button
-                className="btn-secondary"
+                className="btn-ghost"
                 type="button"
-                onClick={() => setHostedRuntimeRetryToken((current) => current + 1)}
+                onClick={() => setBackupOpen(true)}
               >
-                Retry Hosted Workspace
+                Backup Workspace
               </button>
               <button
                 className="btn-ghost"

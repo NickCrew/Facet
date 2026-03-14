@@ -13,6 +13,7 @@ import {
   listHostedWorkspaces,
   renameHostedWorkspace,
 } from '../utils/hostedAccountClient'
+import { isFacetApiError } from '../utils/facetApiErrors'
 import { getHostedApiBaseUrl } from '../utils/hostedApi'
 import { getFacetDeploymentMode, getHostedAccessToken } from '../utils/hostedSession'
 
@@ -36,6 +37,7 @@ export interface HostedAppState {
   selectedWorkspaceId: string | null
   localMigrationSnapshot: FacetWorkspaceSnapshot | null
   lastError: string | null
+  lastErrorCode: string | null
   bootstrap: (options?: { localMigrationSnapshot?: FacetWorkspaceSnapshot | null }) => Promise<void>
   selectWorkspace: (workspaceId: string | null) => void
   refresh: () => Promise<void>
@@ -45,7 +47,7 @@ export interface HostedAppState {
   }) => Promise<FacetHostedWorkspaceSummary>
   renameWorkspace: (workspaceId: string, name: string) => Promise<FacetHostedWorkspaceSummary>
   deleteWorkspace: (workspaceId: string) => Promise<FacetHostedWorkspaceDeleteResponse>
-  reportError: (message: string) => void
+  reportError: (message: string, code?: string | null) => void
   clearError: () => void
 }
 
@@ -104,6 +106,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
   selectedWorkspaceId: null,
   localMigrationSnapshot: null,
   lastError: null,
+  lastErrorCode: null,
 
   bootstrap: async (options = {}) => {
     const deploymentMode = getFacetDeploymentMode()
@@ -118,6 +121,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
         selectedWorkspaceId: null,
         localMigrationSnapshot: null,
         lastError: null,
+        lastErrorCode: null,
       })
       return
     }
@@ -128,6 +132,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
       endpoint: getHostedApiBaseUrl(),
       localMigrationSnapshot: options.localMigrationSnapshot ?? null,
       lastError: null,
+      lastErrorCode: null,
     })
 
     try {
@@ -140,6 +145,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
           workspaces: [],
           selectedWorkspaceId: null,
           lastError: 'Hosted sign-in is required before we can load your account.',
+          lastErrorCode: 'auth_required',
         })
         return
       }
@@ -174,15 +180,19 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
         workspaces: sortedWorkspaces,
         selectedWorkspaceId,
         lastError: null,
+        lastErrorCode: null,
       })
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to bootstrap hosted account.'
+      const errorCode = isFacetApiError(error) ? error.code : null
       set({
-        bootstrapStatus: 'error',
+        bootstrapStatus: errorCode === 'auth_required' ? 'auth-required' : 'error',
         bearerToken: null,
         context: null,
         workspaces: [],
         selectedWorkspaceId: null,
-        lastError: error instanceof Error ? error.message : 'Failed to bootstrap hosted account.',
+        lastError: message,
+        lastErrorCode: errorCode,
       })
     }
   },
@@ -194,6 +204,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
           ? workspaceId
           : state.selectedWorkspaceId,
       lastError: null,
+      lastErrorCode: null,
     }))
   },
 
@@ -223,11 +234,13 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
           current.selectedWorkspaceId,
         ),
         lastError: null,
+        lastErrorCode: null,
       }))
     } catch (error) {
       set({
         lastError:
           error instanceof Error ? error.message : 'Failed to refresh hosted workspace directory.',
+        lastErrorCode: isFacetApiError(error) ? error.code : null,
       })
       throw error
     }
@@ -265,6 +278,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
               }
             : state.context,
           lastError: null,
+          lastErrorCode: null,
         }
       })
 
@@ -274,6 +288,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
       set({
         mutationState: null,
         lastError: message,
+        lastErrorCode: isFacetApiError(error) ? error.code : null,
       })
       throw error
     }
@@ -304,6 +319,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
               }
             : state.context,
           lastError: null,
+          lastErrorCode: null,
         }
       })
 
@@ -313,6 +329,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
       set({
         mutationState: null,
         lastError: message,
+        lastErrorCode: isFacetApiError(error) ? error.code : null,
       })
       throw error
     }
@@ -353,6 +370,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
               }
             : state.context,
           lastError: null,
+          lastErrorCode: null,
         }
       })
 
@@ -362,12 +380,13 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
       set({
         mutationState: null,
         lastError: message,
+        lastErrorCode: isFacetApiError(error) ? error.code : null,
       })
       throw error
     }
   },
 
-  reportError: (message) => set({ lastError: message }),
+  reportError: (message, code = null) => set({ lastError: message, lastErrorCode: code }),
 
-  clearError: () => set({ lastError: null }),
+  clearError: () => set({ lastError: null, lastErrorCode: null }),
 }))

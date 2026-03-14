@@ -6,6 +6,7 @@ import type {
   FacetHostedWorkspaceDirectoryResponse,
   FacetHostedWorkspaceMutationResponse,
 } from '../types/hosted'
+import { readFacetApiError, toFacetApiError } from './facetApiErrors'
 
 const DEFAULT_PROXY_API_KEY = 'facet-local-proxy'
 
@@ -19,16 +20,11 @@ interface HostedAccountClientOptions {
 const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '')
 
 async function readJson<T>(response: Response): Promise<T> {
-  const payload = await response.json()
   if (!response.ok) {
-    const message =
-      payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
-        ? payload.error
-        : `Hosted account API error (${response.status})`
-    throw new Error(message)
+    throw await readFacetApiError(response, 'Hosted account request failed.')
   }
 
-  return payload as T
+  return (await response.json()) as T
 }
 
 function createRequest(options: HostedAccountClientOptions) {
@@ -44,6 +40,8 @@ function createRequest(options: HostedAccountClientOptions) {
         'X-Proxy-API-Key': options.proxyApiKey ?? DEFAULT_PROXY_API_KEY,
         ...(init.headers ?? {}),
       },
+    }).catch((error) => {
+      throw toFacetApiError(error, 'Hosted account request failed.')
     })
 }
 

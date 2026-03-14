@@ -88,4 +88,39 @@ describe('remotePersistenceBackend', () => {
     await expect(backend.loadWorkspaceSnapshot('ws-1')).rejects.toThrow('denied')
     await expect(backend.loadWorkspaceSnapshot('ws-1')).rejects.toThrow(/expected 1, got 999/)
   })
+
+  it('classifies auth and offline failures for hosted recovery UX', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: 'Sign in to load hosted workspaces.',
+            code: 'auth_required',
+          }),
+          {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
+      )
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+
+    const backend = createRemotePersistenceBackend({
+      endpoint: 'http://localhost:9001/api/persistence',
+      bearerToken: 'test-token',
+      fetchFn: fetchFn as typeof fetch,
+    })
+
+    await expect(backend.loadWorkspaceSnapshot('ws-1')).rejects.toMatchObject({
+      name: 'FacetApiError',
+      code: 'auth_required',
+      status: 401,
+    })
+    await expect(backend.loadWorkspaceSnapshot('ws-1')).rejects.toMatchObject({
+      name: 'FacetApiError',
+      code: 'offline',
+      status: 0,
+    })
+  })
 })

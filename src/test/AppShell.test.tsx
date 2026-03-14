@@ -7,6 +7,7 @@ import { AppShell } from '../components/AppShell'
 import { usePersistenceRuntimeStore } from '../persistence/runtime'
 import { useHostedAppStore } from '../store/hostedAppStore'
 import { useUiStore } from '../store/uiStore'
+import { FacetApiError } from '../utils/facetApiErrors'
 import { buildWorkspaceSnapshot } from './fixtures/workspaceSnapshot'
 
 const routerMocks = vi.hoisted(() => ({
@@ -120,11 +121,11 @@ const setPersistenceHydration = (hydrated: boolean, activeWorkspaceId = 'facet-l
 const setHostedStore = (
   overrides: Partial<ReturnType<typeof useHostedAppStore.getState>>,
 ) => {
-  const reportError = vi.fn((message: string) => {
-    useHostedAppStore.setState({ lastError: message })
+  const reportError = vi.fn((message: string, code: string | null = null) => {
+    useHostedAppStore.setState({ lastError: message, lastErrorCode: code })
   })
   const clearError = vi.fn(() => {
-    useHostedAppStore.setState({ lastError: null })
+    useHostedAppStore.setState({ lastError: null, lastErrorCode: null })
   })
 
   useHostedAppStore.setState({
@@ -138,6 +139,7 @@ const setHostedStore = (
     selectedWorkspaceId: 'ws-1',
     localMigrationSnapshot: null,
     lastError: null,
+    lastErrorCode: null,
     bootstrap: vi.fn().mockResolvedValue(undefined),
     selectWorkspace: vi.fn((workspaceId: string | null) => {
       useHostedAppStore.setState({ selectedWorkspaceId: workspaceId })
@@ -275,6 +277,49 @@ describe('AppShell hosted workspace bootstrap', () => {
     expect(screen.queryByText(/workspace: hosted workspace/i)).toBeNull()
     expect(screen.getByRole('alert').textContent).toContain('Remote load failed')
     expect(useHostedAppStore.getState().lastError).toBe('Remote load failed')
+  })
+
+  it('surfaces billing-state bootstrap failures distinctly from generic hosted errors', async () => {
+    setHostedStore({
+      bootstrapStatus: 'error',
+      selectedWorkspaceId: null,
+      workspaces: [],
+      lastError: 'Hosted billing state unavailable (500)',
+      lastErrorCode: 'billing_state_error',
+    })
+
+    render(<AppShell />)
+
+    expect(screen.getByRole('alert').textContent).toContain('Hosted billing state unavailable')
+    expect(screen.getByRole('button', { name: /refresh billing state/i })).toBeTruthy()
+  })
+
+  it('offers session refresh recovery when hosted runtime auth expires', async () => {
+    setHostedStore({})
+    setPersistenceHydration(true, 'ws-previous')
+
+    runtimeMocks.captureLocalWorkspaceSnapshotForMigration.mockResolvedValue(null)
+    runtimeMocks.replacePersistenceRuntime.mockResolvedValue({
+      start: vi.fn().mockRejectedValue(
+        new FacetApiError('Hosted session expired (401)', {
+          status: 401,
+          code: 'auth_required',
+        }),
+      ),
+      flush: vi.fn().mockResolvedValue(undefined),
+      exportWorkspaceSnapshot: vi.fn().mockResolvedValue(buildWorkspaceSnapshot()),
+      importWorkspaceSnapshot: vi.fn().mockResolvedValue(buildWorkspaceSnapshot()),
+      dispose: vi.fn(),
+    })
+
+    render(<AppShell />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('Hosted session expired')
+    })
+
+    expect(screen.getByRole('button', { name: /refresh session/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /backup workspace/i })).toBeTruthy()
   })
 
   it('surfaces migration import failures after create-from-local-data instead of treating them as success', async () => {
