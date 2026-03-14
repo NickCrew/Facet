@@ -6,7 +6,7 @@ async function loadProxyModules() {
   const [
     { createFacetServer },
     { createInMemoryWorkspaceStore },
-    { createInMemoryHostedMembershipStore },
+    { createInMemoryHostedWorkspaceStore },
     { createInMemoryHostedBillingStore },
   ] = await Promise.all([
     // @ts-expect-error runtime-tested local proxy module
@@ -14,7 +14,7 @@ async function loadProxyModules() {
     // @ts-expect-error runtime-tested local proxy module
     import('../../proxy/persistenceApi.js'),
     // @ts-expect-error runtime-tested local proxy module
-    import('../../proxy/hostedAuth.js'),
+    import('../../proxy/hostedWorkspaceStore.js'),
     // @ts-expect-error runtime-tested local proxy module
     import('../../proxy/billingState.js'),
   ])
@@ -22,7 +22,7 @@ async function loadProxyModules() {
   return {
     createFacetServer,
     createInMemoryWorkspaceStore,
-    createInMemoryHostedMembershipStore,
+    createInMemoryHostedWorkspaceStore,
     createInMemoryHostedBillingStore,
   }
 }
@@ -104,30 +104,34 @@ async function startHostedServer(options?: {
     features: string[]
     effectiveThrough: string | null
   } | null
+  includeDefaultWorkspace?: boolean
 }) {
   const {
     createFacetServer,
-    createInMemoryWorkspaceStore,
-    createInMemoryHostedMembershipStore,
+    createInMemoryHostedWorkspaceStore,
     createInMemoryHostedBillingStore,
   } = await loadProxyModules()
-  const store = createInMemoryWorkspaceStore()
   const hosted = await buildHostedAuthFixture()
-  const membershipStore = createInMemoryHostedMembershipStore([
-    {
-      tenantId: 'tenant-1',
-      accountId: 'account-1',
-      userId: 'user-1',
-      email: 'member@example.com',
-      workspaces: [
-        {
-          workspaceId: 'ws-1',
-          role: 'owner',
-          isDefault: true,
-        },
-      ],
-    },
-  ])
+  const includeDefaultWorkspace = options?.includeDefaultWorkspace ?? true
+  const workspaceStore = createInMemoryHostedWorkspaceStore({
+    actors: [
+      {
+        tenantId: 'tenant-1',
+        accountId: 'account-1',
+        userId: 'user-1',
+        email: 'member@example.com',
+        workspaces: includeDefaultWorkspace
+          ? [
+              {
+                workspaceId: 'ws-1',
+                role: 'owner',
+                isDefault: true,
+              },
+            ]
+          : [],
+      },
+    ],
+  })
   const billingStore = createInMemoryHostedBillingStore([
     {
       tenantId: 'tenant-1',
@@ -151,9 +155,8 @@ async function startHostedServer(options?: {
       issuer: 'https://supabase.example/auth/v1',
       audience: 'authenticated',
       jwks: hosted.jwks,
-      membershipStore,
     },
-    persistenceStore: store,
+    hostedWorkspaceStore: workspaceStore,
     billingStore,
     anthropicClient: {
       messages: {
@@ -176,7 +179,7 @@ async function startHostedServer(options?: {
   }
 
   return {
-    store,
+    store: workspaceStore,
     server,
     baseUrl: `http://127.0.0.1:${address.port}`,
     accessToken: await createHostedSessionToken(hosted.privateKey),
@@ -223,6 +226,54 @@ describe('facetServer persistence API', () => {
       },
     })
     expect(unauthorizedWorkspace.status).toBe(403)
+  })
+
+  it('allows wildcard local-mode actors to access arbitrary workspaces', async () => {
+    const { createFacetServer, createInMemoryWorkspaceStore } = await loadProxyModules()
+    const store = createInMemoryWorkspaceStore()
+    const { server } = createFacetServer({
+      allowedOrigins: ['http://localhost:5173'],
+      proxyApiKey: 'proxy-key',
+      persistenceAuthTokens: [
+        {
+          token: 'wildcard-token',
+          tenantId: 'tenant-1',
+          userId: 'user-1',
+          workspaces: ['*'],
+        },
+      ],
+      persistenceStore: store,
+      anthropicClient: {
+        messages: {
+          create: async () => ({ content: [], usage: { input_tokens: 0, output_tokens: 0 } }),
+        },
+      },
+      now: () => '2026-03-11T12:00:00.000Z',
+    })
+    servers.add(server)
+
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', () => resolve())
+    })
+
+    const address = server.address()
+    if (!address || typeof address === 'string') {
+      throw new Error('Failed to bind wildcard test server.')
+    }
+
+    const baseUrl = `http://127.0.0.1:${address.port}`
+    const saveResponse = await fetch(`${baseUrl}/api/persistence/workspaces/any-workspace`, {
+      method: 'PUT',
+      headers: {
+        Authorization: 'Bearer wildcard-token',
+        'Content-Type': 'application/json',
+        Origin: 'http://localhost:5173',
+        'X-Proxy-API-Key': 'proxy-key',
+      },
+      body: JSON.stringify({ snapshot: buildForgedWorkspaceSnapshot() }),
+    })
+
+    expect(saveResponse.status).toBe(200)
   })
 
   it('saves and loads tenant-scoped workspaces with server-owned metadata', async () => {
@@ -365,6 +416,149 @@ describe('facetServer persistence API', () => {
     expect(unauthorizedWorkspace.status).toBe(403)
   })
 
+  it('supports hosted workspace directory create, rename, delete, and account-context sync', async () => {
+    const { server, baseUrl, accessToken } = await startHostedServer({
+      includeDefaultWorkspace: false,
+    })
+    servers.add(server)
+
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      Origin: 'http://localhost:5173',
+      'X-Proxy-API-Key': 'proxy-key',
+    }
+
+    const initialContext = await fetch(`${baseUrl}/api/account/context`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Origin: 'http://localhost:5173',
+        'X-Proxy-API-Key': 'proxy-key',
+      },
+    })
+    await expect(initialContext.json()).resolves.toEqual({
+      context: expect.objectContaining({
+        account: expect.objectContaining({
+          defaultWorkspaceId: null,
+        }),
+        memberships: [],
+      }),
+    })
+
+    const created = await fetch(`${baseUrl}/api/persistence/workspaces`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ name: 'First Hosted Workspace' }),
+    })
+    expect(created.status).toBe(201)
+    const createdBody = await created.json()
+    expect(createdBody.workspace).toEqual(
+      expect.objectContaining({
+        name: 'First Hosted Workspace',
+        revision: 0,
+        isDefault: true,
+        role: 'owner',
+      }),
+    )
+    expect(createdBody.snapshot.workspace.id).toBe(createdBody.workspace.workspaceId)
+
+    const listed = await fetch(`${baseUrl}/api/persistence/workspaces`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Origin: 'http://localhost:5173',
+        'X-Proxy-API-Key': 'proxy-key',
+      },
+    })
+    await expect(listed.json()).resolves.toEqual({
+      workspaces: [createdBody.workspace],
+      actor: expect.objectContaining({
+        tenantId: 'tenant-1',
+        userId: 'user-1',
+        workspaceIds: [createdBody.workspace.workspaceId],
+      }),
+    })
+
+    const renamed = await fetch(
+      `${baseUrl}/api/persistence/workspaces/${createdBody.workspace.workspaceId}`,
+      {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ name: 'Renamed Hosted Workspace' }),
+      },
+    )
+    expect(renamed.status).toBe(200)
+    const renamedBody = await renamed.json()
+    expect(renamedBody.workspace).toEqual(
+      expect.objectContaining({
+        workspaceId: createdBody.workspace.workspaceId,
+        name: 'Renamed Hosted Workspace',
+        revision: 1,
+        isDefault: true,
+      }),
+    )
+    expect(renamedBody.snapshot.workspace.name).toBe('Renamed Hosted Workspace')
+
+    const saved = await fetch(
+      `${baseUrl}/api/persistence/workspaces/${createdBody.workspace.workspaceId}`,
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ snapshot: buildForgedWorkspaceSnapshot() }),
+      },
+    )
+    expect(saved.status).toBe(200)
+    const savedBody = await saved.json()
+    expect(savedBody.snapshot.workspace.revision).toBe(2)
+    expect(savedBody.snapshot.workspace.name).toBe('Incoming Workspace')
+
+    const syncedContext = await fetch(`${baseUrl}/api/account/context`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Origin: 'http://localhost:5173',
+        'X-Proxy-API-Key': 'proxy-key',
+      },
+    })
+    await expect(syncedContext.json()).resolves.toEqual({
+      context: expect.objectContaining({
+        account: expect.objectContaining({
+          defaultWorkspaceId: createdBody.workspace.workspaceId,
+        }),
+        memberships: [
+          {
+            workspaceId: createdBody.workspace.workspaceId,
+            role: 'owner',
+            isDefault: true,
+          },
+        ],
+      }),
+    })
+
+    const deleted = await fetch(
+      `${baseUrl}/api/persistence/workspaces/${createdBody.workspace.workspaceId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Origin: 'http://localhost:5173',
+          'X-Proxy-API-Key': 'proxy-key',
+        },
+      },
+    )
+    expect(deleted.status).toBe(200)
+    await expect(deleted.json()).resolves.toEqual({
+      deletedWorkspaceId: createdBody.workspace.workspaceId,
+      defaultWorkspaceId: null,
+      actor: {
+        tenantId: 'tenant-1',
+        userId: 'user-1',
+        workspaceIds: [],
+      },
+    })
+  })
+
   it('rejects hosted AI requests when the entitlement is missing or inactive', async () => {
     const { server, baseUrl, accessToken } = await startHostedServer()
     servers.add(server)
@@ -431,24 +625,26 @@ describe('facetServer persistence API', () => {
   })
 
   it('fails closed with a billing_state_error when hosted billing state cannot be loaded', async () => {
-    const { createFacetServer, createInMemoryWorkspaceStore, createInMemoryHostedMembershipStore } =
+    const { createFacetServer, createInMemoryHostedWorkspaceStore } =
       await loadProxyModules()
     const hosted = await buildHostedAuthFixture()
-    const membershipStore = createInMemoryHostedMembershipStore([
-      {
-        tenantId: 'tenant-1',
-        accountId: 'account-1',
-        userId: 'user-1',
-        email: 'member@example.com',
-        workspaces: [
-          {
-            workspaceId: 'ws-1',
-            role: 'owner',
-            isDefault: true,
-          },
-        ],
-      },
-    ])
+    const workspaceStore = createInMemoryHostedWorkspaceStore({
+      actors: [
+        {
+          tenantId: 'tenant-1',
+          accountId: 'account-1',
+          userId: 'user-1',
+          email: 'member@example.com',
+          workspaces: [
+            {
+              workspaceId: 'ws-1',
+              role: 'owner',
+              isDefault: true,
+            },
+          ],
+        },
+      ],
+    })
     const { server } = createFacetServer({
       authMode: 'hosted',
       allowedOrigins: ['http://localhost:5173'],
@@ -457,8 +653,8 @@ describe('facetServer persistence API', () => {
         issuer: 'https://supabase.example/auth/v1',
         audience: 'authenticated',
         jwks: hosted.jwks,
-        membershipStore,
       },
+      hostedWorkspaceStore: workspaceStore,
       billingStore: {
         getAccountState: async () => {
           throw new Error('disk read failed')
@@ -467,7 +663,6 @@ describe('facetServer persistence API', () => {
           throw new Error('not implemented')
         },
       },
-      persistenceStore: createInMemoryWorkspaceStore(),
       anthropicClient: {
         messages: {
           create: async () => ({ content: [], usage: { input_tokens: 0, output_tokens: 0 } }),

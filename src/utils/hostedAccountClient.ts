@@ -2,6 +2,9 @@ import type {
   FacetBillingCheckoutSessionResponse,
   FacetBillingCustomerLinkResponse,
   FacetHostedAccountContextResponse,
+  FacetHostedWorkspaceDeleteResponse,
+  FacetHostedWorkspaceDirectoryResponse,
+  FacetHostedWorkspaceMutationResponse,
 } from '../types/hosted'
 
 const DEFAULT_PROXY_API_KEY = 'facet-local-proxy'
@@ -72,4 +75,53 @@ export async function createHostedCheckoutSession(
     body: JSON.stringify({}),
   })
   return readJson<FacetBillingCheckoutSessionResponse>(response)
+}
+
+export async function listHostedWorkspaces(
+  options: HostedAccountClientOptions,
+): Promise<FacetHostedWorkspaceDirectoryResponse> {
+  const response = await createRequest(options)('/api/persistence/workspaces', {
+    method: 'GET',
+  })
+  return readJson<FacetHostedWorkspaceDirectoryResponse>(response)
+}
+
+export async function createHostedWorkspace(
+  options: HostedAccountClientOptions,
+  input: {
+    name?: string
+    workspaceId?: string
+  } = {},
+): Promise<FacetHostedWorkspaceMutationResponse> {
+  const response = await createRequest(options)('/api/persistence/workspaces', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+  return readJson<FacetHostedWorkspaceMutationResponse>(response)
+}
+
+export async function renameHostedWorkspace(
+  options: HostedAccountClientOptions,
+  workspaceId: string,
+  name: string,
+): Promise<FacetHostedWorkspaceMutationResponse> {
+  const response = await createRequest(
+    options,
+  )(`/api/persistence/workspaces/${encodeURIComponent(workspaceId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  })
+  return readJson<FacetHostedWorkspaceMutationResponse>(response)
+}
+
+export async function deleteHostedWorkspace(
+  options: HostedAccountClientOptions,
+  workspaceId: string,
+): Promise<FacetHostedWorkspaceDeleteResponse> {
+  const response = await createRequest(
+    options,
+  )(`/api/persistence/workspaces/${encodeURIComponent(workspaceId)}`, {
+    method: 'DELETE',
+  })
+  return readJson<FacetHostedWorkspaceDeleteResponse>(response)
 }

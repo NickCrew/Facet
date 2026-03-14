@@ -47,7 +47,9 @@ function normalizeHostedActorRecord(value) {
     ? value.workspaces.map(normalizeWorkspaceMembership).filter(Boolean)
     : []
 
-  if (!tenantId || !accountId || !userId || !email || workspaces.length === 0) {
+  // New hosted accounts may authenticate before their first workspace exists,
+  // so zero-workspace actors are valid during workspace bootstrap.
+  if (!tenantId || !accountId || !userId || !email) {
     return null
   }
 
@@ -126,6 +128,10 @@ export function createHostedSessionActorResolver(options) {
   const jwkSet = resolveJwkSet(options)
 
   return async (req) => {
+    if (req._facetHostedActor) {
+      return req._facetHostedActor
+    }
+
     const token = getAuthorizationToken(req)
     if (!token) {
       throw new PersistenceAuthError(401, 'Missing hosted session token.')
@@ -156,7 +162,7 @@ export function createHostedSessionActorResolver(options) {
       throw new PersistenceAuthError(403, 'Hosted session token does not match the provisioned Facet user.')
     }
 
-    return {
+    const resolvedActor = {
       tenantId: actor.tenantId,
       userId: actor.userId,
       workspaces: actor.workspaces.map((workspace) => workspace.workspaceId),
@@ -165,5 +171,8 @@ export function createHostedSessionActorResolver(options) {
       email: actor.email,
       authMode: 'hosted',
     }
+
+    req._facetHostedActor = resolvedActor
+    return resolvedActor
   }
 }

@@ -30,11 +30,11 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`Allowed origins: ${ALLOWED_ORIGINS.join(', ')}`)
   console.log(`Auth mode: ${AUTH_MODE}`)
   console.log(`Proxy auth: ${PROXY_API_KEY ? 'configured' : 'NOT SET'}`)
-  console.log('Persistence API: GET/PUT /api/persistence/workspaces/:workspaceId')
+  console.log('Persistence API: GET/POST /api/persistence/workspaces and GET/PUT/PATCH/DELETE /api/persistence/workspaces/:workspaceId')
   if (AUTH_MODE === 'hosted') {
     console.log(
       `Hosted auth: ${
-        process.env.SUPABASE_JWKS_URL && process.env.HOSTED_MEMBERSHIP_FILE
+        process.env.SUPABASE_JWKS_URL && process.env.HOSTED_WORKSPACE_FILE
           ? 'configured'
           : 'INCOMPLETE'
       }`,

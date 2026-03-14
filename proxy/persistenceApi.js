@@ -125,7 +125,34 @@ export function createTokenActorResolver(authTokens) {
 }
 
 function actorCanAccessWorkspace(actor, workspaceId) {
-  return actor.workspaces.includes('*') || actor.workspaces.includes(workspaceId)
+  if (Array.isArray(actor.workspaces) && actor.workspaces.includes('*')) {
+    return true
+  }
+
+  const workspaceIds = actorWorkspaceIds(actor)
+  return workspaceIds.includes(workspaceId)
+}
+
+function actorCanManageWorkspace(actor, workspaceId) {
+  if (!Array.isArray(actor.workspaceMemberships)) {
+    // Local-mode bearer tokens imply owner access to their configured workspaces.
+    return actorCanAccessWorkspace(actor, workspaceId)
+  }
+
+  return actor.workspaceMemberships.some(
+    (membership) =>
+      membership.workspaceId === workspaceId && membership.role === 'owner',
+  )
+}
+
+function actorWorkspaceIds(actor) {
+  if (Array.isArray(actor.workspaceMemberships)) {
+    return actor.workspaceMemberships.map((membership) => membership.workspaceId)
+  }
+
+  return Array.isArray(actor.workspaces)
+    ? actor.workspaces.filter((workspaceId) => workspaceId !== '*')
+    : []
 }
 
 function assertValidArtifactPayload(artifactType, payload) {
@@ -285,6 +312,44 @@ function normalizeWorkspaceSnapshot(snapshot, actor, workspaceId, savedAt, curre
   }
 }
 
+function validateWorkspaceNameInput(value) {
+  if (typeof value !== 'string') {
+    throw new Error('Workspace name must be a string.')
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    throw new Error('Workspace name must not be empty.')
+  }
+
+  if (trimmed.length > 200) {
+    throw new Error('Workspace name must be 200 characters or fewer.')
+  }
+
+  return trimmed
+}
+
+function validateWorkspaceIdInput(value) {
+  if (typeof value !== 'string') {
+    throw new Error('Workspace id must be a string.')
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    throw new Error('Workspace id must not be empty.')
+  }
+
+  if (!/^[a-z0-9-]{1,64}$/i.test(trimmed)) {
+    throw new Error('Workspace id must use letters, numbers, and hyphens only.')
+  }
+
+  return trimmed
+}
+
+function workspaceMutationErrorStatus(error) {
+  return error?.name === 'WorkspaceStoreValidationError' ? 400 : 500
+}
+
 function extractWorkspaceId(req, routePrefix) {
   const url = new URL(req.url ?? '/', 'http://localhost')
   if (!url.pathname.startsWith(routePrefix)) {
@@ -296,15 +361,32 @@ function extractWorkspaceId(req, routePrefix) {
 }
 
 export function createPersistenceApi({ actorResolver, store, now = () => new Date().toISOString() }) {
+  const collectionRoute = '/api/persistence/workspaces'
   const routePrefix = '/api/persistence/workspaces/'
+
+  const actorPayload = (actor) => ({
+    tenantId: actor.tenantId,
+    userId: actor.userId,
+    workspaceIds: actorWorkspaceIds(actor),
+  })
 
   return {
     canHandle(req) {
       const url = new URL(req.url ?? '/', 'http://localhost')
-      return (
-        (req.method === 'GET' || req.method === 'PUT') &&
-        url.pathname.startsWith(routePrefix)
-      )
+      if (url.pathname === collectionRoute) {
+        return req.method === 'GET' || req.method === 'POST'
+      }
+
+      if (url.pathname.startsWith(routePrefix)) {
+        return (
+          req.method === 'GET' ||
+          req.method === 'PUT' ||
+          req.method === 'PATCH' ||
+          req.method === 'DELETE'
+        )
+      }
+
+      return false
     },
 
     async handle(req, res, readBody, sendJson) {
@@ -325,6 +407,76 @@ export function createPersistenceApi({ actorResolver, store, now = () => new Dat
         return
       }
 
+      const url = new URL(req.url ?? '/', 'http://localhost')
+
+      if (url.pathname === collectionRoute) {
+        if (req.method === 'GET') {
+          if (typeof store.listWorkspacesForActor !== 'function') {
+            sendJson(res, 405, { error: 'Workspace directory listing is not supported by this backend.' })
+            return
+          }
+
+          const workspaces = await store.listWorkspacesForActor(actor)
+          sendJson(res, 200, {
+            workspaces,
+            actor: actorPayload(actor),
+          })
+          return
+        }
+
+        if (req.method === 'POST') {
+          if (typeof store.createWorkspace !== 'function') {
+            sendJson(res, 405, { error: 'Workspace creation is not supported by this backend.' })
+            return
+          }
+
+          let body
+          try {
+            body = await readBody(req)
+          } catch (error) {
+            sendJson(res, 400, { error: error instanceof Error ? error.message : 'Invalid JSON body.' })
+            return
+          }
+
+          try {
+            const created = await store.createWorkspace(
+              actor,
+              {
+                name:
+                  body?.name === undefined
+                    ? undefined
+                    : validateWorkspaceNameInput(body.name),
+                workspaceId:
+                  body?.workspaceId === undefined
+                    ? undefined
+                    : validateWorkspaceIdInput(body.workspaceId),
+              },
+              now(),
+            )
+            const refreshedActor =
+              typeof store.getActor === 'function'
+                ? (await store.getActor(actor.userId)) ?? actor
+                : actor
+
+            sendJson(res, 201, {
+              ...created,
+              actor: actorPayload(refreshedActor),
+            })
+          } catch (error) {
+            if (!(error?.name === 'WorkspaceStoreValidationError')) {
+              console.error('[proxy] workspace_create_error', error)
+            }
+            sendJson(res, workspaceMutationErrorStatus(error), {
+              error: error instanceof Error ? error.message : 'Failed to create workspace.',
+            })
+          }
+          return
+        }
+
+        sendJson(res, 405, { error: 'Method not allowed for workspace directory route.' })
+        return
+      }
+
       const workspaceId = extractWorkspaceId(req, routePrefix)
       if (!workspaceId) {
         sendJson(res, 404, { error: 'Workspace route not found.' })
@@ -337,7 +489,7 @@ export function createPersistenceApi({ actorResolver, store, now = () => new Dat
       }
 
       if (req.method === 'GET') {
-        const snapshot = store.loadWorkspace(actor.tenantId, workspaceId)
+        const snapshot = await store.loadWorkspace(actor.tenantId, workspaceId)
         if (!snapshot) {
           sendJson(res, 404, { error: 'Workspace snapshot not found.' })
           return
@@ -345,23 +497,111 @@ export function createPersistenceApi({ actorResolver, store, now = () => new Dat
 
         sendJson(res, 200, {
           snapshot,
-          actor: {
-            tenantId: actor.tenantId,
-            userId: actor.userId,
-            workspaceIds: actor.workspaces,
-          },
+          actor: actorPayload(actor),
         })
         return
       }
 
-      const body = await readBody(req)
+      if (req.method === 'PATCH') {
+        if (!actorCanManageWorkspace(actor, workspaceId)) {
+          sendJson(res, 403, { error: 'Workspace rename requires owner access.' })
+          return
+        }
+        if (typeof store.renameWorkspace !== 'function') {
+          sendJson(res, 405, { error: 'Workspace rename is not supported by this backend.' })
+          return
+        }
+
+        let body
+        try {
+          body = await readBody(req)
+        } catch (error) {
+          sendJson(res, 400, { error: error instanceof Error ? error.message : 'Invalid JSON body.' })
+          return
+        }
+
+        try {
+          const renamed = await store.renameWorkspace(
+            actor,
+            workspaceId,
+            validateWorkspaceNameInput(body?.name),
+            now(),
+          )
+          sendJson(res, 200, {
+            ...renamed,
+            actor: actorPayload(actor),
+          })
+        } catch (error) {
+          if (!(error?.name === 'WorkspaceStoreValidationError')) {
+            console.error('[proxy] workspace_rename_error', error)
+          }
+          sendJson(res, workspaceMutationErrorStatus(error), {
+            error: error instanceof Error ? error.message : 'Failed to rename workspace.',
+          })
+        }
+        return
+      }
+
+      if (req.method === 'DELETE') {
+        if (!actorCanManageWorkspace(actor, workspaceId)) {
+          sendJson(res, 403, { error: 'Workspace deletion requires owner access.' })
+          return
+        }
+        if (typeof store.deleteWorkspace !== 'function') {
+          sendJson(res, 405, { error: 'Workspace deletion is not supported by this backend.' })
+          return
+        }
+
+        try {
+          const deleted = await store.deleteWorkspace(actor, workspaceId)
+          const refreshedActor =
+            typeof store.getActor === 'function'
+              ? (await store.getActor(actor.userId)) ?? actor
+              : actor
+
+          sendJson(res, 200, {
+            ...deleted,
+            actor: actorPayload(refreshedActor),
+          })
+        } catch (error) {
+          if (!(error?.name === 'WorkspaceStoreValidationError')) {
+            console.error('[proxy] workspace_delete_error', error)
+          }
+          sendJson(res, workspaceMutationErrorStatus(error), {
+            error: error instanceof Error ? error.message : 'Failed to delete workspace.',
+          })
+        }
+        return
+      }
+
+      let body
+      try {
+        body = await readBody(req)
+      } catch (error) {
+        sendJson(res, 400, { error: error instanceof Error ? error.message : 'Invalid JSON body.' })
+        return
+      }
+
       const snapshot = body?.snapshot
       if (!snapshot || typeof snapshot !== 'object') {
         sendJson(res, 400, { error: 'Missing or invalid "snapshot" object.' })
         return
       }
 
-      const currentSnapshot = store.loadWorkspace(actor.tenantId, workspaceId)
+      const currentSnapshot = await store.loadWorkspace(actor.tenantId, workspaceId)
+      const incomingWorkspaceName =
+        typeof snapshot.workspace?.name === 'string'
+          ? snapshot.workspace.name.trim()
+          : null
+      if (
+        currentSnapshot &&
+        incomingWorkspaceName &&
+        incomingWorkspaceName !== currentSnapshot.workspace.name &&
+        !actorCanManageWorkspace(actor, workspaceId)
+      ) {
+        sendJson(res, 403, { error: 'Workspace rename requires owner access.' })
+        return
+      }
       const savedAt = now()
       const normalized = normalizeWorkspaceSnapshot(
         snapshot,
@@ -378,14 +618,10 @@ export function createPersistenceApi({ actorResolver, store, now = () => new Dat
         return
       }
 
-      const savedSnapshot = store.saveWorkspace(normalized)
+      const savedSnapshot = await store.saveWorkspace(normalized)
       sendJson(res, 200, {
         snapshot: savedSnapshot,
-        actor: {
-          tenantId: actor.tenantId,
-          userId: actor.userId,
-          workspaceIds: actor.workspaces,
-        },
+        actor: actorPayload(actor),
       })
     },
   }

@@ -1,0 +1,117 @@
+{
+  "actors": [
+    {
+      "tenantId": "tenant-1",
+      "accountId": "account-1",
+      "userId": "user-1",
+      "email": "owner@example.com",
+      "workspaces": [
+        {
+          "workspaceId": "workspace-1",
+          "role": "owner",
+          "isDefault": true
+        }
+      ]
+    }
+  ],
+  "workspaces": [
+    {
+      "tenantId": "tenant-1",
+      "accountId": "account-1",
+      "workspaceId": "workspace-1",
+      "name": "Facet Workspace",
+      "revision": 0,
+      "createdAt": "2026-03-13T12:00:00.000Z",
+      "updatedAt": "2026-03-13T12:00:00.000Z"
+    }
+  ],
+  "snapshots": [
+    {
+      "snapshotVersion": 1,
+      "tenantId": "tenant-1",
+      "userId": "user-1",
+      "workspace": {
+        "id": "workspace-1",
+        "name": "Facet Workspace",
+        "revision": 0,
+        "updatedAt": "2026-03-13T12:00:00.000Z"
+      },
+      "artifacts": {
+        "resume": {
+          "artifactId": "workspace-1:resume",
+          "artifactType": "resume",
+          "workspaceId": "workspace-1",
+          "schemaVersion": 1,
+          "revision": 0,
+          "updatedAt": "2026-03-13T12:00:00.000Z",
+          "payload": {
+            "version": 1,
+            "meta": {
+              "name": "",
+              "email": "",
+              "phone": "",
+              "location": "",
+              "links": []
+            },
+            "target_lines": [],
+            "profiles": [],
+            "skill_groups": [],
+            "roles": [],
+            "projects": [],
+            "education": [],
+            "certifications": [],
+            "vectors": [],
+            "presets": []
+          }
+        },
+        "pipeline": {
+          "artifactId": "workspace-1:pipeline",
+          "artifactType": "pipeline",
+          "workspaceId": "workspace-1",
+          "schemaVersion": 1,
+          "revision": 0,
+          "updatedAt": "2026-03-13T12:00:00.000Z",
+          "payload": {
+            "entries": []
+          }
+        },
+        "prep": {
+          "artifactId": "workspace-1:prep",
+          "artifactType": "prep",
+          "workspaceId": "workspace-1",
+          "schemaVersion": 1,
+          "revision": 0,
+          "updatedAt": "2026-03-13T12:00:00.000Z",
+          "payload": {
+            "decks": []
+          }
+        },
+        "coverLetters": {
+          "artifactId": "workspace-1:coverLetters",
+          "artifactType": "coverLetters",
+          "workspaceId": "workspace-1",
+          "schemaVersion": 1,
+          "revision": 0,
+          "updatedAt": "2026-03-13T12:00:00.000Z",
+          "payload": {
+            "templates": []
+          }
+        },
+        "research": {
+          "artifactId": "workspace-1:research",
+          "artifactType": "research",
+          "workspaceId": "workspace-1",
+          "schemaVersion": 1,
+          "revision": 0,
+          "updatedAt": "2026-03-13T12:00:00.000Z",
+          "payload": {
+            "profile": null,
+            "requests": [],
+            "runs": []
+          }
+        }
+      },
+      "exportedAt": "2026-03-13T12:00:00.000Z"
+    }
+  ]
+}

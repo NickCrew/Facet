@@ -92,8 +92,12 @@ Phase 2 contract:
 
 The current proxy exposes:
 
+- `GET /api/persistence/workspaces`
+- `POST /api/persistence/workspaces`
 - `GET /api/persistence/workspaces/:workspaceId`
 - `PUT /api/persistence/workspaces/:workspaceId`
+- `PATCH /api/persistence/workspaces/:workspaceId`
+- `DELETE /api/persistence/workspaces/:workspaceId`
 
 In local auth mode these routes require:
 
@@ -114,6 +118,14 @@ Server-side auth can now run in two modes:
 In both modes, the server checks workspace membership on the server. The request
 body snapshot may suggest tenant, user, or workspace identity values, but the
 server rewrites those to its own authoritative scope before saving.
+
+Hosted workspace directory behavior now lives on the server:
+
+- list/create/rename/delete run through server-side membership checks
+- owner-only mutations update the authoritative default-workspace membership when needed
+- hosted saves still rewrite `tenantId`, `userId`, `revision`, and `updatedAt` on the server
+- local hosted development can back this contract with `HOSTED_WORKSPACE_FILE`, a durable
+  file-backed directory that stores actors, workspace summaries, and snapshots together
 
 ## Validation scope
 

@@ -21,9 +21,12 @@ import {
   createInMemoryHostedBillingStore,
 } from './billingState.js'
 import {
-  createFileHostedMembershipStore,
   createHostedSessionActorResolver,
 } from './hostedAuth.js'
+import {
+  createFileHostedWorkspaceStore,
+  createInMemoryHostedWorkspaceStore,
+} from './hostedWorkspaceStore.js'
 
 const DEFAULT_MODEL = 'claude-sonnet-4-20250514'
 const DEFAULT_PROXY_API_KEY = 'facet-local-proxy'
@@ -144,13 +147,23 @@ export function createFacetServer(options = {}) {
     ...Object.values(MODEL_ALIASES),
   ])
   const authMode = options.authMode === 'hosted' ? 'hosted' : 'local'
+  const hostedWorkspaceStore =
+    authMode === 'hosted'
+      ? (options.hostedWorkspaceStore ?? createInMemoryHostedWorkspaceStore())
+      : null
   const persistenceAuthTokens = options.persistenceAuthTokens ?? DEFAULT_PERSISTENCE_AUTH_TOKENS
-  const persistenceStore = options.persistenceStore ?? createInMemoryWorkspaceStore()
+  const persistenceStore =
+    options.persistenceStore ??
+    (authMode === 'hosted' ? hostedWorkspaceStore : createInMemoryWorkspaceStore())
   const persistenceActorResolver =
     options.persistenceActorResolver ??
     (
       authMode === 'hosted'
-        ? createHostedSessionActorResolver(options.hostedAuth ?? {})
+        ? createHostedSessionActorResolver({
+            ...(options.hostedAuth ?? {}),
+            membershipStore:
+              options.hostedAuth?.membershipStore ?? hostedWorkspaceStore,
+          })
         : createTokenActorResolver(persistenceAuthTokens)
     )
   const persistenceApi = createPersistenceApi({
@@ -199,7 +212,7 @@ export function createFacetServer(options = {}) {
       res.setHeader('Access-Control-Allow-Origin', origin)
       res.setHeader('Vary', 'Origin')
     }
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
     res.setHeader(
       'Access-Control-Allow-Headers',
       'Authorization, Content-Type, X-API-Key, X-Proxy-API-Key',
@@ -266,8 +279,16 @@ export function createFacetServer(options = {}) {
         return
       }
 
+      if (feature !== undefined && feature !== null && !isFacetAiFeatureKey(feature)) {
+        sendJson(res, 400, {
+          error: 'AI requests must declare a valid feature when provided.',
+          code: 'invalid_ai_feature',
+        })
+        return
+      }
+
       if (authMode === 'hosted') {
-        if (!isFacetAiFeatureKey(feature)) {
+        if (feature === undefined || feature === null) {
           sendJson(res, 400, {
             error: 'Hosted AI requests must declare a valid feature.',
             code: 'invalid_ai_feature',
@@ -299,6 +320,14 @@ export function createFacetServer(options = {}) {
           sendJson(res, 403, {
             error: 'Hosted AI access requires a tenant-scoped account context.',
             code: 'incomplete_actor',
+          })
+          return
+        }
+
+        if (!billingStore) {
+          sendJson(res, 500, {
+            error: 'Hosted billing state is unavailable for this AI request.',
+            code: 'billing_state_error',
           })
           return
         }
@@ -388,6 +417,10 @@ export function createEnvFacetServer(env = process.env) {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean)
+  const hostedWorkspaceStore =
+    authMode === 'hosted'
+      ? createFileHostedWorkspaceStore(env.HOSTED_WORKSPACE_FILE)
+      : undefined
   const hostedAuth = authMode === 'hosted'
     ? {
         issuer:
@@ -399,7 +432,7 @@ export function createEnvFacetServer(env = process.env) {
           ),
         audience: env.SUPABASE_JWT_AUDIENCE ?? 'authenticated',
         jwksUrl: env.SUPABASE_JWKS_URL,
-        membershipStore: createFileHostedMembershipStore(env.HOSTED_MEMBERSHIP_FILE),
+        membershipStore: hostedWorkspaceStore,
       }
     : undefined
   const billingBaseUrl =
@@ -426,6 +459,7 @@ export function createEnvFacetServer(env = process.env) {
       authMode === 'hosted'
         ? undefined
         : parsePersistenceAuthTokens(env.PERSISTENCE_AUTH_TOKENS),
+    hostedWorkspaceStore,
     hostedAuth,
     billingStore,
     stripeSecretKey: env.STRIPE_SECRET_KEY,

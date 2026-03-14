@@ -114,7 +114,7 @@ These values belong on the Fly app and must never be shipped to the browser.
 | `SUPABASE_JWT_ISSUER` | yes | Expected issuer for hosted auth tokens |
 | `SUPABASE_JWT_AUDIENCE` | yes | Expected audience for hosted auth tokens |
 | `SUPABASE_SERVICE_ROLE_KEY` | yes | Service credential for trusted server-side data operations |
-| `HOSTED_MEMBERSHIP_FILE` | transitional hosted auth | Durable file-backed workspace membership directory until the hosted workspace backend lands |
+| `HOSTED_WORKSPACE_FILE` | transitional hosted persistence/auth | Durable file-backed actor, workspace, and snapshot directory for local hosted development |
 | `HOSTED_BILLING_FILE` | transitional hosted billing | Durable file-backed billing and entitlement directory until the hosted billing backend lands |
 | `STRIPE_SECRET_KEY` | yes | Stripe API secret for the current environment |
 | `STRIPE_PRICE_AI_MONTHLY` | yes | Hosted Wave 1 paid AI plan price identifier |
@@ -136,7 +136,7 @@ Rules:
 - `PROXY_API_KEY` and `PERSISTENCE_AUTH_TOKENS` must not be part of hosted production auth
 - hosted identity comes from verified Supabase session tokens, not static bearer token maps
 - server code must rewrite tenant, user, and workspace identity from trusted auth context before save
-- when `FACET_AUTH_MODE=hosted`, membership comes from `HOSTED_MEMBERSHIP_FILE` until the hosted workspace directory moves into the durable backend layer
+- when `FACET_AUTH_MODE=hosted`, local hosted development can use `HOSTED_WORKSPACE_FILE` as the durable actor and workspace directory while keeping the same authenticated browser/API contract
 - hosted billing and entitlement state come from `HOSTED_BILLING_FILE` until the durable billing backend replaces the file-backed transition layer
 
 ## Secret Ownership
@@ -222,7 +222,7 @@ Wave 1 follow-through required from this contract:
 - `TASK-75` locks the server-side auth, tenant, workspace, and entitlement model
 - `TASK-76` replaces static token maps with hosted auth and a durable membership directory
 - `TASK-77` and `TASK-78` move AI gating onto Stripe-reconciled entitlements
-- `TASK-79` replaces in-memory hosted persistence with Postgres-backed storage
+- `TASK-79` replaces in-memory hosted persistence with a durable hosted workspace store and directory APIs
 
 ## Verification Checklist
 - provider set is locked in a repo-tracked document

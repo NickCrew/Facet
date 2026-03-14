@@ -43,6 +43,12 @@ export interface FacetWorkspaceMembership {
   isDefault: boolean
 }
 
+export interface FacetHostedWorkspaceSummary extends FacetWorkspaceMembership {
+  name: string
+  revision: number
+  updatedAt: string
+}
+
 export interface FacetBillingCustomer {
   provider: 'stripe'
   customerId: string
@@ -85,6 +91,28 @@ export interface FacetBillingCheckoutSessionResponse {
   sessionId: string
   url: string
   billingCustomer: FacetBillingCustomer
+}
+
+export interface FacetHostedActorPayload {
+  tenantId: string
+  userId: string
+  workspaceIds: string[]
+}
+
+export interface FacetHostedWorkspaceDirectoryResponse {
+  workspaces: FacetHostedWorkspaceSummary[]
+  actor?: FacetHostedActorPayload
+}
+
+export interface FacetHostedWorkspaceMutationResponse {
+  workspace: FacetHostedWorkspaceSummary
+  actor?: FacetHostedActorPayload
+}
+
+export interface FacetHostedWorkspaceDeleteResponse {
+  deletedWorkspaceId: string
+  defaultWorkspaceId: string | null
+  actor?: FacetHostedActorPayload
 }
 
 export interface FacetSelfHostedAiConfig {
