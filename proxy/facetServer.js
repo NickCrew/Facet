@@ -1,4 +1,7 @@
 import { createServer } from 'node:http'
+import { createReadStream } from 'node:fs'
+import { stat } from 'node:fs/promises'
+import { extname, resolve } from 'node:path'
 import Anthropic from '@anthropic-ai/sdk'
 import {
   createInMemoryWorkspaceStore,
@@ -31,6 +34,25 @@ import {
 const DEFAULT_MODEL = 'claude-sonnet-4-20250514'
 const DEFAULT_PROXY_API_KEY = 'facet-local-proxy'
 const DEFAULT_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
+const TEXT_UTF8_EXTENSIONS = new Set(['.css', '.html', '.js', '.json', '.map', '.svg', '.txt', '.xml'])
+const STATIC_CONTENT_TYPES = {
+  '.css': 'text/css',
+  '.gif': 'image/gif',
+  '.html': 'text/html',
+  '.ico': 'image/x-icon',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.js': 'text/javascript',
+  '.json': 'application/json',
+  '.map': 'application/json',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.txt': 'text/plain',
+  '.wasm': 'application/wasm',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.xml': 'application/xml',
+}
 
 const MODEL_ALIASES = {
   haiku: 'claude-haiku-4-5-20251001',
@@ -131,12 +153,86 @@ function sendJson(res, status, data) {
   res.end(JSON.stringify(data))
 }
 
+function getStaticContentType(filePath) {
+  const extension = extname(filePath).toLowerCase()
+  const baseType = STATIC_CONTENT_TYPES[extension] ?? 'application/octet-stream'
+  if (TEXT_UTF8_EXTENSIONS.has(extension)) {
+    return `${baseType}; charset=utf-8`
+  }
+  return baseType
+}
+
+async function resolveStaticFilePath(staticDir, pathname) {
+  const decodedPath = decodeURIComponent(pathname)
+  const requestedPath = decodedPath === '/' ? '/index.html' : decodedPath
+  const candidatePath = resolve(staticDir, `.${requestedPath}`)
+  const staticRoot = resolve(staticDir)
+
+  if (!candidatePath.startsWith(staticRoot)) {
+    return null
+  }
+
+  try {
+    const fileStats = await stat(candidatePath)
+    if (fileStats.isFile()) {
+      return candidatePath
+    }
+  } catch {}
+
+  if (extname(candidatePath)) {
+    return null
+  }
+
+  return resolve(staticRoot, 'index.html')
+}
+
+async function tryServeStatic(staticDir, req, res, url) {
+  if (!staticDir || (req.method !== 'GET' && req.method !== 'HEAD')) {
+    return false
+  }
+
+  if (url.pathname.startsWith('/api/')) {
+    return false
+  }
+
+  const filePath = await resolveStaticFilePath(staticDir, url.pathname)
+  if (!filePath) {
+    return false
+  }
+
+  const headers = {
+    'Content-Type': getStaticContentType(filePath),
+  }
+
+  if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/fonts/')) {
+    headers['Cache-Control'] = 'public, immutable, max-age=31536000'
+  } else {
+    headers['Cache-Control'] = 'no-cache'
+  }
+
+  res.writeHead(200, headers)
+  if (req.method === 'HEAD') {
+    res.end()
+    return true
+  }
+
+  await new Promise((resolveRequest, rejectRequest) => {
+    const stream = createReadStream(filePath)
+    stream.on('error', rejectRequest)
+    stream.on('end', resolveRequest)
+    stream.pipe(res)
+  })
+
+  return true
+}
+
 export function createFacetServer(options = {}) {
   const allowedOrigins = options.allowedOrigins ?? DEFAULT_ALLOWED_ORIGINS
   const defaultModel = options.defaultModel ?? DEFAULT_MODEL
   const defaultMaxTokens = options.defaultMaxTokens ?? 4096
   const maxRequestTokens = options.maxRequestTokens ?? defaultMaxTokens
   const maxBodyBytes = options.maxBodyBytes ?? 1048576
+  const staticDir = options.staticDir ? resolve(options.staticDir) : null
   const defaultTemperature = options.defaultTemperature
   const defaultThinkingBudget = options.defaultThinkingBudget ?? 0
   const proxyApiKey = options.proxyApiKey ?? DEFAULT_PROXY_API_KEY
@@ -220,6 +316,12 @@ export function createFacetServer(options = {}) {
   }
 
   const server = createServer(async (req, res) => {
+    const url = new URL(req.url ?? '/', 'http://localhost')
+
+    if (await tryServeStatic(staticDir, req, res, url)) {
+      return
+    }
+
     setCors(req, res)
 
     if (!req.headers.origin || !isAllowedOrigin(req.headers.origin)) {
@@ -260,7 +362,6 @@ export function createFacetServer(options = {}) {
         return
       }
 
-      const url = new URL(req.url ?? '/', 'http://localhost')
       if (url.pathname !== '/') {
         sendJson(res, 404, { error: 'Route not found' })
         return
@@ -464,6 +565,7 @@ export function createEnvFacetServer(env = process.env) {
     billingStore,
     stripeSecretKey: env.STRIPE_SECRET_KEY,
     stripePriceId: env.STRIPE_PRICE_AI_MONTHLY,
+    staticDir: env.FACET_STATIC_DIR,
     billingSuccessUrl:
       env.STRIPE_CHECKOUT_SUCCESS_URL ??
       `${billingBaseUrl.replace(/\/+$/, '')}/settings/billing/success`,

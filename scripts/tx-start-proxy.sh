@@ -10,10 +10,4 @@ if [[ -s "$NVM_DIR/nvm.sh" ]]; then
 fi
 
 cd "$ROOT_DIR/proxy"
-
-if [[ ! -f .env ]]; then
-  echo "proxy/.env is missing. Create proxy/.env from proxy/.env.example before starting the proxy." >&2
-  exit 1
-fi
-
 pnpm run dev

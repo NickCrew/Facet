@@ -1,6 +1,7 @@
 import { createEnvFacetServer, formatModelAliases } from './facetServer.js'
 
 // ── Configuration (all overridable via .env) ────────────────────────
+const HOST = process.env.HOST ?? '127.0.0.1'
 const PORT = parseInt(process.env.PORT ?? '9001', 10)
 const DEFAULT_MODEL = process.env.MODEL ?? 'claude-sonnet-4-20250514'
 const DEFAULT_MAX_TOKENS = parseInt(process.env.MAX_TOKENS ?? '4096', 10)
@@ -20,8 +21,8 @@ const USING_DEFAULT_PERSISTENCE_AUTH_TOKENS =
 
 const { server } = createEnvFacetServer()
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`Facet AI proxy listening on http://localhost:${PORT}`)
+server.listen(PORT, HOST, () => {
+  console.log(`Facet AI proxy listening on http://${HOST}:${PORT}`)
   console.log(`Default model: ${DEFAULT_MODEL}`)
   console.log(`Aliases: ${formatModelAliases()}`)
   console.log(`Max tokens: ${DEFAULT_MAX_TOKENS}`)
@@ -45,6 +46,9 @@ server.listen(PORT, '127.0.0.1', () => {
     )
   }
   console.log(`API key: ${process.env.ANTHROPIC_API_KEY ? 'configured' : 'NOT SET'}`)
+  if (process.env.FACET_STATIC_DIR) {
+    console.log(`Static app dir: ${process.env.FACET_STATIC_DIR}`)
+  }
   if (USING_DEFAULT_PROXY_API_KEY) {
     console.warn('[proxy] Using default proxy API key. Set PROXY_API_KEY before sharing this server.')
   }

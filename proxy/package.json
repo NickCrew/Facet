@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --env-file=.env server.js",
-    "dev": "node --env-file=.env --watch server.js"
+    "start": "node bootstrap.js",
+    "dev": "node --watch bootstrap.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
