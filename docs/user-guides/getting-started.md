@@ -17,7 +17,7 @@ For full project details, see the [README](../../README.md).
 
 ## Prerequisites
 
-- Node.js 20.19.0 or later and npm.
+- Node.js 20.19.0 or later and pnpm.
 - A modern browser (Chrome, Firefox, Safari, or Edge).
 
 > **Self-hosted setup**: Facet is a client-side application. Clone the repository,
@@ -28,8 +28,9 @@ For full project details, see the [README](../../README.md).
 > cd Facet
 > # optional if you use nvm
 > nvm use || nvm install
-> npm install
-> npm run dev
+> corepack enable
+> pnpm install
+> pnpm run dev
 > ```
 >
 > The app will be available at `http://localhost:5173` by default.

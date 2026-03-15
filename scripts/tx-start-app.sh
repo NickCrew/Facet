@@ -13,4 +13,4 @@ if [[ -s "$NVM_DIR/nvm.sh" ]]; then
 fi
 
 cd "$ROOT_DIR"
-npm run dev
+pnpm run dev

@@ -23,11 +23,19 @@ tmux-new:
 
 # Install dependencies
 install:
-    npm install
+    pnpm install
 
 # Start Vite dev server
 dev:
-    npm run dev
+    pnpm run dev
+
+# Start the local AI proxy
+dev-proxy:
+    pnpm run dev:proxy
+
+# Start app and proxy together with pnpm workspace scripts
+dev-all:
+    pnpm run dev:all
 
 # Start Vite dev server in a dedicated tx/tmux window
 tx-dev: tmux-new
@@ -75,31 +83,31 @@ tx-stop:
 
 # TypeScript check + Vite production build
 build:
-    npm run build
+    pnpm run build
 
 # TypeScript type-check only (no emit)
 typecheck:
-    npm run typecheck
+    pnpm run typecheck
 
 # Run all Vitest tests
 test:
-    npm run test
+    pnpm run test
 
 # Run a single test file (e.g., just test-file src/test/assembler.test.ts)
 test-file file:
-    npx vitest run {{ file }}
+    pnpm exec vitest run {{ file }}
 
 # Run tests in watch mode
 test-watch:
-    npx vitest
+    pnpm exec vitest
 
 # ESLint
 lint:
-    npm run lint
+    pnpm run lint
 
 # Preview production build locally
 preview:
-    npm run preview
+    pnpm run preview
 
 # Full CI check: typecheck + lint + test
 ci: typecheck lint test

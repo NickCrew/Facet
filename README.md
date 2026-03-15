@@ -58,10 +58,13 @@ The result is a resume that is always structurally sound, strategically targeted
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) 20.19.0 or later
-- `npm` (included with Node.js)
+- [`pnpm`](https://pnpm.io/) 10 or later
 - [Just](https://github.com/casey/just) (**optional** command runner for convenience)
 
 ```bash
+# enable pnpm via Corepack (bundled with modern Node)
+corepack enable
+
 # macOS
 brew install just
 
@@ -79,7 +82,8 @@ cd Facet
 
 # optional if you use nvm
 nvm use || nvm install
-npm install
+corepack enable
+pnpm install
 
 # optional
 just install
@@ -88,10 +92,12 @@ just install
 ### Development
 
 ```bash
-npm run dev
+pnpm run dev
+pnpm run dev:all   # start app + proxy together
 
 # optional
 just dev
+just dev-all
 ```
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
@@ -99,8 +105,8 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 ### Build
 
 ```bash
-npm run build
-npm run preview
+pnpm run build
+pnpm run preview
 
 # optional
 just build
@@ -113,6 +119,8 @@ Run `just --list` to see all recipes:
 
 ```
 just dev         # Start Vite dev server
+just dev-proxy   # Start the local AI proxy
+just dev-all     # Start app and proxy together
 just tmux-new    # Create the tmux session used by tx
 just tx-dev      # Start Vite dev server in a tx window
 just tx-proxy    # Start the local AI proxy in a tx window

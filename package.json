@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "license": "AGPL",
+  "packageManager": "pnpm@10.32.1",
   "files": [
     "dist/"
   ],
@@ -25,6 +26,8 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:proxy": "pnpm --dir proxy run dev",
+    "dev:all": "pnpm -r --parallel --stream run dev",
     "build": "tsc -b && vite build",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "test": "vitest run",

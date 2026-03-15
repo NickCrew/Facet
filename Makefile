@@ -7,15 +7,17 @@ JUST_DEST ?= $(HOME)/bin
 
 # ── Passthrough recipes ────────────────────────────────────────────
 
-.PHONY: default help install dev tmux-new tx-dev tx-proxy tx-up tx-status tx-stop build typecheck test test-watch lint preview ci clean
+.PHONY: default help install dev dev-proxy dev-all tmux-new tx-dev tx-proxy tx-up tx-status tx-stop build typecheck test test-watch lint preview ci clean
 
 default: help
 
 help: ## Show available targets
 	@echo "Makefile targets (passthrough to justfile):"
 	@echo ""
-	@echo "  make install          Install npm dependencies"
+	@echo "  make install          Install pnpm dependencies"
 	@echo "  make dev              Start Vite dev server"
+	@echo "  make dev-proxy        Start the local AI proxy"
+	@echo "  make dev-all          Start app and proxy together"
 	@echo "  make tmux-new         Create the tmux session used by tx"
 	@echo "  make tx-dev           Start Vite dev server in a tx window"
 	@echo "  make tx-proxy         Start the local AI proxy in a tx window"
@@ -35,7 +37,7 @@ help: ## Show available targets
 	@echo "  make install-just     Install the just command runner"
 	@echo "  make help             Show this help"
 
-install dev tmux-new tx-dev tx-proxy tx-up tx-status tx-stop build typecheck test test-watch lint preview ci clean:
+install dev dev-proxy dev-all tmux-new tx-dev tx-proxy tx-up tx-status tx-stop build typecheck test test-watch lint preview ci clean:
 	@if ! command -v just >/dev/null 2>&1; then \
 		read -p "just is not installed. Install now? [Y/n] " yn; \
 		case "$${yn:-Y}" in \
