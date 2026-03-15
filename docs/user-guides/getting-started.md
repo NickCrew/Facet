@@ -17,7 +17,7 @@ For full project details, see the [README](../../README.md).
 
 ## Prerequisites
 
-- Node.js 18 or later and npm.
+- Node.js 20.19.0 or later and npm.
 - A modern browser (Chrome, Firefox, Safari, or Edge).
 
 > **Self-hosted setup**: Facet is a client-side application. Clone the repository,
@@ -25,7 +25,9 @@ For full project details, see the [README](../../README.md).
 >
 > ```bash
 > git clone <repo-url>
-> cd resume-builder
+> cd Facet
+> # optional if you use nvm
+> nvm use || nvm install
 > npm install
 > npm run dev
 > ```

@@ -57,7 +57,7 @@ The result is a resume that is always structurally sound, strategically targeted
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 18+
+- [Node.js](https://nodejs.org/) 20.19.0 or later
 - `npm` (included with Node.js)
 - [Just](https://github.com/casey/just) (**optional** command runner for convenience)
 
@@ -75,13 +75,22 @@ _For details and other platforms — see [https://github.com/casey/just#installa
 
 ```bash
 git clone https://github.com/NickCrew/Facet.git
-cd facet
+cd Facet
+
+# optional if you use nvm
+nvm use || nvm install
+npm install
+
+# optional
 just install
 ```
 
 ### Development
 
 ```bash
+npm run dev
+
+# optional
 just dev
 ```
 
@@ -90,6 +99,10 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 ### Build
 
 ```bash
+npm run build
+npm run preview
+
+# optional
 just build
 just preview   # preview production build locally
 ```
