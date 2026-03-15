@@ -113,6 +113,12 @@ Run `just --list` to see all recipes:
 
 ```
 just dev         # Start Vite dev server
+just tmux-new    # Create the tmux session used by tx
+just tx-dev      # Start Vite dev server in a tx window
+just tx-proxy    # Start the local AI proxy in a tx window
+just tx-up       # Start app and proxy in tx windows
+just tx-status   # Show tx window status
+just tx-stop     # Stop tx windows
 just build       # TypeScript check + Vite production build
 just typecheck   # TypeScript type-check only
 just test        # Run all Vitest tests
