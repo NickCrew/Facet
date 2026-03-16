@@ -107,7 +107,7 @@ In local auth mode these routes require:
 In hosted auth mode these routes require:
 
 - `Authorization: Bearer <hosted session token>`
-- `X-Proxy-API-Key: <proxy key>`
+- optional `X-Proxy-API-Key: <proxy key>` for local hosted development only
 
 Server-side auth can now run in two modes:
 
@@ -140,6 +140,8 @@ Hosted workspace directory behavior now lives on the server:
   malformed timestamps, empty workspace names, and stale direct-save revisions at the store boundary
 - cross-process write locking is still out of scope for the transitional file-backed store; hosted
   production should move to the durable database-backed implementation described in the Wave 1 docs
+- hosted production no longer needs the browser to send the default `facet-local-proxy` header for
+  authenticated account, persistence, or AI routes
 
 ## Validation scope
 

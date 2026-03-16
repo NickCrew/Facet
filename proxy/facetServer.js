@@ -1,7 +1,8 @@
 import { createServer } from 'node:http'
+import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { stat } from 'node:fs/promises'
-import { extname, resolve } from 'node:path'
+import { realpath, stat } from 'node:fs/promises'
+import { extname, resolve, sep } from 'node:path'
 import Anthropic from '@anthropic-ai/sdk'
 import {
   createInMemoryWorkspaceStore,
@@ -60,10 +61,203 @@ const MODEL_ALIASES = {
   opus: 'claude-opus-4-20250514',
 }
 
+const DEFAULT_HOSTED_RATE_LIMITS = {
+  ai: { max: 30, windowMs: 60_000 },
+  billingMutations: { max: 12, windowMs: 60_000 },
+  persistenceMutations: { max: 120, windowMs: 60_000 },
+}
+
 export const formatModelAliases = () =>
   Object.entries(MODEL_ALIASES)
     .map(([alias, model]) => `${alias} -> ${model}`)
     .join(', ')
+
+function parsePositiveInteger(value, fallback) {
+  const parsed = parseInt(value ?? '', 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function createHostedOperationsMonitor({
+  now = () => Date.now(),
+  logger = console,
+  rateLimits = DEFAULT_HOSTED_RATE_LIMITS,
+} = {}) {
+  const counters = new Map()
+  const recentEvents = new Array(50)
+  let recentEventCount = 0
+  let nextRecentEventIndex = 0
+
+  return {
+    record(scope, result, details = {}) {
+      const counterKey = [scope, result, details.code, details.reason]
+        .filter(Boolean)
+        .join('.')
+      counters.set(counterKey, (counters.get(counterKey) ?? 0) + 1)
+
+      const event = {
+        at: new Date(now()).toISOString(),
+        scope,
+        result,
+        ...details,
+      }
+      recentEvents[nextRecentEventIndex] = event
+      nextRecentEventIndex = (nextRecentEventIndex + 1) % recentEvents.length
+      recentEventCount = Math.min(recentEventCount + 1, recentEvents.length)
+
+      const message = `[hosted-ops] ${JSON.stringify(event)}`
+      if (result === 'error') {
+        logger.error(message)
+      } else if (result === 'denied' || result === 'rate_limited') {
+        logger.warn(message)
+      } else {
+        logger.info(message)
+      }
+    },
+
+    snapshot() {
+      return {
+        counters: Object.fromEntries(
+          [...counters.entries()].sort(([left], [right]) => left.localeCompare(right)),
+        ),
+        recentEvents: Array.from({ length: recentEventCount }, (_, index) => {
+          const offset = (nextRecentEventIndex - recentEventCount + index + recentEvents.length) % recentEvents.length
+          return recentEvents[offset]
+        }).filter(Boolean),
+        rateLimits,
+      }
+    },
+  }
+}
+
+function createFixedWindowRateLimiter({
+  now = () => Date.now(),
+  limits = DEFAULT_HOSTED_RATE_LIMITS,
+} = {}) {
+  const windows = new Map()
+  const cleanupIntervalMs = Math.max(
+    1_000,
+    Math.min(...Object.values(limits).map((config) => config.windowMs)),
+  )
+  const cleanupExpired = () => {
+    const currentTime = now()
+    for (const [existingKey, entry] of windows.entries()) {
+      if (entry.expiresAt <= currentTime) {
+        windows.delete(existingKey)
+      }
+    }
+  }
+  const cleanupTimer = setInterval(cleanupExpired, cleanupIntervalMs)
+  cleanupTimer.unref?.()
+
+  return {
+    consume(bucket, key) {
+      const config = limits[bucket]
+      if (!config?.max || !config?.windowMs) {
+        return { allowed: true, retryAfterSeconds: 0 }
+      }
+
+      const bucketKey = `${bucket}:${key}`
+      const currentTime = now()
+      const currentWindow = windows.get(bucketKey)
+      if (!currentWindow || currentWindow.expiresAt <= currentTime) {
+        windows.set(bucketKey, {
+          count: 1,
+          expiresAt: currentTime + config.windowMs,
+        })
+        return { allowed: true, retryAfterSeconds: 0 }
+      }
+
+      if (currentWindow.count >= config.max) {
+        return {
+          allowed: false,
+          retryAfterSeconds: Math.max(
+            1,
+            Math.ceil((currentWindow.expiresAt - currentTime) / 1000),
+          ),
+        }
+      }
+
+      currentWindow.count += 1
+      return { allowed: true, retryAfterSeconds: 0 }
+    },
+
+    dispose() {
+      clearInterval(cleanupTimer)
+      windows.clear()
+    },
+  }
+}
+
+function resolveHostedRateLimitBucket(req, pathname) {
+  if (pathname === '/' && req.method === 'POST') {
+    return 'ai'
+  }
+
+  if (
+    pathname === '/api/billing/customer' ||
+    pathname === '/api/billing/checkout-session'
+  ) {
+    return 'billingMutations'
+  }
+
+  if (pathname === '/api/persistence/workspaces' && req.method === 'POST') {
+    return 'persistenceMutations'
+  }
+
+  if (
+    pathname.startsWith('/api/persistence/workspaces/') &&
+    (req.method === 'PUT' || req.method === 'PATCH' || req.method === 'DELETE')
+  ) {
+    return 'persistenceMutations'
+  }
+
+  return null
+}
+
+function extractBearerToken(authorizationHeader) {
+  if (typeof authorizationHeader !== 'string') {
+    return null
+  }
+
+  const match = authorizationHeader.match(/^Bearer\s+(\S+)$/i)
+  return match?.[1] ?? null
+}
+
+function decodeJwtSubject(token) {
+  if (!token) {
+    return null
+  }
+
+  const [, encodedPayload] = token.split('.')
+  if (!encodedPayload) {
+    return null
+  }
+
+  try {
+    const payload = JSON.parse(
+      Buffer.from(encodedPayload, 'base64url').toString('utf8'),
+    )
+    return typeof payload.sub === 'string' && payload.sub.trim()
+      ? payload.sub.trim()
+      : null
+  } catch {
+    return null
+  }
+}
+
+function createRateLimitSubjectKey(req) {
+  const bearerToken = extractBearerToken(req.headers.authorization)
+  const stableSubject = decodeJwtSubject(bearerToken)
+  if (stableSubject) {
+    return `sub:${stableSubject}`
+  }
+
+  if (bearerToken) {
+    return createHash('sha256').update(bearerToken).digest('hex').slice(0, 24)
+  }
+
+  return req.socket.remoteAddress ?? 'anonymous'
+}
 
 const ALLOWED_TOOL_TYPES = new Set(['web_search_20250305'])
 
@@ -162,20 +356,33 @@ function getStaticContentType(filePath) {
   return baseType
 }
 
-async function resolveStaticFilePath(staticDir, pathname) {
-  const decodedPath = decodeURIComponent(pathname)
-  const requestedPath = decodedPath === '/' ? '/index.html' : decodedPath
-  const candidatePath = resolve(staticDir, `.${requestedPath}`)
-  const staticRoot = resolve(staticDir)
+async function resolveCanonicalStaticFile(staticRoot, filePath) {
+  const staticRootPrefix = staticRoot.endsWith(sep) ? staticRoot : `${staticRoot}${sep}`
+  const canonicalPath = await realpath(filePath)
+  if (canonicalPath !== staticRoot && !canonicalPath.startsWith(staticRootPrefix)) {
+    return null
+  }
 
-  if (!candidatePath.startsWith(staticRoot)) {
+  const fileStats = await stat(canonicalPath)
+  return fileStats.isFile() ? canonicalPath : null
+}
+
+async function resolveStaticFilePath(staticRoot, pathname) {
+  const requestedPath = pathname === '/' ? '/index.html' : pathname
+  if (requestedPath.includes('\0')) {
+    return null
+  }
+  const candidatePath = resolve(staticRoot, `.${requestedPath}`)
+  const staticRootPrefix = staticRoot.endsWith(sep) ? staticRoot : `${staticRoot}${sep}`
+
+  if (candidatePath !== staticRoot && !candidatePath.startsWith(staticRootPrefix)) {
     return null
   }
 
   try {
-    const fileStats = await stat(candidatePath)
-    if (fileStats.isFile()) {
-      return candidatePath
+    const canonicalCandidatePath = await resolveCanonicalStaticFile(staticRoot, candidatePath)
+    if (canonicalCandidatePath) {
+      return canonicalCandidatePath
     }
   } catch {}
 
@@ -183,11 +390,15 @@ async function resolveStaticFilePath(staticDir, pathname) {
     return null
   }
 
-  return resolve(staticRoot, 'index.html')
+  try {
+    return await resolveCanonicalStaticFile(staticRoot, resolve(staticRoot, 'index.html'))
+  } catch {
+    return null
+  }
 }
 
-async function tryServeStatic(staticDir, req, res, url) {
-  if (!staticDir || (req.method !== 'GET' && req.method !== 'HEAD')) {
+async function tryServeStatic(staticRoot, req, res, url) {
+  if (!staticRoot || (req.method !== 'GET' && req.method !== 'HEAD')) {
     return false
   }
 
@@ -195,7 +406,7 @@ async function tryServeStatic(staticDir, req, res, url) {
     return false
   }
 
-  const filePath = await resolveStaticFilePath(staticDir, url.pathname)
+  const filePath = await resolveStaticFilePath(staticRoot, url.pathname)
   if (!filePath) {
     return false
   }
@@ -233,6 +444,9 @@ export function createFacetServer(options = {}) {
   const maxRequestTokens = options.maxRequestTokens ?? defaultMaxTokens
   const maxBodyBytes = options.maxBodyBytes ?? 1048576
   const staticDir = options.staticDir ? resolve(options.staticDir) : null
+  const staticRootPromise = staticDir
+    ? realpath(staticDir).catch(() => resolve(staticDir))
+    : null
   const defaultTemperature = options.defaultTemperature
   const defaultThinkingBudget = options.defaultThinkingBudget ?? 0
   const proxyApiKey = options.proxyApiKey ?? DEFAULT_PROXY_API_KEY
@@ -243,6 +457,27 @@ export function createFacetServer(options = {}) {
     ...Object.values(MODEL_ALIASES),
   ])
   const authMode = options.authMode === 'hosted' ? 'hosted' : 'local'
+  const hostedRateLimits =
+    authMode === 'hosted'
+      ? {
+          ai: options.hostedRateLimits?.ai ?? DEFAULT_HOSTED_RATE_LIMITS.ai,
+          billingMutations:
+            options.hostedRateLimits?.billingMutations ??
+            DEFAULT_HOSTED_RATE_LIMITS.billingMutations,
+          persistenceMutations:
+            options.hostedRateLimits?.persistenceMutations ??
+            DEFAULT_HOSTED_RATE_LIMITS.persistenceMutations,
+        }
+      : DEFAULT_HOSTED_RATE_LIMITS
+  const operationsMonitor = createHostedOperationsMonitor({
+    now: options.monitorNow ?? (() => Date.now()),
+    logger: options.logger ?? console,
+    rateLimits: hostedRateLimits,
+  })
+  const hostedRateLimiter = createFixedWindowRateLimiter({
+    now: options.rateLimitNow ?? (() => Date.now()),
+    limits: hostedRateLimits,
+  })
   const hostedWorkspaceStore =
     authMode === 'hosted'
       ? (options.hostedWorkspaceStore ?? createInMemoryHostedWorkspaceStore())
@@ -266,6 +501,10 @@ export function createFacetServer(options = {}) {
     actorResolver: persistenceActorResolver,
     store: persistenceStore,
     now: options.now,
+    onEvent:
+      authMode === 'hosted'
+        ? (scope, result, details) => operationsMonitor.record(scope, result, details)
+        : undefined,
   })
   const billingStore =
     authMode === 'hosted'
@@ -297,6 +536,7 @@ export function createFacetServer(options = {}) {
           stripePriceId: options.stripePriceId,
           successUrl: options.billingSuccessUrl ?? `${allowedOrigins[0] ?? 'http://localhost:5173'}/settings/billing/success`,
           cancelUrl: options.billingCancelUrl ?? `${allowedOrigins[0] ?? 'http://localhost:5173'}/settings/billing/cancel`,
+          onEvent: (scope, result, details) => operationsMonitor.record(scope, result, details),
         })
       : null
 
@@ -318,11 +558,26 @@ export function createFacetServer(options = {}) {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost')
 
-    if (await tryServeStatic(staticDir, req, res, url)) {
+    try {
+      setCors(req, res)
+
+      // Static assets intentionally remain publicly readable so browser navigations
+      // and asset fetches can load the SPA shell. Origin and auth enforcement
+      // below applies only to API routes.
+      if (await tryServeStatic(staticRootPromise ? await staticRootPromise : null, req, res, url)) {
+        return
+      }
+    } catch (error) {
+      console.error('[proxy] static_serve_error', error)
+      if (res.headersSent) {
+        if (!res.writableEnded) {
+          res.end()
+        }
+      } else {
+        sendJson(res, 500, { error: 'Static asset request failed.' })
+      }
       return
     }
-
-    setCors(req, res)
 
     if (!req.headers.origin || !isAllowedOrigin(req.headers.origin)) {
       sendJson(res, 403, { error: 'Origin not allowed' })
@@ -335,9 +590,40 @@ export function createFacetServer(options = {}) {
       return
     }
 
-    if (req.headers['x-proxy-api-key'] !== proxyApiKey) {
-      sendJson(res, 401, { error: 'Invalid proxy API key' })
+    const hasValidProxyApiKey = req.headers['x-proxy-api-key'] === proxyApiKey
+    const hasHostedBearerToken =
+      authMode === 'hosted' &&
+      typeof req.headers.authorization === 'string' &&
+      /^Bearer\s+\S+/i.test(req.headers.authorization)
+
+    if (!hasValidProxyApiKey && !hasHostedBearerToken) {
+      sendJson(res, 401, {
+        error: authMode === 'hosted' ? 'Authorization required' : 'Invalid proxy API key',
+      })
       return
+    }
+
+    if (authMode === 'hosted') {
+      const rateLimitBucket = resolveHostedRateLimitBucket(req, url.pathname)
+      if (rateLimitBucket) {
+        const rateLimit = hostedRateLimiter.consume(
+          rateLimitBucket,
+          createRateLimitSubjectKey(req),
+        )
+        if (!rateLimit.allowed) {
+          operationsMonitor.record(rateLimitBucket, 'rate_limited', {
+            method: req.method,
+            path: url.pathname,
+          })
+          res.setHeader('Retry-After', String(rateLimit.retryAfterSeconds))
+          sendJson(res, 429, {
+            error: `Rate limit exceeded for hosted ${rateLimitBucket}.`,
+            code: 'rate_limited',
+            retryAfterSeconds: rateLimit.retryAfterSeconds,
+          })
+          return
+        }
+      }
     }
 
     try {
@@ -381,6 +667,13 @@ export function createFacetServer(options = {}) {
       }
 
       if (feature !== undefined && feature !== null && !isFacetAiFeatureKey(feature)) {
+        if (authMode === 'hosted') {
+          operationsMonitor.record('ai', 'error', {
+            code: 'invalid_ai_feature',
+            method: req.method,
+            path: url.pathname,
+          })
+        }
         sendJson(res, 400, {
           error: 'AI requests must declare a valid feature when provided.',
           code: 'invalid_ai_feature',
@@ -390,6 +683,11 @@ export function createFacetServer(options = {}) {
 
       if (authMode === 'hosted') {
         if (feature === undefined || feature === null) {
+          operationsMonitor.record('ai', 'error', {
+            code: 'invalid_ai_feature',
+            method: req.method,
+            path: url.pathname,
+          })
           sendJson(res, 400, {
             error: 'Hosted AI requests must declare a valid feature.',
             code: 'invalid_ai_feature',
@@ -402,6 +700,11 @@ export function createFacetServer(options = {}) {
           actor = await persistenceActorResolver(req)
         } catch (error) {
           if (error?.status === 401 || error?.status === 403) {
+            operationsMonitor.record('ai', 'denied', {
+              code: 'auth_required',
+              method: req.method,
+              path: url.pathname,
+            })
             sendJson(res, error.status, {
               error: 'Sign in to use AI features in hosted Facet.',
               code: 'auth_required',
@@ -410,6 +713,11 @@ export function createFacetServer(options = {}) {
           }
 
           console.error('[proxy] actor_resolve_error', error)
+          operationsMonitor.record('ai', 'error', {
+            code: 'auth_internal_error',
+            method: req.method,
+            path: url.pathname,
+          })
           sendJson(res, 500, {
             error: 'Unable to verify identity for AI access.',
             code: 'auth_internal_error',
@@ -418,6 +726,11 @@ export function createFacetServer(options = {}) {
         }
 
         if (!actor?.tenantId || !actor?.accountId) {
+          operationsMonitor.record('ai', 'denied', {
+            code: 'incomplete_actor',
+            method: req.method,
+            path: url.pathname,
+          })
           sendJson(res, 403, {
             error: 'Hosted AI access requires a tenant-scoped account context.',
             code: 'incomplete_actor',
@@ -426,6 +739,11 @@ export function createFacetServer(options = {}) {
         }
 
         if (!billingStore) {
+          operationsMonitor.record('ai', 'error', {
+            code: 'billing_state_error',
+            method: req.method,
+            path: url.pathname,
+          })
           sendJson(res, 500, {
             error: 'Hosted billing state is unavailable for this AI request.',
             code: 'billing_state_error',
@@ -437,11 +755,22 @@ export function createFacetServer(options = {}) {
           const billingState = await billingStore.getAccountState(actor.tenantId, actor.accountId)
           const access = resolveHostedAiAccess(billingState, feature)
           if (!access.allowed) {
+            operationsMonitor.record('ai', 'denied', {
+              reason: access.reason,
+              feature,
+              method: req.method,
+              path: url.pathname,
+            })
             sendJson(res, 402, createHostedAiErrorPayload(access.reason, feature))
             return
           }
         } catch (error) {
           console.error('[proxy] billing_state_error', error)
+          operationsMonitor.record('ai', 'error', {
+            code: 'billing_state_error',
+            method: req.method,
+            path: url.pathname,
+          })
           sendJson(res, 500, {
             error: 'Hosted billing state could not be loaded for this AI request.',
             code: 'billing_state_error',
@@ -495,6 +824,14 @@ export function createFacetServer(options = {}) {
       console.log(
         `[proxy] ${resolvedModel} ${result.usage?.input_tokens ?? '?'}in/${result.usage?.output_tokens ?? '?'}out ${elapsed}ms`,
       )
+      if (authMode === 'hosted') {
+        operationsMonitor.record('ai', 'success', {
+          feature,
+          method: req.method,
+          model: resolvedModel,
+          path: url.pathname,
+        })
+      }
 
       sendJson(res, 200, result)
     } catch (error) {
@@ -506,14 +843,34 @@ export function createFacetServer(options = {}) {
     }
   })
 
+  server.on('close', () => {
+    hostedRateLimiter.dispose?.()
+  })
+
   return {
     server,
     persistenceStore,
+    operationsMonitor,
   }
 }
 
 export function createEnvFacetServer(env = process.env) {
   const authMode = env.FACET_AUTH_MODE === 'hosted' ? 'hosted' : 'local'
+  const rawEnvironment = env.FACET_ENVIRONMENT?.trim()
+  if (
+    authMode === 'hosted' &&
+    rawEnvironment !== 'local' &&
+    rawEnvironment !== 'staging' &&
+    rawEnvironment !== 'production'
+  ) {
+    throw new Error(
+      'Hosted mode requires FACET_ENVIRONMENT=local|staging|production.',
+    )
+  }
+  const environment =
+    rawEnvironment === 'production' || rawEnvironment === 'staging'
+      ? rawEnvironment
+      : 'local'
   const allowedOrigins = (env.ALLOWED_ORIGINS ?? DEFAULT_ALLOWED_ORIGINS.join(','))
     .split(',')
     .map((origin) => origin.trim())
@@ -546,6 +903,29 @@ export function createEnvFacetServer(env = process.env) {
       ? createFileHostedBillingStore(env.HOSTED_BILLING_FILE)
       : undefined
 
+  if (authMode === 'hosted' && environment !== 'local') {
+    if ((env.PROXY_API_KEY ?? DEFAULT_PROXY_API_KEY) === DEFAULT_PROXY_API_KEY) {
+      throw new Error(
+        'Hosted staging/production must not rely on the default PROXY_API_KEY.',
+      )
+    }
+
+    if (env.PERSISTENCE_AUTH_TOKENS) {
+      throw new Error(
+        'Hosted staging/production must not use PERSISTENCE_AUTH_TOKENS.',
+      )
+    }
+
+    const usingTransitionalFileStores = Boolean(
+      env.HOSTED_WORKSPACE_FILE || env.HOSTED_BILLING_FILE,
+    )
+    if (usingTransitionalFileStores && env.ALLOW_TRANSITIONAL_HOSTED_FILE_STORE !== 'true') {
+      throw new Error(
+        'Hosted staging/production requires a non-file-backed workspace and billing store unless ALLOW_TRANSITIONAL_HOSTED_FILE_STORE=true is set for a controlled smoke environment.',
+      )
+    }
+  }
+
   return createFacetServer({
     authMode,
     allowedOrigins,
@@ -556,6 +936,38 @@ export function createEnvFacetServer(env = process.env) {
     defaultTemperature: parseFloat(env.DEFAULT_TEMPERATURE ?? ''),
     defaultThinkingBudget: parseInt(env.THINKING_BUDGET ?? '0', 10),
     proxyApiKey: env.PROXY_API_KEY ?? DEFAULT_PROXY_API_KEY,
+    hostedRateLimits: {
+      ai: {
+        max: parsePositiveInteger(
+          env.HOSTED_AI_RATE_LIMIT_MAX,
+          DEFAULT_HOSTED_RATE_LIMITS.ai.max,
+        ),
+        windowMs: parsePositiveInteger(
+          env.HOSTED_AI_RATE_LIMIT_WINDOW_MS,
+          DEFAULT_HOSTED_RATE_LIMITS.ai.windowMs,
+        ),
+      },
+      billingMutations: {
+        max: parsePositiveInteger(
+          env.HOSTED_BILLING_RATE_LIMIT_MAX,
+          DEFAULT_HOSTED_RATE_LIMITS.billingMutations.max,
+        ),
+        windowMs: parsePositiveInteger(
+          env.HOSTED_BILLING_RATE_LIMIT_WINDOW_MS,
+          DEFAULT_HOSTED_RATE_LIMITS.billingMutations.windowMs,
+        ),
+      },
+      persistenceMutations: {
+        max: parsePositiveInteger(
+          env.HOSTED_PERSISTENCE_RATE_LIMIT_MAX,
+          DEFAULT_HOSTED_RATE_LIMITS.persistenceMutations.max,
+        ),
+        windowMs: parsePositiveInteger(
+          env.HOSTED_PERSISTENCE_RATE_LIMIT_WINDOW_MS,
+          DEFAULT_HOSTED_RATE_LIMITS.persistenceMutations.windowMs,
+        ),
+      },
+    },
     persistenceAuthTokens:
       authMode === 'hosted'
         ? undefined

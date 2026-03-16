@@ -12,6 +12,7 @@ interface RemotePersistenceApiResponse {
 export interface RemotePersistenceBackendOptions {
   endpoint: string
   bearerToken: string
+  authMode?: 'hosted' | 'local'
   proxyApiKey?: string
   fetchFn?: typeof fetch
 }
@@ -23,6 +24,9 @@ export const createRemotePersistenceBackend = (
 ): PersistenceBackend => {
   const baseUrl = trimTrailingSlash(options.endpoint)
   const fetchFn = options.fetchFn ?? fetch
+  const resolvedProxyApiKey =
+    options.proxyApiKey ??
+    (options.authMode === 'hosted' ? undefined : DEFAULT_PROXY_API_KEY)
 
   const request = async (workspaceId: string, init: RequestInit): Promise<Response> => {
     return fetchFn(`${baseUrl}/workspaces/${encodeURIComponent(workspaceId)}`, {
@@ -30,7 +34,7 @@ export const createRemotePersistenceBackend = (
       headers: {
         Authorization: `Bearer ${options.bearerToken}`,
         'Content-Type': 'application/json',
-        'X-Proxy-API-Key': options.proxyApiKey ?? DEFAULT_PROXY_API_KEY,
+        ...(resolvedProxyApiKey ? { 'X-Proxy-API-Key': resolvedProxyApiKey } : {}),
         ...(init.headers ?? {}),
       },
     }).catch((error) => {

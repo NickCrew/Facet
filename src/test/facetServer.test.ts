@@ -4,7 +4,7 @@ import { buildForgedWorkspaceSnapshot } from './fixtures/workspaceSnapshot'
 
 async function loadProxyModules() {
   const [
-    { createFacetServer },
+    { createFacetServer, createEnvFacetServer },
     { createInMemoryWorkspaceStore },
     { createInMemoryHostedWorkspaceStore },
     { createInMemoryHostedBillingStore },
@@ -21,6 +21,7 @@ async function loadProxyModules() {
 
   return {
     createFacetServer,
+    createEnvFacetServer,
     createInMemoryWorkspaceStore,
     createInMemoryHostedWorkspaceStore,
     createInMemoryHostedBillingStore,
@@ -86,13 +87,23 @@ async function buildHostedAuthFixture() {
 
 async function createHostedSessionToken(
   privateKey: Awaited<ReturnType<typeof generateKeyPair>>['privateKey'],
+  options: {
+    email?: string
+    jti?: string
+  } = {},
 ) {
-  return new SignJWT({ email: 'member@example.com' })
+  let builder = new SignJWT({ email: options.email ?? 'member@example.com' })
     .setProtectedHeader({ alg: 'RS256', kid: 'facet-test-key' })
     .setSubject('user-1')
     .setIssuer('https://supabase.example/auth/v1')
     .setAudience('authenticated')
     .setExpirationTime('1h')
+
+  if (options.jti) {
+    builder = builder.setJti(options.jti)
+  }
+
+  return builder
     .sign(privateKey)
 }
 
@@ -105,6 +116,11 @@ async function startHostedServer(options?: {
     effectiveThrough: string | null
   } | null
   includeDefaultWorkspace?: boolean
+  hostedRateLimits?: {
+    ai?: { max: number, windowMs: number }
+    billingMutations?: { max: number, windowMs: number }
+    persistenceMutations?: { max: number, windowMs: number }
+  }
 }) {
   const {
     createFacetServer,
@@ -147,7 +163,7 @@ async function startHostedServer(options?: {
       },
     },
   ])
-  const { server } = createFacetServer({
+  const { server, operationsMonitor } = createFacetServer({
     authMode: 'hosted',
     allowedOrigins: ['http://localhost:5173'],
     proxyApiKey: 'proxy-key',
@@ -167,6 +183,7 @@ async function startHostedServer(options?: {
       },
     },
     now: () => '2026-03-14T12:00:00.000Z',
+    hostedRateLimits: options?.hostedRateLimits,
   })
 
   await new Promise<void>((resolve) => {
@@ -181,8 +198,11 @@ async function startHostedServer(options?: {
   return {
     store: workspaceStore,
     server,
+    operationsMonitor,
     baseUrl: `http://127.0.0.1:${address.port}`,
     accessToken: await createHostedSessionToken(hosted.privateKey),
+    createAccessToken: (tokenOptions = {}) =>
+      createHostedSessionToken(hosted.privateKey, tokenOptions),
   }
 }
 
@@ -559,6 +579,35 @@ describe('facetServer persistence API', () => {
     })
   })
 
+  it('allows hosted account and persistence routes without a proxy key and records operation counters', async () => {
+    const { server, baseUrl, accessToken, operationsMonitor } = await startHostedServer()
+    servers.add(server)
+
+    const context = await fetch(`${baseUrl}/api/account/context`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Origin: 'http://localhost:5173',
+      },
+    })
+    expect(context.status).toBe(200)
+
+    const save = await fetch(`${baseUrl}/api/persistence/workspaces/ws-1`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        Origin: 'http://localhost:5173',
+      },
+      body: JSON.stringify({ snapshot: buildForgedWorkspaceSnapshot() }),
+    })
+    expect(save.status).toBe(200)
+
+    expect(operationsMonitor.snapshot().counters).toMatchObject({
+      'billing.context.success': 1,
+      'persistence.save.success': 1,
+    })
+  })
+
   it('rejects hosted AI requests when the entitlement is missing or inactive', async () => {
     const { server, baseUrl, accessToken } = await startHostedServer()
     servers.add(server)
@@ -622,6 +671,114 @@ describe('facetServer persistence API', () => {
         content: [{ type: 'text', text: '{"ok":true}' }],
       }),
     )
+  })
+
+  it('rate limits hosted AI requests and returns retry metadata', async () => {
+    const { server, baseUrl, accessToken, operationsMonitor } = await startHostedServer({
+      entitlement: {
+        planId: 'ai-pro',
+        status: 'active',
+        source: 'stripe',
+        features: ['research.search'],
+        effectiveThrough: '2026-04-14T00:00:00.000Z',
+      },
+      hostedRateLimits: {
+        ai: { max: 1, windowMs: 60_000 },
+      },
+    })
+    servers.add(server)
+
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      Origin: 'http://localhost:5173',
+    }
+
+    const first = await fetch(baseUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        feature: 'research.search',
+        model: 'haiku',
+        system: 'Return JSON only.',
+        messages: [{ role: 'user', content: 'Find jobs.' }],
+      }),
+    })
+    expect(first.status).toBe(200)
+
+    const second = await fetch(baseUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        feature: 'research.search',
+        model: 'haiku',
+        system: 'Return JSON only.',
+        messages: [{ role: 'user', content: 'Find jobs.' }],
+      }),
+    })
+    expect(second.status).toBe(429)
+    expect(second.headers.get('Retry-After')).toBeTruthy()
+    await expect(second.json()).resolves.toEqual(
+      expect.objectContaining({
+        code: 'rate_limited',
+      }),
+    )
+
+    expect(operationsMonitor.snapshot().counters).toMatchObject({
+      'ai.success': 1,
+      'ai.rate_limited': 1,
+    })
+  })
+
+  it('applies hosted rate limits to refreshed tokens for the same subject', async () => {
+    const { server, baseUrl, accessToken, createAccessToken } = await startHostedServer({
+      entitlement: {
+        planId: 'ai-pro',
+        status: 'active',
+        source: 'stripe',
+        features: ['research.search'],
+        effectiveThrough: '2026-04-14T00:00:00.000Z',
+      },
+      hostedRateLimits: {
+        ai: { max: 1, windowMs: 60_000 },
+      },
+    })
+    servers.add(server)
+
+    const first = await fetch(baseUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        Origin: 'http://localhost:5173',
+      },
+      body: JSON.stringify({
+        feature: 'research.search',
+        model: 'haiku',
+        system: 'Return JSON only.',
+        messages: [{ role: 'user', content: 'Find jobs.' }],
+      }),
+    })
+    expect(first.status).toBe(200)
+
+    const refreshedToken = await createAccessToken({
+      jti: 'refresh-1',
+    })
+    const second = await fetch(baseUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${refreshedToken}`,
+        'Content-Type': 'application/json',
+        Origin: 'http://localhost:5173',
+      },
+      body: JSON.stringify({
+        feature: 'research.search',
+        model: 'haiku',
+        system: 'Return JSON only.',
+        messages: [{ role: 'user', content: 'Find jobs.' }],
+      }),
+    })
+    expect(second.status).toBe(429)
   })
 
   it('fails closed with a billing_state_error when hosted billing state cannot be loaded', async () => {
@@ -805,5 +962,67 @@ describe('facetServer persistence API', () => {
       error: 'Hosted AI access requires a tenant-scoped account context.',
       code: 'incomplete_actor',
     })
+  })
+
+  it('rejects hosted staging defaults that still depend on local proxy auth or file stores', async () => {
+    const { createEnvFacetServer } = await loadProxyModules()
+
+    expect(() =>
+      createEnvFacetServer({
+        FACET_AUTH_MODE: 'hosted',
+        FACET_ENVIRONMENT: 'production',
+        ALLOWED_ORIGINS: 'http://localhost:5173',
+        SUPABASE_URL: 'https://supabase.example',
+        SUPABASE_JWKS_URL: 'https://supabase.example/auth/v1/keys',
+        HOSTED_WORKSPACE_FILE: './hosted-workspaces.example.json',
+        HOSTED_BILLING_FILE: './hosted-billing.example.json',
+      }),
+    ).toThrow(/default PROXY_API_KEY/i)
+  })
+
+  it('requires an explicit hosted environment label for createEnvFacetServer', async () => {
+    const { createEnvFacetServer } = await loadProxyModules()
+
+    expect(() =>
+      createEnvFacetServer({
+        FACET_AUTH_MODE: 'hosted',
+        ALLOWED_ORIGINS: 'http://localhost:5173',
+        SUPABASE_URL: 'https://supabase.example',
+        SUPABASE_JWKS_URL: 'https://supabase.example/auth/v1/keys',
+        HOSTED_WORKSPACE_FILE: './hosted-workspaces.example.json',
+        HOSTED_BILLING_FILE: './hosted-billing.example.json',
+      }),
+    ).toThrow(/FACET_ENVIRONMENT=local\|staging\|production/i)
+  })
+
+  it('rejects hosted staging persistence token maps and transitional file stores without an explicit override', async () => {
+    const { createEnvFacetServer } = await loadProxyModules()
+
+    expect(() =>
+      createEnvFacetServer({
+        FACET_AUTH_MODE: 'hosted',
+        FACET_ENVIRONMENT: 'staging',
+        ALLOWED_ORIGINS: 'http://localhost:5173',
+        SUPABASE_URL: 'https://supabase.example',
+        SUPABASE_JWKS_URL: 'https://supabase.example/auth/v1/keys',
+        PROXY_API_KEY: 'non-default-proxy-key',
+        PERSISTENCE_AUTH_TOKENS: '[{"token":"bad"}]',
+        HOSTED_WORKSPACE_FILE: './hosted-workspaces.example.json',
+        HOSTED_BILLING_FILE: './hosted-billing.example.json',
+      }),
+    ).toThrow(/must not use PERSISTENCE_AUTH_TOKENS/i)
+
+    expect(() =>
+      createEnvFacetServer({
+        FACET_AUTH_MODE: 'hosted',
+        FACET_ENVIRONMENT: 'staging',
+        ALLOWED_ORIGINS: 'http://localhost:5173',
+        SUPABASE_URL: 'https://supabase.example',
+        SUPABASE_JWKS_URL: 'https://supabase.example/auth/v1/keys',
+        PROXY_API_KEY: 'non-default-proxy-key',
+        HOSTED_WORKSPACE_FILE: './hosted-workspaces.example.json',
+        HOSTED_BILLING_FILE: './hosted-billing.example.json',
+      }),
+    ).toThrow(/non-file-backed workspace and billing store/i)
   })
 })

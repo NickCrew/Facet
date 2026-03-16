@@ -50,6 +50,7 @@ export function createBillingApi({
   stripePriceId,
   successUrl,
   cancelUrl,
+  onEvent,
 }) {
   const contextRoute = '/api/account/context'
   const customerRoute = '/api/billing/customer'
@@ -70,6 +71,10 @@ export function createBillingApi({
       const url = new URL(req.url ?? '/', 'http://localhost')
 
       if (req.method === 'GET' && url.pathname === contextRoute) {
+        onEvent?.('billing.context', 'success', {
+          method: req.method,
+          path: url.pathname,
+        })
         sendJson(res, 200, {
           context: normalizeAccount(actor, state),
         })
@@ -77,6 +82,11 @@ export function createBillingApi({
       }
 
       if (!stripeClient) {
+        onEvent?.('billing.config', 'error', {
+          code: 'stripe_not_configured',
+          method: req.method,
+          path: url.pathname,
+        })
         sendJson(res, 500, { error: 'Hosted billing is not fully configured.' })
         return
       }
@@ -119,6 +129,10 @@ export function createBillingApi({
           entitlement: state?.entitlement ?? null,
         })
 
+        onEvent?.('billing.customer', 'success', {
+          method: req.method,
+          path: url.pathname,
+        })
         sendJson(res, 200, {
           billingCustomer: next.billingCustomer,
         })
@@ -126,6 +140,11 @@ export function createBillingApi({
       }
 
       if (!stripePriceId) {
+        onEvent?.('billing.config', 'error', {
+          code: 'stripe_price_missing',
+          method: req.method,
+          path: url.pathname,
+        })
         sendJson(res, 500, { error: 'Hosted billing is not fully configured.' })
         return
       }
@@ -172,6 +191,10 @@ export function createBillingApi({
         },
       })
 
+      onEvent?.('billing.checkout', 'success', {
+        method: req.method,
+        path: url.pathname,
+      })
       sendJson(res, 200, {
         sessionId: session.id,
         url: session.url,

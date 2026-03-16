@@ -360,7 +360,12 @@ function extractWorkspaceId(req, routePrefix) {
   return workspaceId || null
 }
 
-export function createPersistenceApi({ actorResolver, store, now = () => new Date().toISOString() }) {
+export function createPersistenceApi({
+  actorResolver,
+  store,
+  now = () => new Date().toISOString(),
+  onEvent,
+}) {
   const collectionRoute = '/api/persistence/workspaces'
   const routePrefix = '/api/persistence/workspaces/'
 
@@ -394,6 +399,12 @@ export function createPersistenceApi({ actorResolver, store, now = () => new Dat
       try {
         actor = await actorResolver(req)
       } catch (error) {
+        const url = new URL(req.url ?? '/', 'http://localhost')
+        onEvent?.('persistence.auth', 'error', {
+          code: error instanceof PersistenceAuthError ? 'auth_required' : 'auth_internal_error',
+          method: req.method,
+          path: url.pathname,
+        })
         sendJson(
           res,
           error instanceof PersistenceAuthError ? error.status : 500,
@@ -417,6 +428,10 @@ export function createPersistenceApi({ actorResolver, store, now = () => new Dat
           }
 
           const workspaces = await store.listWorkspacesForActor(actor)
+          onEvent?.('persistence.list', 'success', {
+            method: req.method,
+            path: url.pathname,
+          })
           sendJson(res, 200, {
             workspaces,
             actor: actorPayload(actor),
@@ -462,10 +477,23 @@ export function createPersistenceApi({ actorResolver, store, now = () => new Dat
               ...created,
               actor: actorPayload(refreshedActor),
             })
+            onEvent?.('persistence.create', 'success', {
+              workspaceId: created.workspace?.workspaceId,
+              method: req.method,
+              path: url.pathname,
+            })
           } catch (error) {
             if (!(error?.name === 'WorkspaceStoreValidationError')) {
               console.error('[proxy] workspace_create_error', error)
             }
+            onEvent?.('persistence.create', 'error', {
+              code:
+                error?.name === 'WorkspaceStoreValidationError'
+                  ? 'validation_error'
+                  : 'workspace_create_error',
+              method: req.method,
+              path: url.pathname,
+            })
             sendJson(res, workspaceMutationErrorStatus(error), {
               error: error instanceof Error ? error.message : 'Failed to create workspace.',
             })
@@ -484,6 +512,12 @@ export function createPersistenceApi({ actorResolver, store, now = () => new Dat
       }
 
       if (!actorCanAccessWorkspace(actor, workspaceId)) {
+        onEvent?.('persistence.access', 'denied', {
+          code: 'workspace_access_denied',
+          workspaceId,
+          method: req.method,
+          path: url.pathname,
+        })
         sendJson(res, 403, { error: 'Workspace access denied for authenticated actor.' })
         return
       }
@@ -491,10 +525,21 @@ export function createPersistenceApi({ actorResolver, store, now = () => new Dat
       if (req.method === 'GET') {
         const snapshot = await store.loadWorkspace(actor.tenantId, workspaceId)
         if (!snapshot) {
+          onEvent?.('persistence.load', 'not_found', {
+            code: 'workspace_not_found',
+            workspaceId,
+            method: req.method,
+            path: url.pathname,
+          })
           sendJson(res, 404, { error: 'Workspace snapshot not found.' })
           return
         }
 
+        onEvent?.('persistence.load', 'success', {
+          workspaceId,
+          method: req.method,
+          path: url.pathname,
+        })
         sendJson(res, 200, {
           snapshot,
           actor: actorPayload(actor),
@@ -531,10 +576,24 @@ export function createPersistenceApi({ actorResolver, store, now = () => new Dat
             ...renamed,
             actor: actorPayload(actor),
           })
+          onEvent?.('persistence.rename', 'success', {
+            workspaceId,
+            method: req.method,
+            path: url.pathname,
+          })
         } catch (error) {
           if (!(error?.name === 'WorkspaceStoreValidationError')) {
             console.error('[proxy] workspace_rename_error', error)
           }
+          onEvent?.('persistence.rename', 'error', {
+            code:
+              error?.name === 'WorkspaceStoreValidationError'
+                ? 'validation_error'
+                : 'workspace_rename_error',
+            workspaceId,
+            method: req.method,
+            path: url.pathname,
+          })
           sendJson(res, workspaceMutationErrorStatus(error), {
             error: error instanceof Error ? error.message : 'Failed to rename workspace.',
           })
@@ -563,10 +622,24 @@ export function createPersistenceApi({ actorResolver, store, now = () => new Dat
             ...deleted,
             actor: actorPayload(refreshedActor),
           })
+          onEvent?.('persistence.delete', 'success', {
+            workspaceId,
+            method: req.method,
+            path: url.pathname,
+          })
         } catch (error) {
           if (!(error?.name === 'WorkspaceStoreValidationError')) {
             console.error('[proxy] workspace_delete_error', error)
           }
+          onEvent?.('persistence.delete', 'error', {
+            code:
+              error?.name === 'WorkspaceStoreValidationError'
+                ? 'validation_error'
+                : 'workspace_delete_error',
+            workspaceId,
+            method: req.method,
+            path: url.pathname,
+          })
           sendJson(res, workspaceMutationErrorStatus(error), {
             error: error instanceof Error ? error.message : 'Failed to delete workspace.',
           })
@@ -614,15 +687,36 @@ export function createPersistenceApi({ actorResolver, store, now = () => new Dat
       try {
         assertValidWorkspaceSnapshot(normalized)
       } catch (error) {
+        onEvent?.('persistence.save', 'error', {
+          code: 'invalid_snapshot',
+          workspaceId,
+          method: req.method,
+          path: url.pathname,
+        })
         sendJson(res, 400, { error: error instanceof Error ? error.message : 'Invalid workspace snapshot.' })
         return
       }
 
-      const savedSnapshot = await store.saveWorkspace(normalized)
-      sendJson(res, 200, {
-        snapshot: savedSnapshot,
-        actor: actorPayload(actor),
-      })
+      try {
+        const savedSnapshot = await store.saveWorkspace(normalized)
+        onEvent?.('persistence.save', 'success', {
+          workspaceId,
+          method: req.method,
+          path: url.pathname,
+        })
+        sendJson(res, 200, {
+          snapshot: savedSnapshot,
+          actor: actorPayload(actor),
+        })
+      } catch (error) {
+        onEvent?.('persistence.save', 'error', {
+          code: 'workspace_save_error',
+          workspaceId,
+          method: req.method,
+          path: url.pathname,
+        })
+        throw error
+      }
     },
   }
 }

@@ -63,6 +63,28 @@ describe('remotePersistenceBackend', () => {
     expect(saveCall?.[1]?.method).toBe('PUT')
   })
 
+  it('omits the proxy key header for hosted bearer-token requests unless explicitly overridden', async () => {
+    const snapshot = buildWorkspaceSnapshot()
+    const fetchFn = vi.fn(async (_input, init) => {
+      expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer hosted-token')
+      expect((init?.headers as Record<string, string>)['X-Proxy-API-Key']).toBeUndefined()
+
+      return new Response(JSON.stringify({ snapshot }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    })
+
+    const backend = createRemotePersistenceBackend({
+      authMode: 'hosted',
+      endpoint: 'http://localhost:9001/api/persistence',
+      bearerToken: 'hosted-token',
+      fetchFn: fetchFn as typeof fetch,
+    })
+
+    await expect(backend.loadWorkspaceSnapshot('ws-1')).resolves.toEqual(snapshot)
+  })
+
   it('surfaces API errors and invalid snapshots', async () => {
     const fetchFn = vi
       .fn()

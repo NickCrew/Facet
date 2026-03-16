@@ -165,6 +165,7 @@ export function AppShell() {
         workspaceId: selectedHostedWorkspace.workspaceId,
         workspaceName: selectedHostedWorkspace.name,
         backend: createRemotePersistenceBackend({
+          authMode: 'hosted',
           endpoint: getHostedPersistenceEndpoint(),
           bearerToken: hostedApp.bearerToken ?? '',
         }),

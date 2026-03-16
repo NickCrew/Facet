@@ -30,6 +30,9 @@ async function readJson<T>(response: Response): Promise<T> {
 function createRequest(options: HostedAccountClientOptions) {
   const baseUrl = trimTrailingSlash(options.endpoint)
   const fetchFn = options.fetchFn ?? fetch
+  const resolvedProxyApiKey =
+    options.proxyApiKey ??
+    (options.bearerToken ? undefined : DEFAULT_PROXY_API_KEY)
 
   return (path: string, init: RequestInit = {}) =>
     fetchFn(`${baseUrl}${path}`, {
@@ -37,7 +40,7 @@ function createRequest(options: HostedAccountClientOptions) {
       headers: {
         Authorization: `Bearer ${options.bearerToken}`,
         'Content-Type': 'application/json',
-        'X-Proxy-API-Key': options.proxyApiKey ?? DEFAULT_PROXY_API_KEY,
+        ...(resolvedProxyApiKey ? { 'X-Proxy-API-Key': resolvedProxyApiKey } : {}),
         ...(init.headers ?? {}),
       },
     }).catch((error) => {

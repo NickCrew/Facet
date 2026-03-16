@@ -79,13 +79,17 @@ export async function callLlmProxy(
 
   try {
     const bearerToken = await getHostedAccessToken()
+    const resolvedProxyApiKey =
+      options.proxyApiKey ??
+      (import.meta.env.VITE_ANTHROPIC_PROXY_API_KEY as string | undefined) ??
+      (bearerToken ? undefined : DEFAULT_PROXY_API_KEY)
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(options.apiKey ? { 'X-API-Key': options.apiKey } : {}),
         ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
-        'X-Proxy-API-Key': options.proxyApiKey ?? (import.meta.env.VITE_ANTHROPIC_PROXY_API_KEY as string | undefined) ?? DEFAULT_PROXY_API_KEY,
+        ...(resolvedProxyApiKey ? { 'X-Proxy-API-Key': resolvedProxyApiKey } : {}),
       },
       body: JSON.stringify({
         system: systemPrompt,

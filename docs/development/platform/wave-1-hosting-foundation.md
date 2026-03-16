@@ -131,13 +131,24 @@ These values belong on the Fly app and must never be shipped to the browser.
 | `LOG_LEVEL` | recommended | Structured log verbosity |
 | `PROXY_API_KEY` | local only | Transitional dev-only request gate |
 | `PERSISTENCE_AUTH_TOKENS` | local only | Transitional dev-only actor mapping |
+| `FACET_ENVIRONMENT` | recommended | `local`, `staging`, or `production` safety mode for hosted deployment checks |
+| `ALLOW_TRANSITIONAL_HOSTED_FILE_STORE` | no | Temporary escape hatch for controlled hosted staging smoke tests that still use file-backed state |
+| `HOSTED_AI_RATE_LIMIT_MAX` | recommended | Max hosted AI requests per rate-limit window |
+| `HOSTED_AI_RATE_LIMIT_WINDOW_MS` | recommended | Hosted AI rate-limit window length |
+| `HOSTED_BILLING_RATE_LIMIT_MAX` | recommended | Max hosted billing mutations per rate-limit window |
+| `HOSTED_BILLING_RATE_LIMIT_WINDOW_MS` | recommended | Hosted billing mutation window length |
+| `HOSTED_PERSISTENCE_RATE_LIMIT_MAX` | recommended | Max hosted persistence mutations per rate-limit window |
+| `HOSTED_PERSISTENCE_RATE_LIMIT_WINDOW_MS` | recommended | Hosted persistence mutation window length |
 
 Rules:
 - `PROXY_API_KEY` and `PERSISTENCE_AUTH_TOKENS` must not be part of hosted production auth
+- authenticated hosted browser requests must not depend on the default `facet-local-proxy` header
 - hosted identity comes from verified Supabase session tokens, not static bearer token maps
 - server code must rewrite tenant, user, and workspace identity from trusted auth context before save
 - when `FACET_AUTH_MODE=hosted`, local hosted development can use `HOSTED_WORKSPACE_FILE` as the durable actor and workspace directory while keeping the same authenticated browser/API contract
 - hosted billing and entitlement state come from `HOSTED_BILLING_FILE` until the durable billing backend replaces the file-backed transition layer
+- hosted staging/production now fail fast when they still rely on the default proxy key or explicit `PERSISTENCE_AUTH_TOKENS`
+- hosted staging/production must not run on the transitional file-backed stores unless `ALLOW_TRANSITIONAL_HOSTED_FILE_STORE=true` is set for a bounded smoke environment
 
 ## Secret Ownership
 
@@ -217,6 +228,12 @@ The current codebase still includes local-development shortcuts:
 - `proxy/server.js` treats missing `PERSISTENCE_AUTH_TOKENS` as a local bearer-token map
 - `proxy/facetServer.js` enforces `X-Proxy-API-Key`
 - `src/persistence/remoteBackend.ts` and `src/utils/llmProxy.ts` can send a client-supplied proxy key
+
+Current hosted control additions:
+- hosted authenticated account, persistence, and AI routes no longer require the browser to send `X-Proxy-API-Key`
+- hosted AI, billing mutation, and persistence mutation routes now apply fixed-window rate limits
+- hosted operations now emit structured `hosted-ops` log events plus in-process counters for AI denials, billing failures, persistence mutations, and rate-limit hits
+- detailed restore, rollback, and alert guidance lives in the Wave 1 operations runbook
 
 Wave 1 follow-through required from this contract:
 - `TASK-75` locks the server-side auth, tenant, workspace, and entitlement model
