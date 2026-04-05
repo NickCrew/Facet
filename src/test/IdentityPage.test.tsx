@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { IdentityPage } from '../routes/identity/IdentityPage'
 import { useIdentityStore } from '../store/identityStore'
 import { useResumeStore } from '../store/resumeStore'
@@ -72,6 +72,29 @@ const scanFixture = (): ResumeScanResult => {
   }
 }
 
+const createAbortError = (): DOMException => new DOMException('The operation was aborted.', 'AbortError')
+
+const uploadPdf = (container: HTMLElement, fileName = 'resume.pdf') => {
+  const uploadInput = container.querySelector('input[type="file"][accept="application/pdf,.pdf"]')
+  if (!uploadInput) {
+    throw new Error('PDF upload input not found. IdentityPage may not have rendered the upload intake.')
+  }
+  fireEvent.change(uploadInput as HTMLInputElement, {
+    target: {
+      files: [new File(['%PDF-1.4'], fileName, { type: 'application/pdf' })],
+    },
+  })
+}
+
+const rejectWithAbort = async (reject: (reason?: unknown) => void) => {
+  await act(async () => {
+    reject(createAbortError())
+    // Flush the React microtask queue so abort-driven catch handlers settle before assertions run.
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+}
+
 describe('IdentityPage', () => {
   beforeEach(() => {
     vi.stubEnv('VITE_ANTHROPIC_PROXY_URL', 'https://ai.example/proxy')
@@ -125,15 +148,7 @@ describe('IdentityPage', () => {
 
   it('uploads a PDF, populates the scan editor, and uses the scanned identity as the AI seed', async () => {
     const { container } = render(<IdentityPage />)
-
-    const uploadInput = container.querySelector('input[type="file"][accept="application/pdf,.pdf"]')
-    expect(uploadInput).toBeTruthy()
-
-    fireEvent.change(uploadInput as HTMLInputElement, {
-      target: {
-        files: [new File(['%PDF-1.4'], 'resume.pdf', { type: 'application/pdf' })],
-      },
-    })
+    uploadPdf(container)
 
     await waitFor(() => {
       expect(screen.getByDisplayValue('Nick Ferguson')).toBeTruthy()
@@ -192,13 +207,7 @@ describe('IdentityPage', () => {
     resumeScannerMocks.scanResumePdfMock.mockResolvedValue(fallback)
 
     const { container } = render(<IdentityPage />)
-    const uploadInput = container.querySelector('input[type="file"][accept="application/pdf,.pdf"]')
-
-    fireEvent.change(uploadInput as HTMLInputElement, {
-      target: {
-        files: [new File(['%PDF-1.4'], 'resume.pdf', { type: 'application/pdf' })],
-      },
-    })
+    uploadPdf(container)
 
     await waitFor(() => {
       expect(screen.getByLabelText('Source Material')).toBeTruthy()
@@ -207,5 +216,56 @@ describe('IdentityPage', () => {
     expect(useIdentityStore.getState().intakeMode).toBe('paste')
     expect(useIdentityStore.getState().scanResult).toBeNull()
     expect(useIdentityStore.getState().sourceMaterial).toContain('Experience')
+  })
+
+  it('cancels in-flight scan work on unmount without leaving stale UI state', async () => {
+    let rejectScan!: (reason?: unknown) => void
+    resumeScannerMocks.scanResumePdfMock.mockImplementation(
+      () =>
+        new Promise<ResumeScanResult>((_resolve, reject) => {
+          rejectScan = reject
+        }),
+    )
+
+    const { container, unmount } = render(<IdentityPage />)
+    uploadPdf(container)
+
+    await waitFor(() => {
+      expect(screen.getByText('Scanning PDF…')).toBeTruthy()
+    })
+
+    unmount()
+    await rejectWithAbort(rejectScan)
+
+    expect(useIdentityStore.getState().scanResult).toBeNull()
+    expect(useIdentityStore.getState().sourceMaterial).toBe('')
+  })
+
+  it('cancels in-flight draft generation on unmount without persisting stale notices', async () => {
+    let rejectGenerate!: (reason?: unknown) => void
+    identityExtractionMocks.generateIdentityDraftMock.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectGenerate = reject
+        }),
+    )
+
+    const { container, unmount } = render(<IdentityPage />)
+    uploadPdf(container)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Nick Ferguson')).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByText('Generate Draft'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Generating…')).toBeTruthy()
+    })
+
+    unmount()
+    await rejectWithAbort(rejectGenerate)
+
+    expect(useIdentityStore.getState().draft).toBeNull()
   })
 })
