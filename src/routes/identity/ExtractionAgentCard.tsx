@@ -125,11 +125,11 @@ export function ExtractionAgentCard({
             onDrop={(event) => void onDrop(event)}
           >
             <Upload size={22} aria-hidden="true" />
-            <strong>{isScanning ? 'Scanning PDF…' : 'Drop a PDF here or click to upload'}</strong>
+            <strong>{isScanning ? 'Scanning PDF…' : 'Drag a resume PDF here or click to browse'}</strong>
           </button>
           <p className="identity-muted">
-            Resume Scanner v1 is PDF-only and performs a local structural parse before any AI call.
-            Use a text-based, single-column PDF. OCR and image-only resumes are out of scope for this pass.
+            Resume Scanner v1 is PDF-only and performs a local structural parse before any AI call. Use a
+            text-based, single-column PDF. OCR and image-only resumes are out of scope for this pass.
           </p>
           <input
             ref={uploadRef}
