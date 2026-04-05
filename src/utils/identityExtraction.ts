@@ -1,5 +1,6 @@
 import { importProfessionalIdentity, type ProfessionalIdentityV3 } from '../identity/schema'
 import type {
+  IdentityDeepenedBullet,
   IdentityAssumptionTag,
   IdentityConfidence,
   IdentityDraftBullet,
@@ -122,6 +123,51 @@ Rules:
 - follow_up_questions should be short and concrete.
 - Do not wrap the JSON in markdown fences.`
 
+const BULLET_DEEPENING_SYSTEM_PROMPT = `You are Facet's bullet deepening agent.
+Decompose exactly one scanned resume bullet from Professional Identity Schema v3 source_text into structured fields.
+Return JSON only with this exact top-level shape:
+{
+  "summary": string,
+  "bullet": {
+    "role_id": string,
+    "bullet_id": string,
+    "problem": string,
+    "action": string,
+    "outcome": string,
+    "impact": string[],
+    "metrics": {},
+    "technologies": string[],
+    "tags": string[],
+    "rewrite": string,
+    "assumptions": [
+      {
+        "label": string,
+        "confidence": "stated" | "confirmed" | "guessing" | "corrected"
+      }
+    ]
+  }
+}
+Rules:
+- Deepen only the supplied bullet. Do not invent new bullets. Do not move claims across bullets.
+- Preserve factual claims already present in source_text.
+- Preserve technologies, metrics, and proper nouns exactly as written.
+- Extract all named technologies, metrics, and proper nouns from source_text into technologies, metrics, and other relevant structured fields even when the text does not label them explicitly.
+- Preserve those facts both in the prose decomposition and in the structured fields.
+- Do not abstract named tools, platforms, languages, vendors, or services into generic categories.
+- If something is unclear, carry the original term through and mark uncertainty in assumptions instead of paraphrasing it away.
+- Keep role_id and bullet_id exactly as provided.
+- Keep source_text implicit; do not rewrite or omit facts from it.
+- problem, action, and outcome should read like concise resume decomposition, not a chat response.
+- impact must be a string array.
+- metrics must be an object whose values are strings, numbers, or booleans.
+- technologies must be a string array.
+- tags should be short, lowercase, and deduplicated.
+- Use "guessing" only when the source implies something but does not state it directly.
+- Use "stated" when the source says it directly.
+- Use "confirmed" when the source states it and the surrounding evidence reinforces it.
+- Use "corrected" only when explicit correction notes revise the bullet.
+- Do not wrap the JSON in markdown fences.`
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -167,6 +213,19 @@ const normalizeAssumptions = (value: unknown, context: string): IdentityAssumpti
       confidence: normalizeConfidence(record.confidence, `${context}[${index}].confidence`),
     }
   })
+}
+
+const assertMetricObject = (value: unknown, context: string): Record<string, string | number | boolean> => {
+  const record = assertRecord(value, context)
+  const normalized: Record<string, string | number | boolean> = {}
+  for (const [key, entry] of Object.entries(record)) {
+    if (typeof entry === 'string' || typeof entry === 'number' || typeof entry === 'boolean') {
+      normalized[key] = entry
+      continue
+    }
+    throw new Error(`${context}.${key} must be a string, number, or boolean.`)
+  }
+  return normalized
 }
 
 const composeRewrite = (problem: string, action: string, outcome: string): string =>
@@ -246,19 +305,41 @@ const normalizeGeneratorRules = (
 const normalizeBulletTechnologies = (
   value: unknown,
   context: string,
-): { value: unknown; warnings: string[] } => {
+): { value: string[]; warnings: string[] } => {
   if (Array.isArray(value)) {
-    return { value, warnings: [] }
+    const warnings: string[] = []
+    const items = value.flatMap((entry, index) => {
+      if (typeof entry === 'string') {
+        return [entry]
+      }
+
+      if (typeof entry === 'number' || typeof entry === 'boolean') {
+        warnings.push(
+          `Normalized ${context}.technologies[${index}] into a string for AI extraction output.`,
+        )
+        return [String(entry)]
+      }
+
+      warnings.push(`Dropped invalid ${context}.technologies[${index}] entry for AI extraction output.`)
+      return []
+    })
+
+    return {
+      value: Array.from(new Set(items.map((entry) => entry.trim()).filter(Boolean))),
+      warnings,
+    }
   }
 
   if (typeof value === 'string') {
-    const items = value
-      .split(',')
-      .map((entry) => entry.trim())
-      .filter(Boolean)
-
     return {
-      value: items,
+      value: Array.from(
+        new Set(
+          value
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter(Boolean),
+        ),
+      ),
       warnings: [
         `Normalized ${context}.technologies from a string into a string array for AI extraction output.`,
       ],
@@ -271,6 +352,26 @@ const normalizeBulletTechnologies = (
       value === undefined
         ? [`Added missing ${context}.technologies array for AI extraction output.`]
         : [`Normalized invalid ${context}.technologies into an empty array for AI extraction output.`],
+  }
+}
+
+const findRoleBullet = (identity: ProfessionalIdentityV3, roleId: string, bulletId: string) => {
+  const roleIndex = identity.roles.findIndex((entry) => entry.id === roleId)
+  if (roleIndex < 0) {
+    throw new Error(`Role "${roleId}" does not exist in identity.roles.`)
+  }
+
+  const role = identity.roles[roleIndex]!
+  const bulletIndex = role.bullets.findIndex((entry) => entry.id === bulletId)
+  if (bulletIndex < 0) {
+    throw new Error(`Bullet "${bulletId}" does not exist in role "${roleId}".`)
+  }
+
+  return {
+    roleIndex,
+    bulletIndex,
+    role,
+    bullet: role.bullets[bulletIndex]!,
   }
 }
 
@@ -350,26 +451,77 @@ const normalizeExtractedIdentityCandidate = (
   }
 }
 
-export const parseIdentityExtractionResponse = (rawResponse: string): IdentityExtractionDraft => {
-  let repaired = false
-  let parsed: unknown
+const parseLlmJsonResponse = (
+  rawResponse: string,
+  context: string,
+): { parsed: unknown; repaired: boolean } => {
   try {
-    const parsedResult = parseJsonWithRepair<unknown>(
-      extractJsonBlock(rawResponse),
-      'Identity extraction response',
-    )
-    parsed = parsedResult.data
-    repaired = parsedResult.repaired
+    const parsedResult = parseJsonWithRepair<unknown>(extractJsonBlock(rawResponse), context)
+    return {
+      parsed: parsedResult.data,
+      repaired: parsedResult.repaired,
+    }
   } catch (error) {
     if (error instanceof JsonExtractionError) {
-      throw error
+      throw new JsonExtractionError(`${context}: ${error.message}`)
     }
-    throw new Error(error instanceof Error ? error.message : 'Unable to parse identity extraction response.')
+
+    throw new Error(error instanceof Error ? error.message : `Unable to parse ${context}.`)
   }
+}
+
+const parseDeepenedBulletPayload = (
+  value: unknown,
+  context: string,
+): Omit<IdentityDeepenedBullet, 'warnings' | 'bullet'> & {
+  summary: string
+  warnings: string[]
+  bullet: Omit<ProfessionalIdentityV3['roles'][number]['bullets'][number], 'source_text'>
+} => {
+  const root = assertRecord(value, context)
+  const summary = assertString(root.summary, 'summary').trim()
+  const bulletRecord = assertRecord(root.bullet, 'bullet')
+  const roleId = assertString(bulletRecord.role_id, 'bullet.role_id').trim()
+  const bulletId = assertString(bulletRecord.bullet_id, 'bullet.bullet_id').trim()
+  const technologies = normalizeBulletTechnologies(bulletRecord.technologies, 'bullet')
+  const bullet = {
+    id: bulletId,
+    problem: assertString(bulletRecord.problem, 'bullet.problem').trim(),
+    action: assertString(bulletRecord.action, 'bullet.action').trim(),
+    outcome: assertString(bulletRecord.outcome, 'bullet.outcome').trim(),
+    impact: assertStringArray(bulletRecord.impact, 'bullet.impact').map((entry) => entry.trim()).filter(Boolean),
+    metrics: assertMetricObject(bulletRecord.metrics, 'bullet.metrics'),
+    technologies: technologies.value,
+    tags: assertStringArray(bulletRecord.tags, 'bullet.tags')
+      .map((entry) => entry.trim().toLowerCase())
+      .filter(Boolean),
+  }
+  return {
+    summary,
+    roleId,
+    bulletId,
+    bullet: {
+      ...bullet,
+      tags: Array.from(new Set(bullet.tags)),
+    },
+    rewrite: assertString(bulletRecord.rewrite, 'bullet.rewrite').trim(),
+    assumptions:
+      bulletRecord.assumptions === undefined
+        ? []
+        : normalizeAssumptions(bulletRecord.assumptions, 'bullet.assumptions'),
+    warnings: technologies.warnings,
+  }
+}
+
+export const parseIdentityExtractionResponse = (rawResponse: string): IdentityExtractionDraft => {
+  const { parsed, repaired } = parseLlmJsonResponse(rawResponse, 'Identity extraction response')
 
   const root = assertRecord(parsed, 'identity extraction response')
   const normalizedIdentity = normalizeExtractedIdentityCandidate(root.identity)
   const imported = importProfessionalIdentity(normalizedIdentity.value)
+  if (!imported.data) {
+    throw new Error('Identity extraction response produced an invalid identity after schema validation.')
+  }
   const warningSet = repaired
     ? [
         'Repaired minor JSON syntax issues in the AI response before validation.',
@@ -430,6 +582,43 @@ export const parseIdentityExtractionResponse = (rawResponse: string): IdentityEx
   }
 }
 
+export const parseDeepenIdentityBulletResponse = (
+  rawResponse: string,
+  identity: ProfessionalIdentityV3,
+): IdentityDeepenedBullet => {
+  const { parsed, repaired } = parseLlmJsonResponse(rawResponse, 'Identity bullet deepening response')
+
+  const normalized = parseDeepenedBulletPayload(parsed, 'identity bullet deepening response')
+  const existing = findRoleBullet(identity, normalized.roleId, normalized.bulletId)
+  const candidateIdentity = structuredClone(identity)
+  candidateIdentity.roles[existing.roleIndex].bullets[existing.bulletIndex] = {
+    ...candidateIdentity.roles[existing.roleIndex].bullets[existing.bulletIndex],
+    ...normalized.bullet,
+    source_text: existing.bullet.source_text,
+  }
+  const imported = importProfessionalIdentity(candidateIdentity)
+  if (!imported.data) {
+    throw new Error('Deepened bullet produced an invalid identity after schema validation.')
+  }
+  const validatedBullet = findRoleBullet(imported.data, normalized.roleId, normalized.bulletId)
+
+  return {
+    summary: normalized.summary,
+    roleId: normalized.roleId,
+    bulletId: normalized.bulletId,
+    bullet: validatedBullet.bullet,
+    rewrite: normalized.rewrite,
+    assumptions: normalized.assumptions,
+    warnings: repaired
+      ? [
+          'Repaired minor JSON syntax issues in the AI response before validation.',
+          ...normalized.warnings,
+          ...imported.warnings,
+        ]
+      : [...normalized.warnings, ...imported.warnings],
+  }
+}
+
 const buildExtractionPrompt = ({
   sourceMaterial,
   correctionNotes,
@@ -474,6 +663,55 @@ const buildExtractionPrompt = ({
   return parts.join('\n')
 }
 
+export const buildDeepenBulletPrompt = ({
+  identity,
+  roleId,
+  bulletId,
+  correctionNotes,
+}: {
+  identity: ProfessionalIdentityV3
+  roleId: string
+  bulletId: string
+  correctionNotes?: string
+}): string => {
+  const target = findRoleBullet(identity, roleId, bulletId)
+  const parts = [
+    'Scanned identity shell:',
+    JSON.stringify(identity, null, 2),
+    '',
+    'Target role context:',
+    JSON.stringify(
+      {
+        role_id: target.role.id,
+        company: target.role.company,
+        title: target.role.title,
+        dates: target.role.dates,
+        subtitle: target.role.subtitle ?? '',
+      },
+      null,
+      2,
+    ),
+    '',
+    'Target bullet to deepen:',
+    JSON.stringify(
+      {
+        role_id: target.role.id,
+        bullet_id: target.bullet.id,
+        source_text: target.bullet.source_text ?? '',
+      },
+      null,
+      2,
+    ),
+  ]
+
+  if (correctionNotes?.trim()) {
+    parts.push('', 'Correction notes:', correctionNotes.trim())
+  }
+
+  parts.push('', 'Return only the deepened bullet payload. Do not emit a full identity object.')
+  return parts.join('\n')
+}
+
 export const generateIdentityDraft = async ({
   endpoint,
   sourceMaterial,
@@ -502,4 +740,41 @@ export const generateIdentityDraft = async ({
   )
 
   return parseIdentityExtractionResponse(rawResponse)
+}
+
+export const deepenIdentityBullet = async ({
+  endpoint,
+  identity,
+  roleId,
+  bulletId,
+  correctionNotes,
+  signal,
+}: {
+  endpoint: string
+  identity: ProfessionalIdentityV3
+  roleId: string
+  bulletId: string
+  correctionNotes?: string
+  signal?: AbortSignal
+}): Promise<IdentityDeepenedBullet> => {
+  const rawResponse = await callLlmProxy(
+    endpoint,
+    BULLET_DEEPENING_SYSTEM_PROMPT,
+    buildDeepenBulletPrompt({ identity, roleId, bulletId, correctionNotes }),
+    {
+      model: 'sonnet',
+      temperature: 0.1,
+      timeoutMs: IDENTITY_EXTRACTION_TIMEOUT_MS,
+      signal,
+    },
+  )
+
+  const result = parseDeepenIdentityBulletResponse(rawResponse, identity)
+  if (result.roleId !== roleId || result.bulletId !== bulletId) {
+    throw new Error(
+      `Deepening response targeted ${result.roleId}/${result.bulletId}, expected ${roleId}/${bulletId}.`,
+    )
+  }
+
+  return result
 }

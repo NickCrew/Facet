@@ -16,6 +16,16 @@ export interface IdentityDraftBullet {
   assumptions: IdentityAssumptionTag[]
 }
 
+export interface IdentityDeepenedBullet {
+  summary: string
+  roleId: string
+  bulletId: string
+  bullet: ProfessionalIdentityV3['roles'][number]['bullets'][number]
+  rewrite: string
+  assumptions: IdentityAssumptionTag[]
+  warnings: string[]
+}
+
 export interface IdentityExtractionDraft {
   generatedAt: string
   summary: string
