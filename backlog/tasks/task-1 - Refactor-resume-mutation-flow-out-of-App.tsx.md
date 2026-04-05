@@ -1,0 +1,37 @@
+---
+id: TASK-1
+title: Refactor resume mutation flow out of App.tsx
+status: To Do
+assignee: []
+created_date: '2026-02-28 05:46'
+labels:
+  - remediation
+  - refactor
+dependencies: []
+references:
+  - .agents/reviews/review-20260227-175002.md
+priority: medium
+---
+
+## Description
+
+<!-- SECTION:DESCRIPTION:BEGIN -->
+Review feedback flags App.tsx/ComponentLibrary prop-drilling and inline mutation callbacks as a maintainability/performance risk. Move mutation logic into reusable actions (store or dedicated hook) and shrink component interfaces.
+<!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 App.tsx no longer defines inline data mutation callbacks for each entity type
+- [ ] #2 ComponentLibrary callback prop count is materially reduced
+- [ ] #3 Behavior parity is preserved for add/edit/reorder/toggle flows
+- [ ] #4 Verification commands pass
+<!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Extract granular mutation actions for target lines/profiles/projects/bullets/skills into a single action surface.
+2. Replace inline update lambdas in App.tsx with stable function references.
+3. Reduce ComponentLibrary prop footprint by passing grouped action APIs.
+4. Re-run lint/typecheck/test/build and document API changes.
+<!-- SECTION:PLAN:END -->
