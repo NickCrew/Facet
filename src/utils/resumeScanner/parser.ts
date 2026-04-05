@@ -13,7 +13,9 @@ import type {
 const BULLET_PREFIX = /^[•●▪◦◆▸►*-]\s*/
 const ROLE_KEYWORD_SOURCE =
   '(?:engineer|developer|manager|director|lead|architect|consultant|analyst|founder|owner|designer|administrator|specialist|intern)'
+// Loose date vocabulary check used to decide whether a line is date-like at all.
 const DATE_WORD_SOURCE = '(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|spring|summer|fall|winter|present|current|\\d{4})'
+// Structured date token used when a segment should be treated as an entire date fragment.
 const DATE_TOKEN_SOURCE =
   '(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?\\s+\\d{4}|(?:spring|summer|fall|winter)\\s+\\d{4}|\\d{4}|present|current)'
 const DATE_RANGE_SEPARATOR_SOURCE = '[-–—]'
@@ -270,8 +272,9 @@ const pickAtSplit = (text: string): { title: string; company: string } | null =>
     .map((candidate) => {
       const titleWordCount = candidate.title.split(/\s+/).filter(Boolean).length
       const companyWordCount = candidate.company.split(/\s+/).filter(Boolean).length
-      // Favor splits where the left side still reads like a role and the right
-      // side looks like a clean company name instead of a partially split title.
+      // Priority order: a title ending in a known role keyword should beat a
+      // generic split, and any candidate that leaves a residual " at " in the
+      // company should lose unless the alternatives are worse.
       const score =
         (isLikelyRoleKeyword(candidate.title) ? 3 : 0) +
         (endsWithRoleKeyword(candidate.title) ? 2 : 0) +
@@ -290,14 +293,15 @@ const pickAtSplit = (text: string): { title: string; company: string } | null =>
   return best ? { title: best.title, company: best.company } : null
 }
 
-const parseRoleHeader = (
+const extractDateFromRoleHeader = (
   line: string,
+  segments: string[],
   nextLine?: string,
-): { company: string; title: string; dates: string; subtitle?: string } => {
-  const segments = line
-    .split(/\s*[|•]\s*/)
-    .map((entry) => normalizeWhitespace(entry))
-    .filter(Boolean)
+): {
+  dateSegment: string
+  remaining: string[]
+  textWithoutDates: string
+} => {
   const inlineDateMatch = line.match(DATE_RANGE_PATTERN)
   const trailingDateMatch = line.match(TRAILING_DATE_PATTERN)
   const inlineDateSegment = inlineDateMatch?.[0]
@@ -324,6 +328,51 @@ const parseRoleHeader = (
       ? segments.filter((_, index) => index !== segmentDateEntry.index)
       : segments.filter((segment) => segment !== dateSegment)
 
+  if (segmentDateEntry) {
+    return {
+      dateSegment,
+      remaining,
+      textWithoutDates: remaining.join(' | '),
+    }
+  }
+
+  if (inlineDateMatch && inlineDateMatch.index !== undefined) {
+    return {
+      dateSegment,
+      remaining,
+      textWithoutDates: normalizeWhitespace(
+        `${line.slice(0, inlineDateMatch.index)} ${line.slice(inlineDateMatch.index + inlineDateMatch[0].length)}`,
+      ),
+    }
+  }
+
+  if (trailingDateMatch && trailingDateMatch.index !== undefined) {
+    return {
+      dateSegment,
+      remaining,
+      textWithoutDates: normalizeWhitespace(
+        `${line.slice(0, trailingDateMatch.index)} ${line.slice(trailingDateMatch.index + trailingDateMatch[0].length)}`,
+      ),
+    }
+  }
+
+  return {
+    dateSegment,
+    remaining,
+    textWithoutDates: dateSegment ? normalizeWhitespace(line.replace(dateSegment, '')) : line,
+  }
+}
+
+const parseRoleHeader = (
+  line: string,
+  nextLine?: string,
+): { company: string; title: string; dates: string; subtitle?: string } => {
+  const segments = line
+    .split(/\s*[|•]\s*/)
+    .map((entry) => normalizeWhitespace(entry))
+    .filter(Boolean)
+  const { dateSegment, remaining, textWithoutDates } = extractDateFromRoleHeader(line, segments, nextLine)
+
   if (remaining.length >= 2) {
     const [first, second] = remaining
     if (isLikelyRoleKeyword(first) && !isLikelyRoleKeyword(second)) {
@@ -337,22 +386,6 @@ const parseRoleHeader = (
     return { title: first, company: second, dates: dateSegment }
   }
 
-  const textWithoutDates = (() => {
-    if (segmentDateEntry) {
-      return remaining.join(' | ')
-    }
-    if (inlineDateMatch && inlineDateMatch.index !== undefined) {
-      return normalizeWhitespace(
-        `${line.slice(0, inlineDateMatch.index)} ${line.slice(inlineDateMatch.index + inlineDateMatch[0].length)}`,
-      )
-    }
-    if (trailingDateMatch && trailingDateMatch.index !== undefined) {
-      return normalizeWhitespace(
-        `${line.slice(0, trailingDateMatch.index)} ${line.slice(trailingDateMatch.index + trailingDateMatch[0].length)}`,
-      )
-    }
-    return dateSegment ? normalizeWhitespace(line.replace(dateSegment, '')) : line
-  })()
   const atSplit = pickAtSplit(textWithoutDates)
   if (atSplit) {
     return {
