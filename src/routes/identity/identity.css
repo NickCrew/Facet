@@ -324,6 +324,12 @@
   border-color: #d56d63;
 }
 
+.identity-chip-failed {
+  background: #fff1c4;
+  color: #704900;
+  border-color: #c89829;
+}
+
 .identity-chip-empty {
   background: transparent;
   color: var(--text-tertiary);
@@ -380,6 +386,18 @@
   gap: var(--space-3);
 }
 
+.identity-scan-bullet-card {
+  gap: var(--space-3);
+}
+
+.identity-scan-bullet-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
 @media (max-width: 960px) {
   .identity-grid {
     grid-template-columns: 1fr;
@@ -416,6 +434,12 @@
   background: #5b211d;
   color: #ffe3e0;
   border-color: #d56d63;
+}
+
+[data-theme='dark'] .identity-chip-failed {
+  background: #4c3700;
+  color: #fff1c4;
+  border-color: #c89829;
 }
 
 .identity-question-list {

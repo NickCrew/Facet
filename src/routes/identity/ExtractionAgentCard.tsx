@@ -36,6 +36,24 @@ interface ExtractionAgentCardProps {
     value: string,
   ) => void
   onUpdateBulletSourceText: (roleIndex: number, bulletIndex: number, value: string) => void
+  onUpdateBulletTextField: (
+    roleId: string,
+    bulletId: string,
+    field: 'problem' | 'action' | 'outcome',
+    value: string,
+  ) => void
+  onUpdateBulletListField: (
+    roleId: string,
+    bulletId: string,
+    field: 'impact' | 'technologies' | 'tags',
+    value: string[],
+  ) => void
+  onUpdateBulletMetrics: (
+    roleId: string,
+    bulletId: string,
+    value: Record<string, string | number | boolean>,
+  ) => void
+  onDeepenBullet: (roleId: string, bulletId: string) => Promise<void>
   onUpdateSkillGroupLabel: (groupIndex: number, value: string) => void
   onUpdateSkillItemName: (groupIndex: number, itemIndex: number, value: string) => void
   onUpdateEducationEntry: (
@@ -66,6 +84,10 @@ export function ExtractionAgentCard({
   onUpdateIdentityCore,
   onUpdateRole,
   onUpdateBulletSourceText,
+  onUpdateBulletTextField,
+  onUpdateBulletListField,
+  onUpdateBulletMetrics,
+  onDeepenBullet,
   onUpdateSkillGroupLabel,
   onUpdateSkillItemName,
   onUpdateEducationEntry,
@@ -205,6 +227,10 @@ export function ExtractionAgentCard({
                 onUpdateIdentityCore={onUpdateIdentityCore}
                 onUpdateRole={onUpdateRole}
                 onUpdateBulletSourceText={onUpdateBulletSourceText}
+                onUpdateBulletTextField={onUpdateBulletTextField}
+                onUpdateBulletListField={onUpdateBulletListField}
+                onUpdateBulletMetrics={onUpdateBulletMetrics}
+                onDeepenBullet={onDeepenBullet}
                 onUpdateSkillGroupLabel={onUpdateSkillGroupLabel}
                 onUpdateSkillItemName={onUpdateSkillItemName}
                 onUpdateEducationEntry={onUpdateEducationEntry}

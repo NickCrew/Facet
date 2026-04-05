@@ -45,6 +45,23 @@ interface IdentityState {
     value: string,
   ) => void
   updateScannedBulletSourceText: (roleIndex: number, bulletIndex: number, value: string) => void
+  updateScannedBulletTextField: (
+    roleId: string,
+    bulletId: string,
+    field: 'problem' | 'action' | 'outcome',
+    value: string,
+  ) => void
+  updateScannedBulletListField: (
+    roleId: string,
+    bulletId: string,
+    field: 'impact' | 'technologies' | 'tags',
+    value: string[],
+  ) => void
+  updateScannedBulletMetrics: (
+    roleId: string,
+    bulletId: string,
+    value: Record<string, string | number | boolean>,
+  ) => void
   startScannedBulletDeepen: (roleId: string, bulletId: string) => void
   completeScannedBulletDeepen: (value: IdentityDeepenedBullet) => void
   failScannedBulletDeepen: (roleId: string, bulletId: string, message: string) => void
@@ -243,6 +260,25 @@ const updateScanIdentity = (
   }
 }
 
+const updateScanBulletById = (
+  identity: ProfessionalIdentityV3,
+  roleId: string,
+  bulletId: string,
+  updater: (
+    bullet: ProfessionalIdentityV3['roles'][number]['bullets'][number],
+  ) => ProfessionalIdentityV3['roles'][number]['bullets'][number],
+): ProfessionalIdentityV3 => ({
+  ...identity,
+  roles: identity.roles.map((role) =>
+    role.id === roleId
+      ? {
+          ...role,
+          bullets: role.bullets.map((bullet) => (bullet.id === bulletId ? updater(bullet) : bullet)),
+        }
+      : role,
+  ),
+})
+
 export const useIdentityStore = create<IdentityState>()(
   persist(
     (set, get) => ({
@@ -350,6 +386,87 @@ export const useIdentityStore = create<IdentityState>()(
             ),
           })),
         ),
+      updateScannedBulletTextField: (roleId, bulletId, field, value) =>
+        set((state) => {
+          if (!state.scanResult) {
+            return {}
+          }
+
+          const identity = updateScanBulletById(state.scanResult.identity, roleId, bulletId, (bullet) => ({
+            ...bullet,
+            [field]: value,
+          }))
+          const progress = normalizeScanProgress(identity, state.scanResult.progress)
+          progress.bullets[getScanBulletKey(roleId, bulletId)] = createBulletProgress(
+            'edited',
+            'corrected',
+            null,
+          )
+
+          return {
+            scanResult: {
+              ...state.scanResult,
+              identity,
+              progress,
+              counts: recalculateScanCounts(identity, progress),
+            },
+            draftDocument: state.draft ? state.draftDocument : formatIdentityDocument(identity),
+          }
+        }),
+      updateScannedBulletListField: (roleId, bulletId, field, value) =>
+        set((state) => {
+          if (!state.scanResult) {
+            return {}
+          }
+
+          const identity = updateScanBulletById(state.scanResult.identity, roleId, bulletId, (bullet) => ({
+            ...bullet,
+            [field]: value,
+          }))
+          const progress = normalizeScanProgress(identity, state.scanResult.progress)
+          progress.bullets[getScanBulletKey(roleId, bulletId)] = createBulletProgress(
+            'edited',
+            'corrected',
+            null,
+          )
+
+          return {
+            scanResult: {
+              ...state.scanResult,
+              identity,
+              progress,
+              counts: recalculateScanCounts(identity, progress),
+            },
+            draftDocument: state.draft ? state.draftDocument : formatIdentityDocument(identity),
+          }
+        }),
+      updateScannedBulletMetrics: (roleId, bulletId, value) =>
+        set((state) => {
+          if (!state.scanResult) {
+            return {}
+          }
+
+          const identity = updateScanBulletById(state.scanResult.identity, roleId, bulletId, (bullet) => ({
+            ...bullet,
+            metrics: value,
+          }))
+          const progress = normalizeScanProgress(identity, state.scanResult.progress)
+          progress.bullets[getScanBulletKey(roleId, bulletId)] = createBulletProgress(
+            'edited',
+            'corrected',
+            null,
+          )
+
+          return {
+            scanResult: {
+              ...state.scanResult,
+              identity,
+              progress,
+              counts: recalculateScanCounts(identity, progress),
+            },
+            draftDocument: state.draft ? state.draftDocument : formatIdentityDocument(identity),
+          }
+        }),
       startScannedBulletDeepen: (roleId, bulletId) =>
         set((state) => {
           if (!state.scanResult) {
@@ -677,7 +794,7 @@ export const useIdentityStore = create<IdentityState>()(
         warnings: state.warnings,
         changelog: state.changelog,
       }),
-      migrate: (persistedState: unknown, version) => {
+      migrate: (persistedState: unknown) => {
         if (typeof persistedState !== 'object' || persistedState === null) {
           return persistedState
         }
@@ -687,10 +804,7 @@ export const useIdentityStore = create<IdentityState>()(
           return persistedState
         }
 
-        const progress =
-          version < 3
-            ? normalizeScanProgress(state.scanResult.identity, state.scanResult.progress)
-            : normalizeScanProgress(state.scanResult.identity, state.scanResult.progress)
+        const progress = normalizeScanProgress(state.scanResult.identity, state.scanResult.progress)
 
         return {
           ...state,

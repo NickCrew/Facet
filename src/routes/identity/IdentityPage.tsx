@@ -8,6 +8,7 @@ import { useUiStore } from '../../store/uiStore'
 import { type IdentityApplyMode } from '../../types/identity'
 import { sanitizeEndpointUrl } from '../../utils/idUtils'
 import {
+  deepenIdentityBullet,
   generateIdentityDraft,
   parseIdentityExtractionResponse,
 } from '../../utils/identityExtraction'
@@ -41,6 +42,7 @@ export function IdentityPage() {
   const uploadRef = useRef<HTMLInputElement>(null)
   const generateAbortRef = useRef<AbortController | null>(null)
   const scanAbortRef = useRef<AbortController | null>(null)
+  const deepenAbortRef = useRef<AbortController | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isScanning, setIsScanning] = useState(false)
   const [pageError, setPageError] = useState<string | null>(null)
@@ -63,6 +65,12 @@ export function IdentityPage() {
   const updateScannedIdentityCore = useIdentityStore((state) => state.updateScannedIdentityCore)
   const updateScannedRole = useIdentityStore((state) => state.updateScannedRole)
   const updateScannedBulletSourceText = useIdentityStore((state) => state.updateScannedBulletSourceText)
+  const updateScannedBulletTextField = useIdentityStore((state) => state.updateScannedBulletTextField)
+  const updateScannedBulletListField = useIdentityStore((state) => state.updateScannedBulletListField)
+  const updateScannedBulletMetrics = useIdentityStore((state) => state.updateScannedBulletMetrics)
+  const startScannedBulletDeepen = useIdentityStore((state) => state.startScannedBulletDeepen)
+  const completeScannedBulletDeepen = useIdentityStore((state) => state.completeScannedBulletDeepen)
+  const failScannedBulletDeepen = useIdentityStore((state) => state.failScannedBulletDeepen)
   const updateScannedSkillGroupLabel = useIdentityStore((state) => state.updateScannedSkillGroupLabel)
   const updateScannedSkillItemName = useIdentityStore((state) => state.updateScannedSkillItemName)
   const updateScannedEducationEntry = useIdentityStore((state) => state.updateScannedEducationEntry)
@@ -83,6 +91,7 @@ export function IdentityPage() {
     () => () => {
       generateAbortRef.current?.abort()
       scanAbortRef.current?.abort()
+      deepenAbortRef.current?.abort()
     },
     [],
   )
@@ -107,36 +116,11 @@ export function IdentityPage() {
     if (!scanResult) {
       return null
     }
-
-    const activeIdentity = draft?.identity ?? currentIdentity
-    if (!activeIdentity) {
-      return {
-        extractedBullets: scanResult.counts.extractedBullets,
-        decomposedBullets: 0,
-      }
-    }
-
-    const activeBulletMap = new Map(
-      activeIdentity.roles.flatMap((role) =>
-        role.bullets.map((bullet) => [
-          `${role.id}::${bullet.id}`,
-          [bullet.problem, bullet.action, bullet.outcome].some((entry) => entry.trim()),
-        ]),
-      ),
-    )
-
-    const decomposedBullets = scanResult.identity.roles.reduce(
-      (total, role) =>
-        total +
-        role.bullets.filter((bullet) => activeBulletMap.get(`${role.id}::${bullet.id}`) === true).length,
-      0,
-    )
-
     return {
       extractedBullets: scanResult.counts.extractedBullets,
-      decomposedBullets,
+      decomposedBullets: scanResult.counts.deepenedBullets + scanResult.counts.editedBullets,
     }
-  }, [currentIdentity, draft, scanResult])
+  }, [scanResult])
 
   const ensureEndpoint = () => {
     if (!aiEndpoint) {
@@ -264,6 +248,50 @@ export function IdentityPage() {
     }
 
     await handleScannedFile(file)
+  }
+
+  const handleDeepenBullet = async (roleId: string, bulletId: string) => {
+    if (!scanResult) {
+      return
+    }
+
+    let controller: AbortController | null = null
+    try {
+      deepenAbortRef.current?.abort()
+      controller = new AbortController()
+      deepenAbortRef.current = controller
+      ensureEndpoint()
+      setPageError(null)
+      setPageNotice(null)
+      startScannedBulletDeepen(roleId, bulletId)
+      const result = await deepenIdentityBullet({
+        endpoint: aiEndpoint,
+        identity: useIdentityStore.getState().scanResult?.identity ?? scanResult.identity,
+        roleId,
+        bulletId,
+        correctionNotes,
+        signal: controller.signal,
+      })
+      if (controller.signal.aborted) {
+        return
+      }
+
+      completeScannedBulletDeepen(result)
+      setPageNotice(result.summary)
+    } catch (error) {
+      if (controller?.signal.aborted && error instanceof DOMException) {
+        return
+      }
+
+      const message = error instanceof Error ? error.message : 'Bullet deepening failed.'
+      failScannedBulletDeepen(roleId, bulletId, message)
+      setPageNotice(null)
+      setPageError(message)
+    } finally {
+      if (controller && deepenAbortRef.current === controller) {
+        deepenAbortRef.current = null
+      }
+    }
   }
 
   const handleValidateDraft = () => {
@@ -473,6 +501,10 @@ export function IdentityPage() {
           onUpdateIdentityCore={updateScannedIdentityCore}
           onUpdateRole={updateScannedRole}
           onUpdateBulletSourceText={updateScannedBulletSourceText}
+          onUpdateBulletTextField={updateScannedBulletTextField}
+          onUpdateBulletListField={updateScannedBulletListField}
+          onUpdateBulletMetrics={updateScannedBulletMetrics}
+          onDeepenBullet={handleDeepenBullet}
           onUpdateSkillGroupLabel={updateScannedSkillGroupLabel}
           onUpdateSkillItemName={updateScannedSkillItemName}
           onUpdateEducationEntry={updateScannedEducationEntry}

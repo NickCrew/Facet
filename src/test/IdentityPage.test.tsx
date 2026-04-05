@@ -13,6 +13,7 @@ import type { ResumeScanResult } from '../types/identity'
 const navigateMock = vi.fn(async () => undefined)
 const identityExtractionMocks = vi.hoisted(() => ({
   generateIdentityDraftMock: vi.fn(),
+  deepenIdentityBulletMock: vi.fn(),
 }))
 const resumeScannerMocks = vi.hoisted(() => ({
   scanResumePdfMock: vi.fn(),
@@ -30,6 +31,7 @@ vi.mock('../utils/identityExtraction', async () => {
   return {
     ...actual,
     generateIdentityDraft: identityExtractionMocks.generateIdentityDraftMock,
+    deepenIdentityBullet: identityExtractionMocks.deepenIdentityBulletMock,
   }
 })
 
@@ -171,6 +173,25 @@ describe('IdentityPage', () => {
       followUpQuestions: [],
       identity: cloneIdentityFixture(),
       bullets: [],
+      warnings: [],
+    })
+    identityExtractionMocks.deepenIdentityBulletMock.mockResolvedValue({
+      summary: 'Deepened the migration bullet.',
+      roleId: 'a10',
+      bulletId: 'platform-migration',
+      bullet: {
+        id: 'platform-migration',
+        problem: 'Cloud-only delivery blocked on-prem installs.',
+        action: 'Ported the platform to Kubernetes-based installs for on-prem customers.',
+        outcome: 'Made the product deployable in customer environments.',
+        impact: ['Unlocked customer-hosted deployments'],
+        metrics: { installs: 12 },
+        technologies: ['Kubernetes'],
+        source_text: 'ignored',
+        tags: ['platform', 'kubernetes'],
+      },
+      rewrite: 'Ported the platform to Kubernetes-based installs for on-prem customers.',
+      assumptions: [],
       warnings: [],
     })
     resumeScannerMocks.scanResumePdfMock.mockResolvedValue(scanFixture())
@@ -342,6 +363,42 @@ describe('IdentityPage', () => {
     })
 
     expect(revokeObjectUrlMock).toHaveBeenCalledWith('blob:draft-export')
+  })
+
+  it('deepens a scanned bullet inline and marks manual edits as corrected', async () => {
+    const { container } = render(<IdentityPage />)
+    uploadPdf(container)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Nick Ferguson')).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByText('Deepen'))
+
+    await waitFor(() => {
+      expect(identityExtractionMocks.deepenIdentityBulletMock).toHaveBeenCalledTimes(1)
+    })
+
+    expect(identityExtractionMocks.deepenIdentityBulletMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roleId: 'a10',
+        bulletId: 'platform-migration',
+      }),
+    )
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Cloud-only delivery blocked on-prem installs.')).toBeTruthy()
+    })
+
+    fireEvent.change(screen.getByDisplayValue('Cloud-only delivery blocked on-prem installs.'), {
+      target: { value: 'Cloud-only delivery blocked on-prem customer installs.' },
+    })
+
+    expect(useIdentityStore.getState().scanResult?.counts.editedBullets).toBe(1)
+    expect(
+      useIdentityStore.getState().scanResult?.identity.roles[0]?.bullets[0]?.problem,
+    ).toBe('Cloud-only delivery blocked on-prem customer installs.')
+    expect(screen.getByText('Edited')).toBeTruthy()
   })
 
   it('exports the current identity model and revokes the object URL after download', async () => {

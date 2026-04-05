@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react'
 import type { ProfessionalIdentityV3 } from '../../identity/schema'
-import type { ResumeScanResult } from '../../types/identity'
+import type { ResumeScanBulletProgress, ResumeScanResult } from '../../types/identity'
 
 interface ScannedIdentityEditorProps {
   scanResult: ResumeScanResult
@@ -13,6 +14,24 @@ interface ScannedIdentityEditorProps {
     value: string,
   ) => void
   onUpdateBulletSourceText: (roleIndex: number, bulletIndex: number, value: string) => void
+  onUpdateBulletTextField: (
+    roleId: string,
+    bulletId: string,
+    field: 'problem' | 'action' | 'outcome',
+    value: string,
+  ) => void
+  onUpdateBulletListField: (
+    roleId: string,
+    bulletId: string,
+    field: 'impact' | 'technologies' | 'tags',
+    value: string[],
+  ) => void
+  onUpdateBulletMetrics: (
+    roleId: string,
+    bulletId: string,
+    value: Record<string, string | number | boolean>,
+  ) => void
+  onDeepenBullet: (roleId: string, bulletId: string) => Promise<void>
   onUpdateSkillGroupLabel: (groupIndex: number, value: string) => void
   onUpdateSkillItemName: (groupIndex: number, itemIndex: number, value: string) => void
   onUpdateEducationEntry: (
@@ -39,16 +58,165 @@ const parseLinksDocument = (value: string): ProfessionalIdentityV3['identity']['
     })
     .filter((entry) => entry.url)
 
+const listToDocument = (items: string[]): string => items.join('\n')
+
+const parseListDocument = (value: string): string[] =>
+  value
+    .split(/\n|,/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+
+const metricsToDocument = (metrics: Record<string, string | number | boolean>): string =>
+  JSON.stringify(metrics, null, 2)
+
+const parseMetricsDocument = (
+  value: string,
+): { data: Record<string, string | number | boolean> | null; error: string | null } => {
+  if (!value.trim()) {
+    return { data: {}, error: null }
+  }
+
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return { data: null, error: 'Metrics must be a JSON object before you leave this field.' }
+    }
+    const normalized = Object.fromEntries(
+      Object.entries(parsed).filter(
+        (entry): entry is [string, string | number | boolean] =>
+          typeof entry[1] === 'string' || typeof entry[1] === 'number' || typeof entry[1] === 'boolean',
+      ),
+    )
+    return { data: normalized, error: null }
+  } catch {
+    return { data: null, error: 'Metrics must be valid JSON before you leave this field.' }
+  }
+}
+
+const STATUS_LABELS: Record<ResumeScanBulletProgress['status'], string> = {
+  idle: 'Scanned',
+  running: 'Deepening',
+  completed: 'Deepened',
+  failed: 'Failed',
+  edited: 'Edited',
+}
+
+const STATUS_CLASSNAMES: Record<ResumeScanBulletProgress['status'], string> = {
+  idle: 'identity-chip-stated',
+  running: 'identity-chip-guessing',
+  completed: 'identity-chip-confirmed',
+  failed: 'identity-chip-failed',
+  edited: 'identity-chip-corrected',
+}
+
+const hasDecomposition = (bullet: ProfessionalIdentityV3['roles'][number]['bullets'][number]): boolean =>
+  [bullet.problem, bullet.action, bullet.outcome].some((entry) => entry.trim())
+
+function DeferredListField({
+  label,
+  value,
+  onCommit,
+}: {
+  label: string
+  value: string[]
+  onCommit: (nextValue: string[]) => void
+}) {
+  const [document, setDocument] = useState(() => listToDocument(value))
+
+  useEffect(() => {
+    setDocument(listToDocument(value))
+  }, [value])
+
+  return (
+    <label className="identity-field">
+      <span className="identity-label">{label}</span>
+      <textarea
+        className="identity-textarea"
+        value={document}
+        onChange={(event) => setDocument(event.target.value)}
+        onBlur={() => {
+          const nextValue = parseListDocument(document)
+          onCommit(nextValue)
+          setDocument(listToDocument(nextValue))
+        }}
+      />
+    </label>
+  )
+}
+
+function DeferredMetricsField({
+  roleId,
+  bulletId,
+  metrics,
+  onCommit,
+}: {
+  roleId: string
+  bulletId: string
+  metrics: Record<string, string | number | boolean>
+  onCommit: (
+    roleId: string,
+    bulletId: string,
+    value: Record<string, string | number | boolean>,
+  ) => void
+}) {
+  const [document, setDocument] = useState(() => metricsToDocument(metrics))
+  const [error, setError] = useState<string | null>(null)
+  const errorId = `${roleId}-${bulletId}-metrics-error`
+
+  useEffect(() => {
+    setDocument(metricsToDocument(metrics))
+    setError(null)
+  }, [metrics])
+
+  return (
+    <label className="identity-field identity-field-wide">
+      <span className="identity-label">Metrics (JSON)</span>
+      <textarea
+        className="identity-textarea"
+        value={document}
+        aria-invalid={error ? 'true' : undefined}
+        aria-describedby={error ? errorId : undefined}
+        onChange={(event) => {
+          setDocument(event.target.value)
+          if (error) {
+            setError(null)
+          }
+        }}
+        onBlur={() => {
+          const parsed = parseMetricsDocument(document)
+          if (!parsed.data) {
+            setError(parsed.error)
+            return
+          }
+
+          onCommit(roleId, bulletId, parsed.data)
+          setDocument(metricsToDocument(parsed.data))
+          setError(null)
+        }}
+      />
+      {error ? (
+        <span className="identity-muted" id={errorId}>
+          {error}
+        </span>
+      ) : null}
+    </label>
+  )
+}
+
 export function ScannedIdentityEditor({
   scanResult,
   onUpdateIdentityCore,
   onUpdateRole,
   onUpdateBulletSourceText,
+  onUpdateBulletTextField,
+  onUpdateBulletListField,
+  onUpdateBulletMetrics,
+  onDeepenBullet,
   onUpdateSkillGroupLabel,
   onUpdateSkillItemName,
   onUpdateEducationEntry,
 }: ScannedIdentityEditorProps) {
-  const { identity } = scanResult
+  const { identity, progress } = scanResult
 
   return (
     <div className="identity-scan-editor">
@@ -122,7 +290,7 @@ export function ScannedIdentityEditor({
       <section className="identity-scan-section">
         <div>
           <h3>Roles</h3>
-          <p>These bullets stay as source text until the extraction agent decomposes them.</p>
+          <p>Deepen bullets inline, then correct the decomposition directly in the scanned model.</p>
         </div>
         {identity.roles.length > 0 ? (
           <div className="identity-scan-stack">
@@ -163,18 +331,116 @@ export function ScannedIdentityEditor({
                   </label>
                 </div>
                 <div className="identity-scan-stack">
-                  {role.bullets.map((bullet, bulletIndex) => (
-                    <label className="identity-field" key={bullet.id}>
-                      <span className="identity-label">Bullet {bulletIndex + 1}</span>
-                      <textarea
-                        className="identity-textarea"
-                        value={bullet.source_text ?? ''}
-                        onChange={(event) =>
-                          onUpdateBulletSourceText(roleIndex, bulletIndex, event.target.value)
-                        }
-                      />
-                    </label>
-                  ))}
+                  {role.bullets.map((bullet, bulletIndex) => {
+                    const key = `${role.id}::${bullet.id}`
+                    const bulletProgress = progress.bullets[key]
+                    const showDecomposition = hasDecomposition(bullet) || bulletProgress?.status === 'edited'
+                    return (
+                      <article className="identity-scan-card identity-scan-bullet-card" key={bullet.id}>
+                        <div className="identity-scan-bullet-toolbar">
+                          <div className="identity-chip-row">
+                            <span className={`identity-chip ${STATUS_CLASSNAMES[bulletProgress?.status ?? 'idle']}`}>
+                              {STATUS_LABELS[bulletProgress?.status ?? 'idle']}
+                            </span>
+                            <span className={`identity-chip identity-chip-${bulletProgress?.confidence ?? 'stated'}`}>
+                              {bulletProgress?.confidence ?? 'stated'}
+                            </span>
+                          </div>
+                          <button
+                            className="identity-btn"
+                            type="button"
+                            onClick={() => void onDeepenBullet(role.id, bullet.id)}
+                            disabled={bulletProgress?.status === 'running'}
+                          >
+                            {bulletProgress?.status === 'completed' || bulletProgress?.status === 'edited'
+                              ? 'Re-deepen'
+                              : bulletProgress?.status === 'running'
+                                ? 'Deepening…'
+                                : 'Deepen'}
+                          </button>
+                        </div>
+                        <label className="identity-field">
+                          <span className="identity-label">Bullet {bulletIndex + 1} Source</span>
+                          <textarea
+                            className="identity-textarea"
+                            value={bullet.source_text ?? ''}
+                            onChange={(event) =>
+                              onUpdateBulletSourceText(roleIndex, bulletIndex, event.target.value)
+                            }
+                          />
+                        </label>
+                        {bulletProgress?.lastError ? (
+                          <p className="identity-muted">{bulletProgress.lastError}</p>
+                        ) : null}
+                        {showDecomposition ? (
+                          <div className="identity-scan-form-grid">
+                            <label className="identity-field identity-field-wide">
+                              <span className="identity-label">Problem</span>
+                              <textarea
+                                className="identity-textarea"
+                                value={bullet.problem}
+                                onChange={(event) =>
+                                  onUpdateBulletTextField(role.id, bullet.id, 'problem', event.target.value)
+                                }
+                              />
+                            </label>
+                            <label className="identity-field identity-field-wide">
+                              <span className="identity-label">Action</span>
+                              <textarea
+                                className="identity-textarea"
+                                value={bullet.action}
+                                onChange={(event) =>
+                                  onUpdateBulletTextField(role.id, bullet.id, 'action', event.target.value)
+                                }
+                              />
+                            </label>
+                            <label className="identity-field identity-field-wide">
+                              <span className="identity-label">Outcome</span>
+                              <textarea
+                                className="identity-textarea"
+                                value={bullet.outcome}
+                                onChange={(event) =>
+                                  onUpdateBulletTextField(role.id, bullet.id, 'outcome', event.target.value)
+                                }
+                              />
+                            </label>
+                            <DeferredListField
+                              label="Impact"
+                              value={bullet.impact}
+                              onCommit={(nextValue) =>
+                                onUpdateBulletListField(role.id, bullet.id, 'impact', nextValue)
+                              }
+                            />
+                            <DeferredListField
+                              label="Technologies"
+                              value={bullet.technologies}
+                              onCommit={(nextValue) =>
+                                onUpdateBulletListField(role.id, bullet.id, 'technologies', nextValue)
+                              }
+                            />
+                            <DeferredListField
+                              label="Tags"
+                              value={bullet.tags}
+                              onCommit={(nextValue) =>
+                                onUpdateBulletListField(
+                                  role.id,
+                                  bullet.id,
+                                  'tags',
+                                  nextValue.map((entry) => entry.toLowerCase()),
+                                )
+                              }
+                            />
+                            <DeferredMetricsField
+                              roleId={role.id}
+                              bulletId={bullet.id}
+                              metrics={bullet.metrics}
+                              onCommit={onUpdateBulletMetrics}
+                            />
+                          </div>
+                        ) : null}
+                      </article>
+                    )
+                  })}
                 </div>
               </article>
             ))}
