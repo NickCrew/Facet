@@ -1,10 +1,13 @@
 export const FACET_AI_FEATURE_KEYS = [
   'build.jd-analysis',
   'build.bullet-reframe',
+  'match.jd-analysis',
   'research.profile-inference',
   'research.search',
   'prep.generate',
   'letters.generate',
+  'linkedin.generate',
+  'debrief.generate',
 ]
 
 const HOSTED_ALLOWED_STATUSES = new Set(['trial', 'active', 'grace'])
@@ -59,4 +62,3 @@ export function createHostedAiErrorPayload(reason, feature) {
     error: 'Upgrade to AI Pro to use this hosted AI feature.',
   }
 }
-

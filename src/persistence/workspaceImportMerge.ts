@@ -1,10 +1,18 @@
 import { mergeResumeData } from '../engine/importMerge'
 import type { CoverLetterTemplate } from '../types/coverLetter'
+import type { DebriefSession } from '../types/debrief'
+import type { LinkedInProfileDraft } from '../types/linkedin'
 import type { PipelineEntry } from '../types/pipeline'
 import type { PrepCard, PrepDeck } from '../types/prep'
+import type { RecruiterCard } from '../types/recruiter'
 import type { SearchRequest, SearchRun } from '../types/search'
 import { cloneValue } from './clone'
 import type { FacetWorkspaceSnapshot } from './contracts'
+import {
+  createEmptyDebriefArtifactSnapshot,
+  createEmptyLinkedInArtifactSnapshot,
+  createEmptyRecruiterArtifactSnapshot,
+} from './normalization'
 
 const mergeById = <T extends { id: string }>(existing: T[], incoming: T[]): T[] => {
   const knownIds = new Set(existing.map((item) => item.id))
@@ -68,6 +76,17 @@ const mergeCoverLetterTemplates = (
   return next
 }
 
+const mergeLinkedInDrafts = (
+  existing: LinkedInProfileDraft[],
+  incoming: LinkedInProfileDraft[],
+) => mergeById(existing, incoming)
+
+const mergeRecruiterCards = (existing: RecruiterCard[], incoming: RecruiterCard[]) =>
+  mergeById(existing, incoming)
+
+const mergeDebriefSessions = (existing: DebriefSession[], incoming: DebriefSession[]) =>
+  mergeById(existing, incoming)
+
 const mergePipelineEntries = (existing: PipelineEntry[], incoming: PipelineEntry[]) =>
   mergeById(existing, incoming)
 
@@ -84,6 +103,19 @@ export const mergeWorkspaceSnapshots = (
   if (!current) {
     return cloneValue(imported)
   }
+
+  const linkedInArtifact =
+    current.artifacts.linkedin ??
+    imported.artifacts.linkedin ??
+    createEmptyLinkedInArtifactSnapshot(current.workspace.id, imported.exportedAt)
+  const recruiterArtifact =
+    current.artifacts.recruiter ??
+    imported.artifacts.recruiter ??
+    createEmptyRecruiterArtifactSnapshot(current.workspace.id, imported.exportedAt)
+  const debriefArtifact =
+    current.artifacts.debrief ??
+    imported.artifacts.debrief ??
+    createEmptyDebriefArtifactSnapshot(current.workspace.id, imported.exportedAt)
 
   return {
     ...cloneValue(current),
@@ -125,6 +157,33 @@ export const mergeWorkspaceSnapshots = (
           templates: mergeCoverLetterTemplates(
             current.artifacts.coverLetters.payload.templates,
             imported.artifacts.coverLetters.payload.templates,
+          ),
+        },
+      },
+      linkedin: {
+        ...cloneValue(linkedInArtifact),
+        payload: {
+          drafts: mergeLinkedInDrafts(
+            current.artifacts.linkedin?.payload?.drafts ?? [],
+            imported.artifacts.linkedin?.payload?.drafts ?? [],
+          ),
+        },
+      },
+      recruiter: {
+        ...cloneValue(recruiterArtifact),
+        payload: {
+          cards: mergeRecruiterCards(
+            current.artifacts.recruiter?.payload?.cards ?? [],
+            imported.artifacts.recruiter?.payload?.cards ?? [],
+          ),
+        },
+      },
+      debrief: {
+        ...cloneValue(debriefArtifact),
+        payload: {
+          sessions: mergeDebriefSessions(
+            current.artifacts.debrief?.payload?.sessions ?? [],
+            imported.artifacts.debrief?.payload?.sessions ?? [],
           ),
         },
       },
@@ -175,6 +234,9 @@ export const scopeWorkspaceSnapshotToWorkspace = (
     pipeline: scopedArtifact(snapshot.artifacts.pipeline, workspaceId, 'pipeline'),
     prep: scopedArtifact(snapshot.artifacts.prep, workspaceId, 'prep'),
     coverLetters: scopedArtifact(snapshot.artifacts.coverLetters, workspaceId, 'coverLetters'),
+    linkedin: scopedArtifact(snapshot.artifacts.linkedin, workspaceId, 'linkedin'),
+    recruiter: scopedArtifact(snapshot.artifacts.recruiter, workspaceId, 'recruiter'),
+    debrief: scopedArtifact(snapshot.artifacts.debrief, workspaceId, 'debrief'),
     research: scopedArtifact(snapshot.artifacts.research, workspaceId, 'research'),
   },
 })

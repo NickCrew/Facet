@@ -3,8 +3,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultResumeData } from '../store/defaultData'
 import { useCoverLetterStore } from '../store/coverLetterStore'
+import { useDebriefStore } from '../store/debriefStore'
+import { useLinkedInStore } from '../store/linkedinStore'
 import { usePipelineStore } from '../store/pipelineStore'
 import { usePrepStore } from '../store/prepStore'
+import { useRecruiterStore } from '../store/recruiterStore'
 import { useResumeStore } from '../store/resumeStore'
 import { useSearchStore } from '../store/searchStore'
 import { resolveStorage } from '../store/storage'
@@ -33,6 +36,7 @@ import {
   LOCAL_ONLY_PERSISTENCE_BOUNDARIES,
 } from '../persistence/snapshot'
 import { assertValidWorkspaceSnapshot } from '../persistence/validation'
+import { buildWorkspaceSnapshot } from './fixtures/workspaceSnapshot'
 
 const LEGACY_KEYS = [
   'vector-resume-data',
@@ -41,6 +45,8 @@ const LEGACY_KEYS = [
   'facet-prep-workspace',
   'facet-prep-data',
   'facet-cover-letter-data',
+  'facet-linkedin-workspace',
+  'facet-debrief-workspace',
   'facet-search-data',
 ]
 
@@ -78,6 +84,18 @@ describe('persistence foundation', () => {
     })
     useCoverLetterStore.setState({
       templates: [],
+    })
+    useLinkedInStore.setState({
+      drafts: [],
+      selectedDraftId: null,
+    })
+    useRecruiterStore.setState({
+      cards: [],
+      selectedCardId: null,
+    })
+    useDebriefStore.setState({
+      sessions: [],
+      selectedSessionId: null,
     })
     useSearchStore.setState({
       profile: null,
@@ -168,6 +186,46 @@ describe('persistence foundation', () => {
         },
       ],
     })
+    useLinkedInStore.setState({
+      drafts: [
+        {
+          id: 'linkedin-1',
+          name: 'Platform Draft',
+          focus: 'Platform engineering',
+          audience: 'Hiring managers',
+          headline: 'Staff Platform Engineer',
+          about: 'I build platform systems.',
+          topSkills: ['Kubernetes'],
+          featuredHighlights: ['Ported platform installs.'],
+          generatedAt: '2026-03-11T00:00:00.000Z',
+        },
+      ],
+      selectedDraftId: 'linkedin-1',
+    })
+    useRecruiterStore.setState({
+      cards: [
+        {
+          id: 'recruiter-1',
+          generatedAt: '2026-03-11T00:00:00.000Z',
+          company: 'Acme',
+          role: 'Staff Engineer',
+          candidateName: 'Jane Smith',
+          candidateTitle: 'Staff Platform Engineer',
+          matchScore: 0.82,
+          summary: 'Strong platform and reliability fit.',
+          recruiterHook: 'Jane Smith is a strong fit for Acme.',
+          suggestedIntro: 'Lead with platform migration wins.',
+          topReasons: ['Strong match on platform scope'],
+          proofPoints: ['Acme: Ported a platform to Kubernetes-based installs.'],
+          skillHighlights: ['Kubernetes'],
+          positioningAngles: ['Lead with platform reliability.'],
+          likelyConcerns: ['Domain ramp may take time.'],
+          gapBridges: ['Bridge gaps through adjacent platform delivery work.'],
+          notes: 'Keep the positioning grounded in the match report.',
+        },
+      ],
+      selectedCardId: 'recruiter-1',
+    })
     useSearchStore.setState({
       profile: {
         id: 'sprof-1',
@@ -230,6 +288,9 @@ describe('persistence foundation', () => {
     expect(snapshot.artifacts.pipeline.payload.entries).toHaveLength(1)
     expect(snapshot.artifacts.prep.payload.decks).toHaveLength(1)
     expect(snapshot.artifacts.coverLetters.payload.templates).toHaveLength(1)
+    expect(snapshot.artifacts.linkedin.payload.drafts).toHaveLength(1)
+    expect(snapshot.artifacts.recruiter.payload.cards).toHaveLength(1)
+    expect(snapshot.artifacts.debrief.payload.sessions).toEqual([])
     expect(snapshot.artifacts.research.payload.profile?.id).toBe('sprof-1')
     expect(snapshot.artifacts.pipeline.payload).not.toHaveProperty('sortField')
     expect(snapshot.artifacts.prep.payload).not.toHaveProperty('activeDeckId')
@@ -275,6 +336,18 @@ describe('persistence foundation', () => {
       decks: [],
       activeDeckId: 'prep-deck-1',
     })
+    useLinkedInStore.setState({
+      drafts: [],
+      selectedDraftId: 'linkedin-1',
+    })
+    useRecruiterStore.setState({
+      cards: [],
+      selectedCardId: 'recruiter-1',
+    })
+    useDebriefStore.setState({
+      sessions: [],
+      selectedSessionId: 'debrief-1',
+    })
 
     const snapshot = createLocalPreferencesSnapshotFromStores('ws-1', '2026-03-11T12:00:00.000Z')
 
@@ -284,6 +357,9 @@ describe('persistence foundation', () => {
     expect(snapshot.ui.lastBackupAt).toBe('2026-03-01T12:00:00.000Z')
     expect(snapshot.pipeline.sortField).toBe('company')
     expect(snapshot.prep.activeDeckId).toBe('prep-deck-1')
+    expect(snapshot.linkedin.selectedDraftId).toBe('linkedin-1')
+    expect(snapshot.recruiter.selectedCardId).toBe('recruiter-1')
+    expect(snapshot.debrief.selectedSessionId).toBe('debrief-1')
     expect(snapshot.ui).not.toHaveProperty('comparisonVector')
   })
 
@@ -350,6 +426,108 @@ describe('persistence foundation', () => {
         signOff: 'Thanks',
       },
     ]
+    snapshot.artifacts.linkedin.payload.drafts = [
+      {
+        id: 'linkedin-1',
+        name: 'Platform Draft',
+        focus: 'Platform engineering',
+        audience: 'Hiring managers',
+        headline: 'Staff Platform Engineer',
+        about: 'I build platform systems.',
+        topSkills: ['Kubernetes'],
+        featuredHighlights: ['Ported platform installs.'],
+        generatedAt: '2026-03-11T12:00:00.000Z',
+      },
+    ]
+    snapshot.artifacts.recruiter.payload.cards = [
+      {
+        id: 'recruiter-1',
+        generatedAt: '2026-03-11T12:00:00.000Z',
+        company: 'Acme',
+        role: 'Staff Engineer',
+        candidateName: 'Jane Smith',
+        candidateTitle: 'Staff Platform Engineer',
+        matchScore: 0.82,
+        summary: 'Strong platform fit.',
+        recruiterHook: 'Jane Smith is a strong fit for Acme.',
+        suggestedIntro: 'Lead with platform migration wins.',
+        topReasons: ['Strong match on platform scope'],
+        proofPoints: ['Acme: Ported the platform to Kubernetes-based installs.'],
+        skillHighlights: ['Kubernetes'],
+        positioningAngles: ['Lead with platform reliability.'],
+        likelyConcerns: ['Domain ramp may take time.'],
+        gapBridges: ['Bridge through adjacent platform delivery work.'],
+        notes: 'Keep the positioning grounded in the match report.',
+      },
+    ]
+    snapshot.artifacts.debrief.payload.sessions = [
+      {
+        id: 'debrief-1',
+        generatedAt: '2026-03-11T12:00:00.000Z',
+        company: 'Acme',
+        role: 'Staff Engineer',
+        sourceKind: 'pipeline',
+        pipelineEntryId: 'pipe-1',
+        roundName: 'Hiring Manager',
+        interviewDate: '2026-03-11',
+        outcome: 'advance',
+        jobDescription: 'Build platforms',
+        rawNotes: 'Talked through platform migration.',
+        questionsAsked: [{ question: 'Tell me about platform migrations.' }],
+        whatWorked: ['Clear migration story'],
+        whatDidnt: ['Metrics were fuzzy'],
+        storiesTold: [],
+        summary: 'Strong platform narrative.',
+        overallTakeaway: 'Lead with the migration story.',
+        anchorStories: [],
+        recurringGaps: [],
+        bestFitCompanyTypes: [],
+        identityDraft: {
+          generatedAt: '2026-03-11T12:00:00.000Z',
+          summary: 'Confirm impact metrics.',
+          followUpQuestions: ['What was the rollout size?'],
+          identity: {
+            version: 3,
+            identity: {
+              name: 'Jane Smith',
+              email: '',
+              phone: '',
+              location: '',
+              links: [],
+              thesis: '',
+            },
+            self_model: {
+              arc: [],
+              philosophy: [],
+              interview_style: {
+                strengths: [],
+                weaknesses: [],
+                prep_strategy: '',
+              },
+            },
+            preferences: {
+              compensation: { priorities: [] },
+              work_model: { preference: 'remote' },
+              role_fit: { ideal: [], red_flags: [], evaluation_criteria: [] },
+            },
+            skills: { groups: [] },
+            profiles: [],
+            roles: [],
+            projects: [],
+            education: [],
+            generator_rules: {
+              voice_skill: 'voice',
+              resume_skill: 'resume',
+            },
+          },
+          bullets: [],
+          warnings: [],
+        },
+        correctionNotes: ['Add the production rollout metric.'],
+        followUpQuestions: ['What was the rollout size?'],
+        warnings: [],
+      },
+    ]
     snapshot.artifacts.research.payload.profile = {
       id: 'profile-1',
       skills: [],
@@ -382,6 +560,9 @@ describe('persistence foundation', () => {
     expect(usePipelineStore.getState().entries).toHaveLength(1)
     expect(usePrepStore.getState().activeDeckId).toBe('deck-1')
     expect(useCoverLetterStore.getState().templates).toHaveLength(1)
+    expect(useLinkedInStore.getState().drafts).toHaveLength(1)
+    expect(useRecruiterStore.getState().cards).toHaveLength(1)
+    expect(useDebriefStore.getState().sessions).toHaveLength(1)
     expect(useSearchStore.getState().profile?.id).toBe('profile-1')
     expect(snapshot.artifacts.resume.payload.meta.name).toBe('Hydrated Name')
   })
@@ -411,6 +592,15 @@ describe('persistence foundation', () => {
       prep: {
         activeDeckId: 'deck-1',
       },
+      linkedin: {
+        selectedDraftId: 'linkedin-1',
+      },
+      recruiter: {
+        selectedCardId: 'recruiter-1',
+      },
+      debrief: {
+        selectedSessionId: 'debrief-1',
+      },
       exportedAt: '2026-03-11T12:00:00.000Z',
     }
 
@@ -422,6 +612,9 @@ describe('persistence foundation', () => {
     expect(usePipelineStore.getState().sortField).toBe('company')
     expect(usePipelineStore.getState().sortDir).toBe('desc')
     expect(usePrepStore.getState().activeDeckId).toBe('deck-1')
+    expect(useLinkedInStore.getState().selectedDraftId).toBe('linkedin-1')
+    expect(useRecruiterStore.getState().selectedCardId).toBe('recruiter-1')
+    expect(useDebriefStore.getState().selectedSessionId).toBe('debrief-1')
   })
 
   it('documents the migration map from legacy storage keys', () => {
@@ -430,6 +623,9 @@ describe('persistence foundation', () => {
       'pipelineStore.entries',
       'prepStore.decks',
       'coverLetterStore.templates',
+      'linkedinStore.drafts',
+      'recruiterStore.cards',
+      'debriefStore.sessions',
       'searchStore.profile,requests,runs',
     ])
     expect(LOCAL_ONLY_PERSISTENCE_BOUNDARIES.map((entry) => entry.target)).toEqual([
@@ -437,6 +633,9 @@ describe('persistence foundation', () => {
       'excluded',
       'localPreferences.pipeline',
       'localPreferences.prep',
+      'localPreferences.linkedin',
+      'localPreferences.recruiter',
+      'localPreferences.debrief',
     ])
     expect(LEGACY_PERSISTENCE_MIGRATION_PLAN.map((entry) => entry.storageKey)).toEqual([
       'vector-resume-data',
@@ -444,6 +643,8 @@ describe('persistence foundation', () => {
       'facet-prep-workspace',
       'facet-prep-data',
       'facet-cover-letter-data',
+      'facet-linkedin-workspace',
+      'facet-debrief-workspace',
       'facet-search-data',
       'vector-resume-ui',
     ])
@@ -974,6 +1175,28 @@ describe('persistence foundation', () => {
     const loaded = await coordinator.loadWorkspace('missing-workspace')
     expect(loaded).toBeNull()
     expect(coordinator.getStatus().phase).toBe('ready')
+  })
+
+  it('normalizes imported snapshots that predate recruiter, linkedin, and debrief artifacts', async () => {
+    const coordinator = createPersistenceCoordinator({
+      backend: createInMemoryPersistenceBackend(),
+      readWorkspaceSnapshot: createWorkspaceSnapshotFromStores,
+      mergeImportedSnapshot: (_, imported) => imported,
+    })
+
+    const legacySnapshot = buildWorkspaceSnapshot()
+    delete ((legacySnapshot.artifacts as unknown) as { recruiter?: unknown }).recruiter
+    delete ((legacySnapshot.artifacts as unknown) as { linkedin?: unknown }).linkedin
+    delete ((legacySnapshot.artifacts as unknown) as { debrief?: unknown }).debrief
+
+    const saved = await coordinator.importWorkspaceSnapshot(legacySnapshot as typeof legacySnapshot)
+
+    expect(saved.artifacts.recruiter.payload.cards).toEqual([])
+    expect(saved.artifacts.recruiter.artifactType).toBe('recruiter')
+    expect(saved.artifacts.linkedin.payload.drafts).toEqual([])
+    expect(saved.artifacts.linkedin.artifactType).toBe('linkedin')
+    expect(saved.artifacts.debrief.payload.sessions).toEqual([])
+    expect(saved.artifacts.debrief.artifactType).toBe('debrief')
   })
 
   it('surfaces loadWorkspace backend failures as error status', async () => {

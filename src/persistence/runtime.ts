@@ -1,7 +1,10 @@
 import { create } from 'zustand'
 import { useCoverLetterStore } from '../store/coverLetterStore'
+import { useDebriefStore } from '../store/debriefStore'
+import { useLinkedInStore } from '../store/linkedinStore'
 import { usePipelineStore } from '../store/pipelineStore'
 import { usePrepStore } from '../store/prepStore'
+import { useRecruiterStore } from '../store/recruiterStore'
 import { useResumeStore } from '../store/resumeStore'
 import { useSearchStore } from '../store/searchStore'
 import { useUiStore } from '../store/uiStore'
@@ -29,6 +32,7 @@ import {
   createLocalPreferencesSnapshotFromStores,
   createWorkspaceSnapshotFromStores,
 } from './snapshot'
+import { normalizeLocalPreferencesSnapshot } from './normalization'
 import type { FacetWorkspaceSnapshot } from './contracts'
 import {
   mergeWorkspaceSnapshots,
@@ -205,6 +209,9 @@ export const createPersistenceRuntime = (
       usePipelineStore.subscribe(() => schedulePersist()),
       usePrepStore.subscribe(() => schedulePersist()),
       useCoverLetterStore.subscribe(() => schedulePersist()),
+      useLinkedInStore.subscribe(() => schedulePersist()),
+      useRecruiterStore.subscribe(() => schedulePersist()),
+      useDebriefStore.subscribe(() => schedulePersist()),
       useSearchStore.subscribe(() => schedulePersist()),
       useUiStore.subscribe(() => schedulePersist()),
     ]
@@ -247,7 +254,9 @@ export const createPersistenceRuntime = (
             const localPreferences =
               await localPreferencesBackend.loadLocalPreferencesSnapshot(workspaceId)
             if (localPreferences) {
-              applyLocalPreferencesSnapshotToStores(localPreferences)
+              applyLocalPreferencesSnapshotToStores(
+                normalizeLocalPreferencesSnapshot(localPreferences),
+              )
             }
           } else {
             usedLegacyMigration = hydrateStoresFromLegacyStorage()

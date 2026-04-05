@@ -1,7 +1,10 @@
 export { DEFAULT_LOCAL_WORKSPACE_ID } from '../types/durable'
 import type { CoverLetterTemplate } from '../types/coverLetter'
+import type { DebriefSession } from '../types/debrief'
+import type { LinkedInProfileDraft } from '../types/linkedin'
 import type { PipelineEntry } from '../types/pipeline'
 import type { PrepDeck } from '../types/prep'
+import type { RecruiterCard } from '../types/recruiter'
 import type { SearchProfile, SearchRequest, SearchRun } from '../types/search'
 import type { ResumeData, VectorSelection } from '../types'
 
@@ -14,6 +17,9 @@ export const FACET_ARTIFACT_TYPES = [
   'pipeline',
   'prep',
   'coverLetters',
+  'linkedin',
+  'recruiter',
+  'debrief',
   'research',
 ] as const
 
@@ -29,6 +35,18 @@ export interface PrepWorkspaceData {
 
 export interface CoverLettersWorkspaceData {
   templates: CoverLetterTemplate[]
+}
+
+export interface LinkedInWorkspaceData {
+  drafts: LinkedInProfileDraft[]
+}
+
+export interface RecruiterWorkspaceData {
+  cards: RecruiterCard[]
+}
+
+export interface DebriefWorkspaceData {
+  sessions: DebriefSession[]
 }
 
 export interface ResearchWorkspaceData {
@@ -58,6 +76,9 @@ export type ResumeArtifactSnapshot = FacetArtifactSnapshot<'resume', ResumeData>
 export type PipelineArtifactSnapshot = FacetArtifactSnapshot<'pipeline', PipelineWorkspaceData>
 export type PrepArtifactSnapshot = FacetArtifactSnapshot<'prep', PrepWorkspaceData>
 export type CoverLettersArtifactSnapshot = FacetArtifactSnapshot<'coverLetters', CoverLettersWorkspaceData>
+export type LinkedInArtifactSnapshot = FacetArtifactSnapshot<'linkedin', LinkedInWorkspaceData>
+export type RecruiterArtifactSnapshot = FacetArtifactSnapshot<'recruiter', RecruiterWorkspaceData>
+export type DebriefArtifactSnapshot = FacetArtifactSnapshot<'debrief', DebriefWorkspaceData>
 export type ResearchArtifactSnapshot = FacetArtifactSnapshot<'research', ResearchWorkspaceData>
 
 export interface FacetWorkspaceArtifacts {
@@ -65,6 +86,9 @@ export interface FacetWorkspaceArtifacts {
   pipeline: PipelineArtifactSnapshot
   prep: PrepArtifactSnapshot
   coverLetters: CoverLettersArtifactSnapshot
+  linkedin: LinkedInArtifactSnapshot
+  recruiter: RecruiterArtifactSnapshot
+  debrief: DebriefArtifactSnapshot
   research: ResearchArtifactSnapshot
 }
 
@@ -103,12 +127,27 @@ export interface FacetPrepLocalPreferences {
   activeDeckId: string | null
 }
 
+export interface FacetLinkedInLocalPreferences {
+  selectedDraftId: string | null
+}
+
+export interface FacetRecruiterLocalPreferences {
+  selectedCardId: string | null
+}
+
+export interface FacetDebriefLocalPreferences {
+  selectedSessionId: string | null
+}
+
 export interface FacetLocalPreferencesSnapshotV1 {
   snapshotVersion: typeof FACET_LOCAL_PREFERENCES_VERSION
   workspaceId: string
   ui: FacetUiLocalPreferences
   pipeline: FacetPipelineLocalPreferences
   prep: FacetPrepLocalPreferences
+  linkedin: FacetLinkedInLocalPreferences
+  recruiter: FacetRecruiterLocalPreferences
+  debrief: FacetDebriefLocalPreferences
   exportedAt: string
 }
 

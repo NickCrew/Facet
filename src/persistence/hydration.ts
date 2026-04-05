@@ -4,6 +4,14 @@ import {
   useCoverLetterStore,
 } from '../store/coverLetterStore'
 import {
+  migrateDebriefState,
+  useDebriefStore,
+} from '../store/debriefStore'
+import {
+  migrateLinkedInState,
+  useLinkedInStore,
+} from '../store/linkedinStore'
+import {
   migratePipelineState,
   usePipelineStore,
 } from '../store/pipelineStore'
@@ -11,6 +19,7 @@ import {
   migratePrepState,
   usePrepStore,
 } from '../store/prepStore'
+import { useRecruiterStore } from '../store/recruiterStore'
 import {
   resumeMigration,
   useResumeStore,
@@ -21,6 +30,9 @@ import {
 } from '../store/searchStore'
 import { resolveStorage } from '../store/storage'
 import { useUiStore } from '../store/uiStore'
+import type { DebriefSession } from '../types/debrief'
+import type { LinkedInProfileDraft } from '../types/linkedin'
+import type { RecruiterCard } from '../types/recruiter'
 import { cloneValue } from './clone'
 import {
   DEFAULT_LOCAL_WORKSPACE_ID,
@@ -38,7 +50,11 @@ const LEGACY_RESUME_UI_KEY = 'vector-resume-ui'
 const LEGACY_PIPELINE_KEY = 'facet-pipeline-data'
 const LEGACY_PREP_KEY = 'facet-prep-workspace'
 const LEGACY_COVER_LETTER_KEY = 'facet-cover-letter-data'
+const LEGACY_LINKEDIN_KEY = 'facet-linkedin-workspace'
+const LEGACY_DEBRIEF_KEY = 'facet-debrief-workspace'
 const LEGACY_SEARCH_KEY = 'facet-search-data'
+// Recruiter cards shipped after unified workspace persistence, so there is no
+// standalone legacy local-storage key to migrate here.
 
 const readPersistedEnvelope = <TState>(key: string): PersistedEnvelope<TState> | null => {
   const raw = resolveStorage().getItem(key)
@@ -86,6 +102,39 @@ export const applyWorkspaceSnapshotToStores = (snapshot: FacetWorkspaceSnapshot)
     templates: cloneValue(snapshot.artifacts.coverLetters.payload.templates),
   })
 
+  const linkedInDrafts =
+    cloneValue(snapshot.artifacts.linkedin.payload.drafts) as LinkedInProfileDraft[]
+  useLinkedInStore.setState((state) => ({
+    ...state,
+    drafts: linkedInDrafts,
+    selectedDraftId:
+      linkedInDrafts.find((draft) => draft.id === state.selectedDraftId)?.id ??
+      linkedInDrafts[0]?.id ??
+      null,
+  }))
+
+  const recruiterCards =
+    cloneValue(snapshot.artifacts.recruiter.payload.cards) as RecruiterCard[]
+  useRecruiterStore.setState((state) => ({
+    ...state,
+    cards: recruiterCards,
+    selectedCardId:
+      recruiterCards.find((card) => card.id === state.selectedCardId)?.id ??
+      recruiterCards[0]?.id ??
+      null,
+  }))
+
+  const debriefSessions =
+    cloneValue(snapshot.artifacts.debrief.payload.sessions) as DebriefSession[]
+  useDebriefStore.setState((state) => ({
+    ...state,
+    sessions: debriefSessions,
+    selectedSessionId:
+      debriefSessions.find((session) => session.id === state.selectedSessionId)?.id ??
+      debriefSessions[0]?.id ??
+      null,
+  }))
+
   useSearchStore.setState({
     profile: cloneValue(snapshot.artifacts.research.payload.profile),
     requests: cloneValue(snapshot.artifacts.research.payload.requests),
@@ -122,6 +171,19 @@ export const applyLocalPreferencesSnapshotToStores = (
     ...state,
     activeDeckId: snapshot.prep.activeDeckId,
   }))
+
+  useLinkedInStore.setState((state) => ({
+    ...state,
+    selectedDraftId: snapshot.linkedin.selectedDraftId,
+  }))
+  useRecruiterStore.setState((state) => ({
+    ...state,
+    selectedCardId: snapshot.recruiter.selectedCardId,
+  }))
+  useDebriefStore.setState((state) => ({
+    ...state,
+    selectedSessionId: snapshot.debrief.selectedSessionId,
+  }))
 }
 
 export const hydrateStoresFromLegacyStorage = (): boolean => {
@@ -129,6 +191,8 @@ export const hydrateStoresFromLegacyStorage = (): boolean => {
   const pipelineEnvelope = readPersistedEnvelope<unknown>(LEGACY_PIPELINE_KEY)
   const prepEnvelope = readPersistedEnvelope<unknown>(LEGACY_PREP_KEY)
   const coverLetterEnvelope = readPersistedEnvelope<unknown>(LEGACY_COVER_LETTER_KEY)
+  const linkedInEnvelope = readPersistedEnvelope<unknown>(LEGACY_LINKEDIN_KEY)
+  const debriefEnvelope = readPersistedEnvelope<unknown>(LEGACY_DEBRIEF_KEY)
   const searchEnvelope = readPersistedEnvelope<unknown>(LEGACY_SEARCH_KEY)
   const uiEnvelope = readPersistedEnvelope<unknown>(LEGACY_RESUME_UI_KEY)
 
@@ -137,6 +201,8 @@ export const hydrateStoresFromLegacyStorage = (): boolean => {
       pipelineEnvelope ||
       prepEnvelope ||
       coverLetterEnvelope ||
+      linkedInEnvelope ||
+      debriefEnvelope ||
       searchEnvelope ||
       uiEnvelope,
   )
@@ -159,6 +225,8 @@ export const hydrateStoresFromLegacyStorage = (): boolean => {
 
   const migratedPrep = migratePrepState(prepEnvelope?.state)
   const migratedCoverLetters = migrateCoverLetterState(coverLetterEnvelope?.state)
+  const migratedLinkedIn = migrateLinkedInState(linkedInEnvelope?.state)
+  const migratedDebrief = migrateDebriefState(debriefEnvelope?.state)
   const migratedSearch = migrateSearchState(searchEnvelope?.state)
 
   useResumeStore.setState({
@@ -188,6 +256,24 @@ export const hydrateStoresFromLegacyStorage = (): boolean => {
   useCoverLetterStore.setState({
     templates: cloneValue(migratedCoverLetters.templates ?? []),
   })
+
+  useLinkedInStore.setState((state) => ({
+    ...state,
+    drafts: cloneValue(migratedLinkedIn.drafts ?? []),
+    selectedDraftId:
+      migratedLinkedIn.selectedDraftId ??
+      migratedLinkedIn.drafts?.[0]?.id ??
+      null,
+  }))
+
+  useDebriefStore.setState((state) => ({
+    ...state,
+    sessions: cloneValue(migratedDebrief.sessions ?? []),
+    selectedSessionId:
+      migratedDebrief.selectedSessionId ??
+      migratedDebrief.sessions?.[0]?.id ??
+      null,
+  }))
 
   useSearchStore.setState({
     profile: cloneValue(migratedSearch.profile ?? null),

@@ -5,10 +5,12 @@ import { assembleResume } from '../../engine/assembler'
 import { PrepCardGrid } from './PrepCardGrid'
 import { PrepPracticeMode } from './PrepPracticeMode'
 import { PrepSearch } from './PrepSearch'
+import { useMatchStore } from '../../store/matchStore'
 import { usePrepStore } from '../../store/prepStore'
 import { usePipelineStore } from '../../store/pipelineStore'
 import { useResumeStore } from '../../store/resumeStore'
 import { parsePrepImport } from '../../utils/prepImport'
+import { createMatchMaterialContext } from '../../utils/matchMaterial'
 import { generateInterviewPrep } from '../../utils/prepGenerator'
 import { sanitizeEndpointUrl } from '../../utils/idUtils'
 import type { PrepCard, PrepCategory, PrepDeck } from '../../types/prep'
@@ -17,9 +19,11 @@ import './prep.css'
 export function PrepPage() {
   const search = useSearch({ strict: false }) as { vector?: string; skills?: string; q?: string }
   const importRef = useRef<HTMLInputElement>(null)
+  const currentReport = useMatchStore((state) => state.currentReport)
   const [query, setQuery] = useState(search.q ?? '')
   const [category, setCategory] = useState<PrepCategory | 'all'>('all')
   const [vectorFilter, setVectorFilter] = useState(search.vector ?? '')
+  const [generationSource, setGenerationSource] = useState<'match' | 'pipeline'>(currentReport ? 'match' : 'pipeline')
   const [selectedEntryId, setSelectedEntryId] = useState<string>('')
   const [selectedVectorId, setSelectedVectorId] = useState(search.vector ?? '')
   const [companyResearchDraft, setCompanyResearchDraft] = useState('')
@@ -31,6 +35,10 @@ export function PrepPage() {
     usePrepStore()
   const pipelineEntries = usePipelineStore((state) => state.entries)
   const resumeData = useResumeStore((state) => state.data)
+  const matchMaterial = useMemo(
+    () => (currentReport ? createMatchMaterialContext(resumeData, currentReport) : null),
+    [currentReport, resumeData],
+  )
   const activeDeck = useMemo(
     () => decks.find((deck) => deck.id === activeDeckId) ?? null,
     [decks, activeDeckId],
@@ -65,6 +73,12 @@ export function PrepPage() {
     }
   }, [candidateEntries, search.vector, selectedEntryId])
 
+  useEffect(() => {
+    if (!currentReport && generationSource === 'match') {
+      setGenerationSource('pipeline')
+    }
+  }, [currentReport, generationSource])
+
   const selectedEntry = useMemo(
     () => pipelineEntries.find((entry) => entry.id === selectedEntryId) ?? null,
     [pipelineEntries, selectedEntryId],
@@ -76,6 +90,12 @@ export function PrepPage() {
       setSelectedEntryId('')
     }
   }, [selectedEntry, selectedEntryId])
+
+  useEffect(() => {
+    if (generationSource !== 'match' || !matchMaterial) return
+    setSelectedVectorId(matchMaterial.vector.id)
+    setCompanyResearchDraft((current) => current || matchMaterial.briefingNotes)
+  }, [generationSource, matchMaterial])
 
   const filteredCards = useMemo(() => {
     const cards = activeDeck?.cards ?? []
@@ -149,48 +169,40 @@ export function PrepPage() {
   }, [exportDecks])
 
   const handleCreateBlankDeck = useCallback(() => {
-    const vectorId = selectedVectorId || activeDeck?.vectorId || ''
-    const title =
-      selectedEntry != null
+    const vectorId =
+      generationSource === 'match'
+        ? (matchMaterial?.vector.id ?? activeDeck?.vectorId ?? '')
+        : (selectedVectorId || activeDeck?.vectorId || '')
+    const title = generationSource === 'match' && matchMaterial
+      ? `${matchMaterial.company} ${matchMaterial.role} Interview Prep`
+      : selectedEntry != null
         ? `${selectedEntry.company} ${selectedEntry.role} Interview Prep`
         : 'Interview Prep'
     createDeck({
       title,
-      company: selectedEntry?.company ?? activeDeck?.company ?? '',
-      role: selectedEntry?.role ?? activeDeck?.role ?? '',
+      company:
+        generationSource === 'match'
+          ? (matchMaterial?.company ?? activeDeck?.company ?? '')
+          : (selectedEntry?.company ?? activeDeck?.company ?? ''),
+      role:
+        generationSource === 'match'
+          ? (matchMaterial?.role ?? activeDeck?.role ?? '')
+          : (selectedEntry?.role ?? activeDeck?.role ?? ''),
       vectorId,
-      pipelineEntryId: selectedEntry?.id ?? null,
-      companyUrl: selectedEntry?.url || undefined,
-      skillMatch: selectedEntry?.skillMatch || undefined,
-      positioning: selectedEntry?.positioning || undefined,
-      notes: selectedEntry?.notes || undefined,
+      pipelineEntryId: generationSource === 'pipeline' ? selectedEntry?.id ?? null : null,
+      companyUrl: generationSource === 'pipeline' ? selectedEntry?.url || undefined : undefined,
+      skillMatch: generationSource === 'match' ? matchMaterial?.skillMatch : selectedEntry?.skillMatch || undefined,
+      positioning: generationSource === 'match' ? matchMaterial?.positioning : selectedEntry?.positioning || undefined,
+      notes: generationSource === 'match' ? matchMaterial?.notes : selectedEntry?.notes || undefined,
       companyResearch: companyResearchDraft || undefined,
-      jobDescription: selectedEntry?.jobDescription || undefined,
+      jobDescription: generationSource === 'match' ? matchMaterial?.jobDescription : selectedEntry?.jobDescription || undefined,
       cards: [],
     })
-  }, [activeDeck?.company, activeDeck?.role, activeDeck?.vectorId, companyResearchDraft, createDeck, selectedEntry, selectedVectorId])
+  }, [activeDeck?.company, activeDeck?.role, activeDeck?.vectorId, companyResearchDraft, createDeck, generationSource, matchMaterial, selectedEntry, selectedVectorId])
 
   const handleGenerate = useCallback(async () => {
     if (!aiEndpoint) {
       setGenerationError('AI generation is disabled. Configure VITE_ANTHROPIC_PROXY_URL.')
-      return
-    }
-    if (!selectedEntry) {
-      setGenerationError('Choose a pipeline entry before generating prep.')
-      return
-    }
-    if (!selectedVectorId) {
-      setGenerationError('Choose a matching vector before generating prep.')
-      return
-    }
-    if (!selectedEntry.jobDescription.trim()) {
-      setGenerationError('The selected pipeline entry does not have a job description yet.')
-      return
-    }
-
-    const vector = resumeData.vectors.find((item) => item.id === selectedVectorId)
-    if (!vector) {
-      setGenerationError('The selected vector could not be found in resume data.')
       return
     }
 
@@ -199,6 +211,77 @@ export function PrepPage() {
 
     try {
       const freshResumeData = useResumeStore.getState().data
+      const activeMatchMaterial =
+        generationSource === 'match' && currentReport
+          ? createMatchMaterialContext(freshResumeData, currentReport)
+          : null
+
+      if (generationSource === 'match') {
+        if (!activeMatchMaterial) {
+          setGenerationError('Generate a Phase 1 match report before generating prep.')
+          return
+        }
+
+        const result = await generateInterviewPrep(aiEndpoint, {
+          company: activeMatchMaterial.company,
+          role: activeMatchMaterial.role,
+          vectorId: activeMatchMaterial.vector.id,
+          vectorLabel: activeMatchMaterial.vector.label,
+          skillMatch: activeMatchMaterial.skillMatch,
+          positioning: activeMatchMaterial.positioning,
+          notes: activeMatchMaterial.notes,
+          companyResearch: companyResearchDraft || undefined,
+          jobDescription: activeMatchMaterial.jobDescription,
+          resumeContext: {
+            candidate: freshResumeData.meta,
+            vector: activeMatchMaterial.vector,
+            assembled: activeMatchMaterial.assembled,
+          },
+        })
+
+        createDeck({
+          title: result.deckTitle,
+          company: activeMatchMaterial.company,
+          role: activeMatchMaterial.role,
+          vectorId: activeMatchMaterial.vector.id,
+          pipelineEntryId: null,
+          skillMatch: activeMatchMaterial.skillMatch,
+          positioning: activeMatchMaterial.positioning,
+          notes: activeMatchMaterial.notes,
+          companyResearch: result.companyResearchSummary || companyResearchDraft || undefined,
+          jobDescription: activeMatchMaterial.jobDescription,
+          generatedAt: new Date().toISOString(),
+          cards: result.cards.map((card) => ({
+            ...card,
+            company: activeMatchMaterial.company,
+            role: activeMatchMaterial.role,
+            vectorId: activeMatchMaterial.vector.id,
+            pipelineEntryId: null,
+            source: 'ai',
+          })),
+        })
+        return
+      }
+
+      if (!selectedEntry) {
+        setGenerationError('Choose a pipeline entry before generating prep.')
+        return
+      }
+      if (!selectedVectorId) {
+        setGenerationError('Choose a matching vector before generating prep.')
+        return
+      }
+      if (!selectedEntry.jobDescription.trim()) {
+        setGenerationError('The selected pipeline entry does not have a job description yet.')
+        return
+      }
+
+      const vector = freshResumeData.vectors.find((item) => item.id === selectedVectorId)
+      if (!vector) {
+        setGenerationError('The selected vector could not be found in resume data.')
+        return
+      }
+
       const assembled = assembleResume(freshResumeData, {
         selectedVector: vector.id,
         manualOverrides: freshResumeData.manualOverrides?.[vector.id] ?? {},
@@ -252,7 +335,24 @@ export function PrepPage() {
     } finally {
       setIsGenerating(false)
     }
-  }, [aiEndpoint, companyResearchDraft, createDeck, selectedEntry, selectedVectorId])
+  }, [aiEndpoint, companyResearchDraft, createDeck, currentReport, generationSource, selectedEntry, selectedVectorId])
+
+  const handleGenerationSourceChange = useCallback((nextSource: 'match' | 'pipeline') => {
+    setGenerationSource(nextSource)
+    setGenerationError(null)
+    if (nextSource === 'match' && matchMaterial) {
+      setSelectedVectorId(matchMaterial.vector.id)
+      setCompanyResearchDraft(matchMaterial.briefingNotes)
+      return
+    }
+
+    if (nextSource === 'pipeline' && selectedEntry) {
+      setSelectedVectorId(selectedEntry.vectorId ?? '')
+      setCompanyResearchDraft(
+        [selectedEntry.positioning, selectedEntry.notes, selectedEntry.url].filter(Boolean).join('\n\n'),
+      )
+    }
+  }, [matchMaterial, selectedEntry])
 
   const handleAddCard = useCallback(() => {
     if (!activeDeck) return
@@ -319,7 +419,7 @@ export function PrepPage() {
         <div>
           <h1>Interview Prep</h1>
           <p className="prep-header-copy">
-            Generate editable prep sets from a pipeline entry, the matching resume vector, the job description, and your company research notes.
+            Generate editable prep sets from the current match report or a pipeline entry, then refine them before practice mode.
           </p>
         </div>
 
@@ -356,7 +456,7 @@ export function PrepPage() {
         <div className="prep-panel-header">
           <div>
             <h2>Generate Prep</h2>
-            <p>Pick the opportunity, confirm the vector, add company research notes, then let the model draft a full prep set you can edit.</p>
+            <p>Match mode uses the current Phase 1 report. Pipeline mode remains available for older opportunities and manual research notes.</p>
           </div>
           <div className="prep-panel-actions">
             <button className="prep-btn" onClick={handleCreateBlankDeck}>
@@ -371,47 +471,92 @@ export function PrepPage() {
         </div>
 
         <div className="prep-generator-grid">
-          <label className="prep-field">
-            <span className="prep-field-label">Pipeline entry</span>
-            <select
-              className="prep-input"
-              value={selectedEntryId}
-              onChange={(event) => {
-                const nextEntry = pipelineEntries.find((entry) => entry.id === event.target.value) ?? null
-                setSelectedEntryId(event.target.value)
-                setSelectedVectorId(nextEntry?.vectorId ?? '')
-                setCompanyResearchDraft(
-                  [nextEntry?.positioning, nextEntry?.notes, nextEntry?.url].filter(Boolean).join('\n\n'),
-                )
-              }}
-            >
-              <option value="">Select an entry</option>
-              {candidateEntries.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.company} - {entry.role}
-                </option>
-              ))}
-            </select>
-          </label>
+          {currentReport && (
+            <fieldset className="prep-field prep-field-span-2 prep-fieldset">
+              <legend className="prep-field-label">Source</legend>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className={`prep-btn ${generationSource === 'match' ? 'prep-btn-primary' : ''}`}
+                  onClick={() => handleGenerationSourceChange('match')}
+                  aria-pressed={generationSource === 'match'}
+                >
+                  Current Match Report
+                </button>
+                <button
+                  type="button"
+                  className={`prep-btn ${generationSource === 'pipeline' ? 'prep-btn-primary' : ''}`}
+                  onClick={() => handleGenerationSourceChange('pipeline')}
+                  aria-pressed={generationSource === 'pipeline'}
+                >
+                  Pipeline Entry
+                </button>
+              </div>
+            </fieldset>
+          )}
 
-          <label className="prep-field">
-            <span className="prep-field-label">Vector</span>
-            <select
-              className="prep-input"
-              value={selectedVectorId}
-              onChange={(event) => setSelectedVectorId(event.target.value)}
-            >
-              <option value="">Select a vector</option>
-              {resumeData.vectors.map((vector) => (
-                <option key={vector.id} value={vector.id}>
-                  {vector.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          {generationSource === 'match' && matchMaterial ? (
+            <div className="prep-context-card prep-field-span-2">
+              <div className="prep-context-row">
+                <strong>{matchMaterial.company}</strong>
+                <span>{matchMaterial.role}</span>
+                <span>Match {Math.round(matchMaterial.matchScore * 100)}%</span>
+              </div>
+              <div className="prep-context-meta">
+                <span>Vector: {matchMaterial.vector.label}</span>
+                <span>Skills: {matchMaterial.skillMatch || 'n/a'}</span>
+                <span>Gap focus: {matchMaterial.gapFocus.join(', ') || 'n/a'}</span>
+              </div>
+              <details className="prep-context-details">
+                <summary>Match report preview</summary>
+                <div className="prep-context-body">{matchMaterial.jobDescription}</div>
+              </details>
+            </div>
+          ) : (
+            <>
+              <label className="prep-field">
+                <span className="prep-field-label">Pipeline entry</span>
+                <select
+                  className="prep-input"
+                  value={selectedEntryId}
+                  onChange={(event) => {
+                    const nextEntry = pipelineEntries.find((entry) => entry.id === event.target.value) ?? null
+                    setSelectedEntryId(event.target.value)
+                    setSelectedVectorId(nextEntry?.vectorId ?? '')
+                    setCompanyResearchDraft(
+                      [nextEntry?.positioning, nextEntry?.notes, nextEntry?.url].filter(Boolean).join('\n\n'),
+                    )
+                  }}
+                >
+                  <option value="">Select an entry</option>
+                  {candidateEntries.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.company} - {entry.role}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="prep-field">
+                <span className="prep-field-label">Vector</span>
+                <select
+                  className="prep-input"
+                  value={selectedVectorId}
+                  onChange={(event) => setSelectedVectorId(event.target.value)}
+                >
+                  <option value="">Select a vector</option>
+                  {resumeData.vectors.map((vector) => (
+                    <option key={vector.id} value={vector.id}>
+                      {vector.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
 
           <label className="prep-field prep-field-span-2">
-            <span className="prep-field-label">Company research notes</span>
+            <span className="prep-field-label">Additional notes</span>
             <textarea
               className="prep-textarea prep-textarea-lg"
               value={companyResearchDraft}
@@ -420,7 +565,7 @@ export function PrepPage() {
             />
           </label>
 
-          {selectedEntry && (
+          {generationSource === 'pipeline' && selectedEntry && (
             <div className="prep-context-card prep-field-span-2">
               <div className="prep-context-row">
                 <strong>{selectedEntry.company}</strong>

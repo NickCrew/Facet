@@ -49,13 +49,13 @@ import { ImportExport } from '../../components/ImportExport'
 import { Tour } from '../../components/Tour'
 import { FacetWordmark } from '../../components/FacetWordmark'
 import { mergeResumeData } from '../../engine/importMerge'
+import type { ResumeConfigSourceKind } from '../../engine/serializer'
 import { resolveEffectiveBulletOrders } from '../../utils/bulletOrder'
 import { buildResumePdfFileName } from '../../utils/pdfFormatting'
 import {
   analyzeJobDescription,
   prepareJobDescription,
   reframeBulletForVector,
-  sanitizeEndpointUrl,
 } from '../../utils/jdAnalyzer'
 import { useFocusTrap } from '../../utils/useFocusTrap'
 import { normalizeThemeState, resolveTheme } from '../../themes/theme'
@@ -67,6 +67,13 @@ import { useSuggestionActions } from '../../hooks/useSuggestionActions'
 import { usePresets } from '../../hooks/usePresets'
 import { createId, slugify } from '../../utils/idUtils'
 import { findOptimalDensity } from '../../utils/densityOptimizer'
+import {
+  resolveComparisonVectorAfterReplaceImport,
+  resolveSelectedVectorAfterReplaceImport,
+} from '../../utils/importSelection'
+import { useMatchStore } from '../../store/matchStore'
+import { buildMatchVectorId } from '../../utils/matchAssembler'
+import { sanitizeEndpointUrl } from '../../utils/idUtils'
 
 const vectorFallbackColors = ['#2563EB', '#0D9488', '#7C3AED', '#EA580C', '#4F46E5', '#0891B2']
 const CURRENT_YEAR = new Date().getFullYear()
@@ -190,6 +197,7 @@ export function BuildPage() {
     tourCompleted,
     setTourCompleted,
   } = useUiStore()
+  const currentMatchReport = useMatchStore((state) => state.currentReport)
 
   // 3. Refs
   const noticeTimeoutRef = useRef<number | null>(null)
@@ -315,12 +323,15 @@ export function BuildPage() {
   }, [suggestionModeActive, jdAnalysisResult, ignoredSuggestionIds, data.target_lines])
 
   const matchScore = useMemo(() => {
+    if (selectedVector !== 'all' && currentMatchReport && buildMatchVectorId(currentMatchReport) === selectedVector) {
+      return currentMatchReport.matchScore
+    }
     if (!jdAnalysisResult) return null
     const matched = jdAnalysisResult.matched_keywords.length
     const gaps = jdAnalysisResult.skill_gaps.length
     const total = matched + gaps
     return total > 0 ? matched / total : 1.0
-  }, [jdAnalysisResult])
+  }, [currentMatchReport, jdAnalysisResult, selectedVector])
 
   // 6. Effects
   useEffect(() => {
@@ -790,22 +801,42 @@ export function BuildPage() {
     }
   }
 
-  const onImport = (nextData: ResumeData, importMode: 'merge' | 'replace', warnings: string[]) => {
+  const onImport = ({
+    data: nextData,
+    importMode,
+    warnings,
+    sourceKind,
+  }: {
+    data: ResumeData
+    importMode: 'merge' | 'replace'
+    warnings: string[]
+    sourceKind: ResumeConfigSourceKind
+  }) => {
     if (importMode === 'merge') {
       updateData((current) => mergeResumeData(current, nextData))
     } else {
       setData(nextData)
+      setSelectedVector(resolveSelectedVectorAfterReplaceImport(selectedVector, nextData.vectors))
+      setComparisonVector(resolveComparisonVectorAfterReplaceImport(comparisonVector, nextData.vectors))
     }
+
+    const importLabel =
+      sourceKind === 'professional-identity-v3' ? 'Professional Identity v3' : 'resume config'
 
     if (warnings.length > 0) {
       showNotice(
         'success',
-        `${importMode === 'merge' ? 'Merged' : 'Imported'} with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}.`,
+        `${importMode === 'merge' ? 'Merged' : 'Imported'} ${importLabel} with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}.`,
       )
       return
     }
 
-    showNotice('success', importMode === 'merge' ? 'Import merged successfully' : 'Import replaced successfully')
+    showNotice(
+      'success',
+      importMode === 'merge'
+        ? `Merged ${importLabel} successfully`
+        : `Imported ${importLabel} successfully`,
+    )
   }
 
   const onAddMetaLinkBound = () => addMetaLink()

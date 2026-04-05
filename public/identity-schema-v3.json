@@ -1,0 +1,326 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://atlascrew.dev/schemas/identity.json",
+  "title": "Professional Identity Schema v3",
+  "description": "Portable professional identity model for Facet and related agent workflows.",
+  "type": "object",
+  "required": [
+    "version",
+    "identity",
+    "self_model",
+    "preferences",
+    "skills",
+    "profiles",
+    "roles",
+    "projects",
+    "education",
+    "generator_rules"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "type": "number", "const": 3 },
+    "identity": { "$ref": "#/$defs/IdentityCore" },
+    "self_model": { "$ref": "#/$defs/SelfModel" },
+    "preferences": { "$ref": "#/$defs/Preferences" },
+    "skills": { "$ref": "#/$defs/Skills" },
+    "profiles": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Profile" }
+    },
+    "roles": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Role" }
+    },
+    "projects": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Project" }
+    },
+    "education": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/EducationEntry" }
+    },
+    "generator_rules": { "$ref": "#/$defs/GeneratorRules" }
+  },
+  "$defs": {
+    "TagList": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "ImpactList": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "TechnologyList": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "MetricValue": {
+      "type": ["string", "number", "boolean"]
+    },
+    "IdentityLink": {
+      "type": "object",
+      "required": ["id", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "url": { "type": "string" }
+      }
+    },
+    "IdentityCore": {
+      "type": "object",
+      "required": ["name", "email", "phone", "location", "links", "thesis"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "display_name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "location": { "type": "string" },
+        "remote": { "type": "boolean" },
+        "title": { "type": "string" },
+        "links": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/IdentityLink" }
+        },
+        "thesis": { "type": "string" },
+        "elaboration": { "type": "string" },
+        "origin": { "type": "string" }
+      }
+    },
+    "ArcEntry": {
+      "type": "object",
+      "required": ["company", "chapter"],
+      "additionalProperties": false,
+      "properties": {
+        "company": { "type": "string" },
+        "chapter": { "type": "string" }
+      }
+    },
+    "PhilosophyEntry": {
+      "type": "object",
+      "required": ["id", "text", "tags"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "tags": { "$ref": "#/$defs/TagList" }
+      }
+    },
+    "InterviewStyle": {
+      "type": "object",
+      "required": ["strengths", "weaknesses", "prep_strategy"],
+      "additionalProperties": false,
+      "properties": {
+        "strengths": { "$ref": "#/$defs/TagList" },
+        "weaknesses": { "$ref": "#/$defs/TagList" },
+        "prep_strategy": { "type": "string" }
+      }
+    },
+    "SelfModel": {
+      "type": "object",
+      "required": ["arc", "philosophy", "interview_style"],
+      "additionalProperties": false,
+      "properties": {
+        "arc": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ArcEntry" }
+        },
+        "philosophy": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PhilosophyEntry" }
+        },
+        "interview_style": { "$ref": "#/$defs/InterviewStyle" }
+      }
+    },
+    "CompPriority": {
+      "type": "object",
+      "required": ["item", "weight"],
+      "additionalProperties": false,
+      "properties": {
+        "item": { "type": "string" },
+        "weight": { "type": "string" },
+        "notes": { "type": "string" }
+      }
+    },
+    "CompensationPreferences": {
+      "type": "object",
+      "required": ["priorities"],
+      "additionalProperties": false,
+      "properties": {
+        "base_floor": { "type": "number" },
+        "base_target": { "type": "number" },
+        "notes": { "type": "string" },
+        "priorities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CompPriority" }
+        }
+      }
+    },
+    "WorkModelPreferences": {
+      "type": "object",
+      "required": ["preference"],
+      "additionalProperties": false,
+      "properties": {
+        "preference": { "type": "string" },
+        "flexibility": { "type": "string" },
+        "hard_no": { "type": "string" }
+      }
+    },
+    "RoleFitPreferences": {
+      "type": "object",
+      "required": ["ideal", "red_flags", "evaluation_criteria"],
+      "additionalProperties": false,
+      "properties": {
+        "ideal": { "$ref": "#/$defs/TagList" },
+        "red_flags": { "$ref": "#/$defs/TagList" },
+        "evaluation_criteria": { "$ref": "#/$defs/TagList" }
+      }
+    },
+    "Preferences": {
+      "type": "object",
+      "required": ["compensation", "work_model", "role_fit"],
+      "additionalProperties": false,
+      "properties": {
+        "compensation": { "$ref": "#/$defs/CompensationPreferences" },
+        "work_model": { "$ref": "#/$defs/WorkModelPreferences" },
+        "role_fit": { "$ref": "#/$defs/RoleFitPreferences" }
+      }
+    },
+    "SkillItem": {
+      "type": "object",
+      "required": ["name", "tags"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "proficiency": { "type": "string" },
+        "tags": { "$ref": "#/$defs/TagList" }
+      }
+    },
+    "SkillGroup": {
+      "type": "object",
+      "required": ["id", "label", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SkillItem" }
+        }
+      }
+    },
+    "Skills": {
+      "type": "object",
+      "required": ["groups"],
+      "additionalProperties": false,
+      "properties": {
+        "groups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SkillGroup" }
+        }
+      }
+    },
+    "Profile": {
+      "type": "object",
+      "required": ["id", "tags", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "tags": { "$ref": "#/$defs/TagList" },
+        "text": { "type": "string" }
+      }
+    },
+    "BulletMetrics": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/MetricValue" }
+    },
+    "RoleBullet": {
+      "type": "object",
+      "required": [
+        "id",
+        "problem",
+        "action",
+        "outcome",
+        "impact",
+        "metrics",
+        "technologies",
+        "tags"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "problem": { "type": "string" },
+        "action": { "type": "string" },
+        "outcome": { "type": "string" },
+        "impact": { "$ref": "#/$defs/ImpactList" },
+        "metrics": { "$ref": "#/$defs/BulletMetrics" },
+        "technologies": { "$ref": "#/$defs/TechnologyList" },
+        "portfolio_dive": { "type": ["string", "null"] },
+        "tags": { "$ref": "#/$defs/TagList" }
+      }
+    },
+    "Role": {
+      "type": "object",
+      "required": ["id", "company", "title", "dates", "bullets"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "company": { "type": "string" },
+        "subtitle": { "type": ["string", "null"] },
+        "title": { "type": "string" },
+        "dates": { "type": "string" },
+        "portfolio_anchor": { "type": ["string", "null"] },
+        "bullets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RoleBullet" }
+        }
+      }
+    },
+    "Project": {
+      "type": "object",
+      "required": ["id", "name", "description", "tags"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "url": { "type": "string" },
+        "description": { "type": "string" },
+        "portfolio_dive": { "type": ["string", "null"] },
+        "tags": { "$ref": "#/$defs/TagList" }
+      }
+    },
+    "EducationEntry": {
+      "type": "object",
+      "required": ["school", "location", "degree"],
+      "additionalProperties": false,
+      "properties": {
+        "school": { "type": "string" },
+        "location": { "type": "string" },
+        "degree": { "type": "string" },
+        "year": { "type": "string" }
+      }
+    },
+    "GeneratorRules": {
+      "type": "object",
+      "required": ["voice_skill", "resume_skill"],
+      "additionalProperties": false,
+      "properties": {
+        "voice_skill": { "type": "string" },
+        "resume_skill": { "type": "string" },
+        "accuracy": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

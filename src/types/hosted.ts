@@ -1,10 +1,13 @@
 export const FACET_AI_FEATURE_KEYS = [
   'build.jd-analysis',
   'build.bullet-reframe',
+  'match.jd-analysis',
   'research.profile-inference',
   'research.search',
   'prep.generate',
   'letters.generate',
+  'linkedin.generate',
+  'debrief.generate',
 ] as const
 
 export type FacetAiFeatureKey = (typeof FACET_AI_FEATURE_KEYS)[number]

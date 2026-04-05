@@ -3,11 +3,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { PrepPage } from '../routes/prep/PrepPage'
+import { useMatchStore } from '../store/matchStore'
 import { usePipelineStore } from '../store/pipelineStore'
 import { usePrepStore } from '../store/prepStore'
 import { useResumeStore } from '../store/resumeStore'
 import { resolveStorage } from '../store/storage'
 import { defaultResumeData } from '../store/defaultData'
+import type { MatchReport } from '../types/match'
 
 vi.mock('@tanstack/react-router', () => ({
   useSearch: () => ({ vector: 'backend', skills: '', q: '' }),
@@ -19,6 +21,7 @@ describe('PrepPage', () => {
     resolveStorage().removeItem('facet-prep-workspace')
     resolveStorage().removeItem('vector-resume-data')
     usePrepStore.setState({ decks: [], activeDeckId: null })
+    useMatchStore.setState({ jobDescription: '', currentReport: null, warnings: [], history: [] })
     useResumeStore.setState({
       data: JSON.parse(JSON.stringify(defaultResumeData)),
       past: [],
@@ -156,5 +159,86 @@ describe('PrepPage', () => {
 
     expect(usePrepStore.getState().decks).toHaveLength(1)
     expect(screen.getAllByDisplayValue('Acme Corp Staff Engineer Interview Prep').length).toBeGreaterThan(0)
+  })
+
+  it('generates a prep deck from the current match report without a pipeline entry', async () => {
+    const matchReport: MatchReport = {
+      generatedAt: '2026-04-02T00:00:00.000Z',
+      identityVersion: 3,
+      company: 'Atlas',
+      role: 'Staff Platform Engineer',
+      summary: 'Strong platform fit.',
+      jobDescription: 'Own platform engineering and reliability.',
+      matchScore: 0.84,
+      requirements: [],
+      topBullets: [
+        {
+          kind: 'bullet',
+          id: 'acme-b1',
+          label: 'Order pipeline',
+          sourceLabel: 'Acme',
+          text: 'Built a distributed order pipeline.',
+          tags: ['platform'],
+          matchedTags: ['platform'],
+          matchedKeywords: ['platform'],
+          matchedRequirementIds: ['req-1'],
+          score: 0.9,
+        },
+      ],
+      topSkills: [
+        {
+          kind: 'skill',
+          id: 'skill-1',
+          label: 'AWS',
+          sourceLabel: 'Infrastructure',
+          text: 'AWS',
+          tags: ['aws'],
+          matchedTags: ['aws'],
+          matchedKeywords: ['AWS'],
+          matchedRequirementIds: ['req-1'],
+          score: 0.8,
+        },
+      ],
+      topProjects: [],
+      topProfiles: [
+        {
+          kind: 'profile',
+          id: 'profile-backend',
+          label: 'Backend profile',
+          sourceLabel: 'Profiles',
+          text: 'Backend systems profile.',
+          tags: ['backend'],
+          matchedTags: ['backend'],
+          matchedKeywords: ['systems'],
+          matchedRequirementIds: ['req-1'],
+          score: 0.7,
+        },
+      ],
+      topPhilosophy: [],
+      gaps: [],
+      advantages: [],
+      positioningRecommendations: ['Lead with platform reliability.'],
+      gapFocus: [],
+      warnings: [],
+    }
+
+    usePipelineStore.setState((state) => ({ ...state, entries: [] }))
+    useMatchStore.setState({
+      jobDescription: matchReport.jobDescription,
+      currentReport: matchReport,
+      warnings: [],
+      history: [],
+    })
+
+    render(<PrepPage />)
+
+    fireEvent.click(screen.getByText('Generate with AI'))
+
+    await waitFor(() => {
+      expect(usePrepStore.getState().decks).toHaveLength(1)
+    })
+
+    expect(screen.getAllByDisplayValue('Acme Staff Engineer Prep').length).toBeGreaterThan(0)
+    expect(screen.getByDisplayValue('Atlas')).toBeTruthy()
   })
 })

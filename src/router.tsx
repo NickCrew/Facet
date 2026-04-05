@@ -2,9 +2,14 @@ import { lazy } from 'react'
 import { createRouter, createRootRoute, createRoute, redirect } from '@tanstack/react-router'
 import { AppShell } from './components/AppShell'
 import { BuildPage } from './routes/build/BuildPage'
+import { IdentityPage } from './routes/identity/IdentityPage'
+import { MatchPage } from './routes/match/MatchPage'
 import { PipelinePage } from './routes/pipeline/PipelinePage'
 import { PrepPage } from './routes/prep/PrepPage'
 import { LettersPage } from './routes/letters/LettersPage'
+import { LinkedInPage } from './routes/linkedin/LinkedInPage'
+import { RecruiterPage } from './routes/recruiter/RecruiterPage'
+import { DebriefPage } from './routes/debrief/DebriefPage'
 import { ResearchPage } from './routes/research/ResearchPage'
 
 const LazyHelpPage = lazy(() => import('./routes/help/HelpPage').then((m) => ({ default: m.HelpPage })))
@@ -25,6 +30,18 @@ const buildRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/build',
   component: BuildPage,
+})
+
+const identityRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/identity',
+  component: IdentityPage,
+})
+
+const matchRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/match',
+  component: MatchPage,
 })
 
 const pipelineRoute = createRoute({
@@ -56,6 +73,24 @@ const lettersRoute = createRoute({
   component: LettersPage,
 })
 
+const linkedInRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/linkedin',
+  component: LinkedInPage,
+})
+
+const recruiterRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/recruiter',
+  component: RecruiterPage,
+})
+
+const debriefRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/debrief',
+  component: DebriefPage,
+})
+
 const helpRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/help',
@@ -65,10 +100,15 @@ const helpRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   buildRoute,
+  identityRoute,
+  matchRoute,
   pipelineRoute,
   researchRoute,
   prepRoute,
   lettersRoute,
+  linkedInRoute,
+  recruiterRoute,
+  debriefRoute,
   helpRoute,
 ])
 

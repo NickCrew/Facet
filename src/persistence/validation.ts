@@ -36,6 +36,21 @@ const assertValidArtifactPayload = (
         throw new Error('Workspace snapshot has invalid artifacts.coverLetters.payload.templates.')
       }
       break
+    case 'linkedin':
+      if (!Array.isArray(payload.drafts)) {
+        throw new Error('Workspace snapshot has invalid artifacts.linkedin.payload.drafts.')
+      }
+      break
+    case 'recruiter':
+      if (!Array.isArray(payload.cards)) {
+        throw new Error('Workspace snapshot has invalid artifacts.recruiter.payload.cards.')
+      }
+      break
+    case 'debrief':
+      if (!Array.isArray(payload.sessions)) {
+        throw new Error('Workspace snapshot has invalid artifacts.debrief.payload.sessions.')
+      }
+      break
     case 'research':
       if (
         (payload.profile !== null && payload.profile !== undefined && !isRecord(payload.profile)) ||
@@ -97,7 +112,7 @@ export function assertValidWorkspaceSnapshot(
     throw new Error('Workspace snapshot must include artifacts.')
   }
 
-  for (const key of ['resume', 'pipeline', 'prep', 'coverLetters', 'research'] as const) {
+  for (const key of ['resume', 'pipeline', 'prep', 'coverLetters', 'linkedin', 'recruiter', 'debrief', 'research'] as const) {
     const artifact = snapshot.artifacts[key]
 
     if (!isRecord(artifact)) {

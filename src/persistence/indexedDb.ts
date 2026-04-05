@@ -121,6 +121,21 @@ const createAuthoritativeWorkspaceSnapshot = (
       revision: (current?.artifacts.coverLetters.revision ?? 0) + 1,
       updatedAt: savedAt,
     },
+    linkedin: {
+      ...cloneValue(snapshot.artifacts.linkedin),
+      revision: (current?.artifacts.linkedin?.revision ?? 0) + 1,
+      updatedAt: savedAt,
+    },
+    recruiter: {
+      ...cloneValue(snapshot.artifacts.recruiter),
+      revision: (current?.artifacts.recruiter?.revision ?? 0) + 1,
+      updatedAt: savedAt,
+    },
+    debrief: {
+      ...cloneValue(snapshot.artifacts.debrief),
+      revision: (current?.artifacts.debrief?.revision ?? 0) + 1,
+      updatedAt: savedAt,
+    },
     research: {
       ...cloneValue(snapshot.artifacts.research),
       revision: (current?.artifacts.research.revision ?? 0) + 1,

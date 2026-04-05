@@ -1,13 +1,17 @@
 import type {
   CoverLettersArtifactSnapshot,
+  DebriefArtifactSnapshot,
   PipelineArtifactSnapshot,
   PrepArtifactSnapshot,
+  RecruiterArtifactSnapshot,
   ResearchArtifactSnapshot,
   ResumeArtifactSnapshot,
+  LinkedInArtifactSnapshot,
   FacetWorkspaceArtifacts,
   FacetWorkspaceSnapshot,
 } from './contracts'
 import { cloneValue } from './clone'
+import { normalizeWorkspaceSnapshot } from './normalization'
 import { assertValidWorkspaceSnapshot } from './validation'
 import { isFacetApiError } from '../utils/facetApiErrors'
 
@@ -64,6 +68,9 @@ export interface PersistenceWorkspacePatch {
     pipeline?: Partial<Pick<PipelineArtifactSnapshot, 'payload' | 'revision'>>
     prep?: Partial<Pick<PrepArtifactSnapshot, 'payload' | 'revision'>>
     coverLetters?: Partial<Pick<CoverLettersArtifactSnapshot, 'payload' | 'revision'>>
+    linkedin?: Partial<Pick<LinkedInArtifactSnapshot, 'payload' | 'revision'>>
+    recruiter?: Partial<Pick<RecruiterArtifactSnapshot, 'payload' | 'revision'>>
+    debrief?: Partial<Pick<DebriefArtifactSnapshot, 'payload' | 'revision'>>
     research?: Partial<Pick<ResearchArtifactSnapshot, 'payload' | 'revision'>>
   }
 }
@@ -210,6 +217,24 @@ export const applyWorkspacePatch = (
             artifactPatch as Partial<CoverLettersArtifactSnapshot>,
           )
           break
+        case 'linkedin':
+          next.artifacts.linkedin = applyArtifactPatch(
+            next.artifacts.linkedin,
+            artifactPatch as Partial<LinkedInArtifactSnapshot>,
+          )
+          break
+        case 'recruiter':
+          next.artifacts.recruiter = applyArtifactPatch(
+            next.artifacts.recruiter,
+            artifactPatch as Partial<RecruiterArtifactSnapshot>,
+          )
+          break
+        case 'debrief':
+          next.artifacts.debrief = applyArtifactPatch(
+            next.artifacts.debrief,
+            artifactPatch as Partial<DebriefArtifactSnapshot>,
+          )
+          break
         case 'research':
           next.artifacts.research = applyArtifactPatch(
             next.artifacts.research,
@@ -276,7 +301,11 @@ export const createPersistenceCoordinator = (
       })
 
       try {
-        const snapshot = await options.backend.loadWorkspaceSnapshot(workspaceId)
+        const rawSnapshot = await options.backend.loadWorkspaceSnapshot(workspaceId)
+        const snapshot = rawSnapshot ? normalizeWorkspaceSnapshot(rawSnapshot) : null
+        if (snapshot) {
+          assertValidWorkspaceSnapshot(snapshot)
+        }
         const hydratedAt = snapshot ? now() : status.lastHydratedAt
 
         setStatus({
@@ -299,7 +328,11 @@ export const createPersistenceCoordinator = (
 
     loadWorkspace: async (workspaceId) => {
       try {
-        const result = await options.backend.loadWorkspaceSnapshot(workspaceId)
+        const rawResult = await options.backend.loadWorkspaceSnapshot(workspaceId)
+        const result = rawResult ? normalizeWorkspaceSnapshot(rawResult) : null
+        if (result) {
+          assertValidWorkspaceSnapshot(result)
+        }
         setStatus({
           activeWorkspaceId: workspaceId,
           lastHydratedAt: result ? now() : status.lastHydratedAt,
@@ -326,8 +359,10 @@ export const createPersistenceCoordinator = (
 
       try {
         const current =
-          (await options.backend.loadWorkspaceSnapshot(workspaceId)) ??
-          options.readWorkspaceSnapshot({ workspaceId })
+          normalizeWorkspaceSnapshot(
+            ((await options.backend.loadWorkspaceSnapshot(workspaceId)) ??
+              options.readWorkspaceSnapshot({ workspaceId })) as FacetWorkspaceSnapshot,
+          )
         const next = applyWorkspacePatch(current, patch)
         next.workspace.revision = current.workspace.revision + 1
         next.workspace.updatedAt = now()
@@ -353,14 +388,15 @@ export const createPersistenceCoordinator = (
     },
 
     importWorkspaceSnapshot: async (snapshot, importOptions = { mode: 'replace' }) => {
-      assertValidWorkspaceSnapshot(snapshot)
+      const normalizedSnapshot = normalizeWorkspaceSnapshot(snapshot)
+      assertValidWorkspaceSnapshot(normalizedSnapshot)
 
       if (importOptions.mode === 'merge' && !options.mergeImportedSnapshot) {
         throw new Error('Merge import requires mergeImportedSnapshot to be configured.')
       }
 
       setStatus({
-        activeWorkspaceId: snapshot.workspace.id,
+        activeWorkspaceId: normalizedSnapshot.workspace.id,
         phase: 'saving',
         lastError: null,
       })
@@ -368,12 +404,15 @@ export const createPersistenceCoordinator = (
       try {
         const current =
           importOptions.mode === 'merge'
-            ? await options.backend.loadWorkspaceSnapshot(snapshot.workspace.id)
+            ? await options.backend.loadWorkspaceSnapshot(normalizedSnapshot.workspace.id)
             : null
         const resolved =
           importOptions.mode === 'merge' && options.mergeImportedSnapshot
-            ? options.mergeImportedSnapshot(current, snapshot)
-            : snapshot
+            ? options.mergeImportedSnapshot(
+                current ? normalizeWorkspaceSnapshot(current) : null,
+                normalizedSnapshot,
+              )
+            : normalizedSnapshot
 
         const saved = await options.backend.saveWorkspaceSnapshot(resolved)
 

@@ -1,6 +1,9 @@
 import { useCoverLetterStore } from '../store/coverLetterStore'
+import { useDebriefStore } from '../store/debriefStore'
+import { useLinkedInStore } from '../store/linkedinStore'
 import { usePipelineStore } from '../store/pipelineStore'
 import { usePrepStore } from '../store/prepStore'
+import { useRecruiterStore } from '../store/recruiterStore'
 import { useResumeStore } from '../store/resumeStore'
 import { useSearchStore } from '../store/searchStore'
 import { useUiStore } from '../store/uiStore'
@@ -62,6 +65,24 @@ export const DURABLE_PERSISTENCE_BOUNDARIES: PersistenceBoundaryDefinition[] = [
     notes: 'Cover letter templates should round-trip through export, import, and future sync.',
   },
   {
+    source: 'linkedinStore.drafts',
+    target: 'workspace.artifacts.linkedin.payload.drafts',
+    durability: 'durable',
+    notes: 'LinkedIn drafts should persist with the rest of Phase 2 workspace outputs.',
+  },
+  {
+    source: 'recruiterStore.cards',
+    target: 'workspace.artifacts.recruiter.payload.cards',
+    durability: 'durable',
+    notes: 'Recruiter cards are durable match-derived materials for sharing and reuse.',
+  },
+  {
+    source: 'debriefStore.sessions',
+    target: 'workspace.artifacts.debrief.payload.sessions',
+    durability: 'durable',
+    notes: 'Interview debrief history is durable workspace knowledge for the flywheel.',
+  },
+  {
     source: 'searchStore.profile,requests,runs',
     target: 'workspace.artifacts.research.payload',
     durability: 'durable',
@@ -94,6 +115,24 @@ export const LOCAL_ONLY_PERSISTENCE_BOUNDARIES: PersistenceBoundaryDefinition[] 
     target: 'localPreferences.prep',
     durability: 'local-only',
     notes: 'The currently open prep deck is a session preference, not durable content.',
+  },
+  {
+    source: 'linkedinStore.selectedDraftId',
+    target: 'localPreferences.linkedin',
+    durability: 'local-only',
+    notes: 'The currently selected LinkedIn draft is a local editing preference.',
+  },
+  {
+    source: 'recruiterStore.selectedCardId',
+    target: 'localPreferences.recruiter',
+    durability: 'local-only',
+    notes: 'The currently selected recruiter card is a local browsing preference.',
+  },
+  {
+    source: 'debriefStore.selectedSessionId',
+    target: 'localPreferences.debrief',
+    durability: 'local-only',
+    notes: 'The currently selected debrief session is a local browsing preference.',
   },
 ]
 
@@ -132,6 +171,20 @@ export const LEGACY_PERSISTENCE_MIGRATION_PLAN: LegacyPersistenceSource[] = [
     target: 'workspace.artifacts.coverLetters.payload.templates',
     durability: 'durable',
     notes: 'Cover letter templates map directly into the workspace snapshot.',
+  },
+  {
+    storageKey: 'facet-linkedin-workspace',
+    source: 'linkedinStore persist payload',
+    target: 'workspace.artifacts.linkedin.payload.drafts plus localPreferences.linkedin',
+    durability: 'durable',
+    notes: 'LinkedIn drafts are durable workspace outputs while selectedDraftId stays local-only.',
+  },
+  {
+    storageKey: 'facet-debrief-workspace',
+    source: 'debriefStore persist payload',
+    target: 'workspace.artifacts.debrief.payload.sessions plus localPreferences.debrief',
+    durability: 'durable',
+    notes: 'Debrief sessions are durable while the active session stays local-only.',
   },
   {
     storageKey: 'facet-search-data',
@@ -173,6 +226,9 @@ export const createWorkspaceSnapshotFromStores = (
 
   const pipelineState = usePipelineStore.getState()
   const prepState = usePrepStore.getState()
+  const linkedInState = useLinkedInStore.getState()
+  const recruiterState = useRecruiterStore.getState()
+  const debriefState = useDebriefStore.getState()
   const searchState = useSearchStore.getState()
 
   return {
@@ -216,6 +272,30 @@ export const createWorkspaceSnapshotFromStores = (
         },
         exportedAt,
       ),
+      linkedin: buildArtifactSnapshot(
+        'linkedin',
+        workspaceId,
+        {
+          drafts: cloneValue(linkedInState.drafts),
+        },
+        exportedAt,
+      ),
+      recruiter: buildArtifactSnapshot(
+        'recruiter',
+        workspaceId,
+        {
+          cards: cloneValue(recruiterState.cards),
+        },
+        exportedAt,
+      ),
+      debrief: buildArtifactSnapshot(
+        'debrief',
+        workspaceId,
+        {
+          sessions: cloneValue(debriefState.sessions),
+        },
+        exportedAt,
+      ),
       research: buildArtifactSnapshot(
         'research',
         workspaceId,
@@ -238,6 +318,9 @@ export const createLocalPreferencesSnapshotFromStores = (
   const uiState = useUiStore.getState()
   const pipelineState = usePipelineStore.getState()
   const prepState = usePrepStore.getState()
+  const linkedInState = useLinkedInStore.getState()
+  const recruiterState = useRecruiterStore.getState()
+  const debriefState = useDebriefStore.getState()
 
   return {
     snapshotVersion: FACET_LOCAL_PREFERENCES_VERSION,
@@ -262,6 +345,15 @@ export const createLocalPreferencesSnapshotFromStores = (
     },
     prep: {
       activeDeckId: prepState.activeDeckId,
+    },
+    linkedin: {
+      selectedDraftId: linkedInState.selectedDraftId,
+    },
+    recruiter: {
+      selectedCardId: recruiterState.selectedCardId,
+    },
+    debrief: {
+      selectedSessionId: debriefState.selectedSessionId,
     },
     exportedAt,
   }

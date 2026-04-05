@@ -1,0 +1,230 @@
+.debrief-page {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+.debrief-sidebar,
+.debrief-panel,
+.debrief-empty {
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-surface);
+}
+
+.debrief-sidebar {
+  width: 280px;
+  margin: var(--space-6);
+  margin-right: 0;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.debrief-sidebar-header,
+.debrief-panel-header,
+.debrief-session-list-item,
+.debrief-story-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.debrief-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow: auto;
+}
+
+.debrief-session-button,
+.debrief-btn,
+.debrief-icon-btn {
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  transition: all var(--duration-fast) var(--easing);
+}
+
+.debrief-session-button,
+.debrief-btn {
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.debrief-icon-btn {
+  padding: 6px;
+}
+
+.debrief-session-button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  gap: 4px;
+}
+
+.debrief-session-button.active,
+.debrief-btn-primary {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--text-inverse);
+}
+
+.debrief-text-danger {
+  color: var(--status-critical);
+}
+
+.debrief-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.debrief-panel,
+.debrief-empty {
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.debrief-eyebrow {
+  margin: 0 0 var(--space-1);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-primary);
+}
+
+.debrief-copy,
+.debrief-note,
+.debrief-empty-text,
+.debrief-panel p {
+  color: var(--text-secondary);
+}
+
+.debrief-note-error {
+  color: var(--status-critical);
+}
+
+.debrief-grid,
+.debrief-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.debrief-pattern-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.debrief-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.debrief-field-span {
+  grid-column: 1 / -1;
+}
+
+.debrief-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
+}
+
+.debrief-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.debrief-input,
+.debrief-textarea {
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.debrief-textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.debrief-textarea-lg {
+  min-height: 168px;
+}
+
+.debrief-toggle-row,
+.debrief-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.debrief-context-card,
+.debrief-pattern-card,
+.debrief-detail-card,
+.debrief-story-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-inset) 88%, transparent);
+  padding: var(--space-3);
+}
+
+.debrief-context-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.debrief-story-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+@media (max-width: 1024px) {
+  .debrief-page {
+    flex-direction: column;
+  }
+
+  .debrief-sidebar {
+    width: auto;
+    margin: var(--space-4);
+    margin-bottom: 0;
+  }
+
+  .debrief-pattern-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .debrief-main {
+    padding: var(--space-4);
+  }
+
+  .debrief-grid,
+  .debrief-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}

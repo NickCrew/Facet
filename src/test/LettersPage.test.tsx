@@ -4,10 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { LettersPage } from '../routes/letters/LettersPage'
 import { useCoverLetterStore } from '../store/coverLetterStore'
+import { useMatchStore } from '../store/matchStore'
 import { usePipelineStore } from '../store/pipelineStore'
 import { useResumeStore } from '../store/resumeStore'
 import { resolveStorage } from '../store/storage'
 import { defaultResumeData } from '../store/defaultData'
+import type { MatchReport } from '../types/match'
 
 describe('LettersPage', () => {
   beforeEach(() => {
@@ -15,6 +17,7 @@ describe('LettersPage', () => {
     resolveStorage().removeItem('facet-cover-letter-data')
     resolveStorage().removeItem('vector-resume-data')
     useCoverLetterStore.setState({ templates: [] })
+    useMatchStore.setState({ jobDescription: '', currentReport: null, warnings: [], history: [] })
     useResumeStore.setState({
       data: JSON.parse(JSON.stringify(defaultResumeData)),
       past: [],
@@ -130,5 +133,126 @@ describe('LettersPage', () => {
     })
 
     expect(useCoverLetterStore.getState().templates).toHaveLength(0)
+  })
+
+  it('generates a template from the current match report without a pipeline entry', async () => {
+    const matchReport: MatchReport = {
+      generatedAt: '2026-04-02T00:00:00.000Z',
+      identityVersion: 3,
+      company: 'Atlas',
+      role: 'Staff Platform Engineer',
+      summary: 'Strong platform fit.',
+      jobDescription: 'Own platform engineering and reliability.',
+      matchScore: 0.84,
+      requirements: [],
+      topBullets: [
+        {
+          kind: 'bullet',
+          id: 'acme-b1',
+          label: 'Order pipeline',
+          sourceLabel: 'Acme',
+          text: 'Built a distributed order pipeline.',
+          tags: ['platform'],
+          matchedTags: ['platform'],
+          matchedKeywords: ['platform'],
+          matchedRequirementIds: ['req-1'],
+          score: 0.9,
+        },
+      ],
+      topSkills: [
+        {
+          kind: 'skill',
+          id: 'skill-1',
+          label: 'AWS',
+          sourceLabel: 'Infrastructure',
+          text: 'AWS',
+          tags: ['aws'],
+          matchedTags: ['aws'],
+          matchedKeywords: ['AWS'],
+          matchedRequirementIds: ['req-1'],
+          score: 0.8,
+        },
+      ],
+      topProjects: [],
+      topProfiles: [
+        {
+          kind: 'profile',
+          id: 'profile-backend',
+          label: 'Backend profile',
+          sourceLabel: 'Profiles',
+          text: 'Backend systems profile.',
+          tags: ['backend'],
+          matchedTags: ['backend'],
+          matchedKeywords: ['systems'],
+          matchedRequirementIds: ['req-1'],
+          score: 0.7,
+        },
+      ],
+      topPhilosophy: [],
+      gaps: [],
+      advantages: [],
+      positioningRecommendations: ['Lead with platform reliability.'],
+      gapFocus: [],
+      warnings: [],
+    }
+
+    usePipelineStore.setState((state) => ({ ...state, entries: [] }))
+    useMatchStore.setState({
+      jobDescription: matchReport.jobDescription,
+      currentReport: matchReport,
+      warnings: [],
+      history: [],
+    })
+
+    render(<LettersPage />)
+
+    fireEvent.click(screen.getByText('Generate with AI'))
+
+    await waitFor(() => {
+      expect(useCoverLetterStore.getState().templates).toHaveLength(1)
+    })
+
+    expect(screen.getByDisplayValue('Acme Staff Engineer Cover Letter')).toBeTruthy()
+    expect(screen.getByText(/Atlas - Staff Platform Engineer/)).toBeTruthy()
+  })
+
+  it('lets the user switch from match generation back to a pipeline opportunity', () => {
+    const matchReport: MatchReport = {
+      generatedAt: '2026-04-02T00:00:00.000Z',
+      identityVersion: 3,
+      company: 'Atlas',
+      role: 'Staff Platform Engineer',
+      summary: 'Strong platform fit.',
+      jobDescription: 'Own platform engineering and reliability.',
+      matchScore: 0.84,
+      requirements: [],
+      topBullets: [],
+      topSkills: [],
+      topProjects: [],
+      topProfiles: [],
+      topPhilosophy: [],
+      gaps: [],
+      advantages: [],
+      positioningRecommendations: ['Lead with platform reliability.'],
+      gapFocus: [],
+      warnings: [],
+    }
+
+    useMatchStore.setState({
+      jobDescription: matchReport.jobDescription,
+      currentReport: matchReport,
+      warnings: [],
+      history: [],
+    })
+
+    render(<LettersPage />)
+
+    expect(screen.queryByLabelText('Pipeline Entry')).toBeNull()
+    expect(screen.getByText(/Match 84%/)).toBeTruthy()
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Pipeline Entry' })[0])
+
+    expect(screen.getByLabelText('Pipeline Entry')).toBeTruthy()
+    expect(screen.queryByText(/Match 84%/)).toBeNull()
   })
 })

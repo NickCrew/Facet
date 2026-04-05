@@ -6,6 +6,8 @@ import type {
   ResumeThemePresetId,
   SectionHeaderStyle,
 } from '../types'
+import { importProfessionalIdentity, looksLikeProfessionalIdentity } from '../identity/schema'
+import { professionalIdentityToResumeData } from '../identity/resumeAdapter'
 import { ensureSkillGroupVectors } from '../utils/skillGroupVectors'
 import {
   THEME_DATES_ALIGNMENT_OPTIONS,
@@ -19,10 +21,12 @@ import {
 } from '../themes/theme'
 
 export type ResumeConfigFormat = 'yaml' | 'json'
+export type ResumeConfigSourceKind = 'resume' | 'professional-identity-v3'
 
 export interface ParsedResumeConfig {
   data: ResumeData
   format: ResumeConfigFormat
+  sourceKind: ResumeConfigSourceKind
   warnings: string[]
 }
 
@@ -780,6 +784,15 @@ const approximateLineNumber = (raw: string, token: string): number | null => {
   return raw.slice(0, tokenIndex).split('\n').length
 }
 
+const formatImportError = (detail: string, raw: string): string => {
+  const context = extractContextPath(detail)
+  const token = context ? contextToSearchToken(context) : ''
+  const line = approximateLineNumber(raw, token)
+  const suffix = line ? ` (approx line ${line})` : ''
+
+  return `${detail}${suffix}`
+}
+
 export const importResumeConfig = (
   input: string,
   expectedFormat?: ResumeConfigFormat,
@@ -811,21 +824,35 @@ export const importResumeConfig = (
     delete record.saved_variants
   }
 
+  if (looksLikeProfessionalIdentity(parsed)) {
+    try {
+      const identity = importProfessionalIdentity(parsed)
+      const adapted = professionalIdentityToResumeData(identity.data)
+      const normalized = collectWarningsAndNormalizeVectors(normalizeResumePriorities(adapted.data))
+      return {
+        data: normalized.data,
+        format,
+        sourceKind: 'professional-identity-v3',
+        warnings: [...identity.warnings, ...adapted.warnings, ...normalized.warnings],
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new Error(formatImportError(detail, raw))
+    }
+  }
+
   try {
     assertResumeDataShape(parsed)
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
-    const context = extractContextPath(detail)
-    const token = context ? contextToSearchToken(context) : ''
-    const line = approximateLineNumber(raw, token)
-    const suffix = line ? ` (approx line ${line})` : ''
-    throw new Error(`${detail}${suffix}`)
+    throw new Error(formatImportError(detail, raw))
   }
 
   const normalized = collectWarningsAndNormalizeVectors(normalizeResumePriorities(parsed as ResumeData))
   return {
     data: normalized.data,
     format,
+    sourceKind: 'resume',
     warnings: normalized.warnings,
   }
 }

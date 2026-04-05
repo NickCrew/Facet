@@ -3,9 +3,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { waitFor } from '@testing-library/react'
 import { useCoverLetterStore } from '../store/coverLetterStore'
+import { useDebriefStore } from '../store/debriefStore'
 import { defaultResumeData } from '../store/defaultData'
+import { useLinkedInStore } from '../store/linkedinStore'
 import { usePipelineStore } from '../store/pipelineStore'
 import { usePrepStore } from '../store/prepStore'
+import { useRecruiterStore } from '../store/recruiterStore'
 import { useResumeStore } from '../store/resumeStore'
 import { useSearchStore } from '../store/searchStore'
 import { resolveStorage } from '../store/storage'
@@ -36,6 +39,8 @@ const LEGACY_KEYS = [
   'facet-prep-workspace',
   'facet-prep-data',
   'facet-cover-letter-data',
+  'facet-linkedin-workspace',
+  'facet-debrief-workspace',
   'facet-search-data',
 ]
 
@@ -70,6 +75,15 @@ const localPreferencesSnapshot: FacetLocalPreferencesSnapshot = {
   prep: {
     activeDeckId: 'deck-1',
   },
+  linkedin: {
+    selectedDraftId: 'linkedin-1',
+  },
+  recruiter: {
+    selectedCardId: 'recruiter-1',
+  },
+  debrief: {
+    selectedSessionId: 'debrief-1',
+  },
   exportedAt: '2026-03-11T12:00:00.000Z',
 }
 
@@ -102,6 +116,18 @@ describe('persistence runtime', () => {
     })
     useCoverLetterStore.setState({
       templates: [],
+    })
+    useLinkedInStore.setState({
+      drafts: [],
+      selectedDraftId: null,
+    })
+    useRecruiterStore.setState({
+      cards: [],
+      selectedCardId: null,
+    })
+    useDebriefStore.setState({
+      sessions: [],
+      selectedSessionId: null,
     })
     useSearchStore.setState({
       profile: null,
@@ -224,6 +250,32 @@ describe('persistence runtime', () => {
             ],
           },
         },
+        recruiter: {
+          ...buildWorkspaceSnapshot().artifacts.recruiter,
+          payload: {
+            cards: [
+              {
+                id: 'recruiter-1',
+                generatedAt: '2026-03-11T12:00:00.000Z',
+                company: 'Acme',
+                role: 'Staff Engineer',
+                candidateName: 'Jane Smith',
+                candidateTitle: 'Staff Platform Engineer',
+                matchScore: 0.82,
+                summary: 'Strong platform fit.',
+                recruiterHook: 'Jane Smith is a strong fit for Acme.',
+                suggestedIntro: 'Lead with platform migration wins.',
+                topReasons: ['Strong match on platform scope'],
+                proofPoints: ['Acme: Ported the platform to Kubernetes-based installs.'],
+                skillHighlights: ['Kubernetes'],
+                positioningAngles: ['Lead with platform reliability.'],
+                likelyConcerns: ['Domain ramp may take time.'],
+                gapBridges: ['Bridge through adjacent platform delivery work.'],
+                notes: 'Keep the positioning grounded in the match report.',
+              },
+            ],
+          },
+        },
       },
     })
 
@@ -241,10 +293,56 @@ describe('persistence runtime', () => {
 
     expect(usePipelineStore.getState().entries).toHaveLength(1)
     expect(usePrepStore.getState().activeDeckId).toBe('deck-1')
+    expect(useLinkedInStore.getState().selectedDraftId).toBe('linkedin-1')
+    expect(useRecruiterStore.getState().cards).toHaveLength(1)
+    expect(useRecruiterStore.getState().selectedCardId).toBe('recruiter-1')
     expect(useUiStore.getState().appearance).toBe('dark')
     expect(usePipelineStore.getState().sortField).toBe('company')
     expect(usePersistenceRuntimeStore.getState().hydrated).toBe(true)
     expect(usePersistenceRuntimeStore.getState().status.phase).toBe('ready')
+
+    runtime.dispose()
+  })
+
+  it('normalizes older workspace snapshots and local preferences that predate recruiter and linkedin persistence', async () => {
+    const workspaceBackend = createInMemoryPersistenceBackend()
+    const preferencesBackend = createInMemoryLocalPreferencesBackend()
+    const legacySnapshot = buildWorkspaceSnapshot({
+      workspace: {
+        id: 'ws-1',
+        name: 'Workspace One',
+        revision: 2,
+        updatedAt: '2026-03-11T12:00:00.000Z',
+      },
+    })
+    delete ((legacySnapshot.artifacts as unknown) as { recruiter?: unknown }).recruiter
+    delete ((legacySnapshot.artifacts as unknown) as { linkedin?: unknown }).linkedin
+
+    const legacyPreferences = {
+      ...localPreferencesSnapshot,
+    } as FacetLocalPreferencesSnapshot & {
+      recruiter?: { selectedCardId: string | null }
+      linkedin?: { selectedDraftId: string | null }
+    }
+    delete (legacyPreferences as { recruiter?: { selectedCardId: string | null } }).recruiter
+    delete (legacyPreferences as { linkedin?: { selectedDraftId: string | null } }).linkedin
+
+    await workspaceBackend.saveWorkspaceSnapshot(legacySnapshot)
+    await preferencesBackend.saveLocalPreferencesSnapshot(legacyPreferences as FacetLocalPreferencesSnapshot)
+
+    const runtime = createPersistenceRuntime({
+      workspaceId: 'ws-1',
+      workspaceName: 'Workspace One',
+      backend: workspaceBackend,
+      localPreferencesBackend: preferencesBackend,
+    })
+
+    await runtime.start()
+
+    expect(useRecruiterStore.getState().cards).toEqual([])
+    expect(useRecruiterStore.getState().selectedCardId).toBeNull()
+    expect(useLinkedInStore.getState().drafts).toEqual([])
+    expect(useLinkedInStore.getState().selectedDraftId).toBeNull()
 
     runtime.dispose()
   })

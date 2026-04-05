@@ -52,6 +52,24 @@ describe('resolveAiAccess', () => {
       source: 'hosted-entitlement',
       reason: null,
     })
+
+    expect(resolveAiAccess(hostedContext(), 'match.jd-analysis')).toEqual({
+      allowed: true,
+      source: 'hosted-entitlement',
+      reason: null,
+    })
+
+    expect(resolveAiAccess(hostedContext(), 'linkedin.generate')).toEqual({
+      allowed: true,
+      source: 'hosted-entitlement',
+      reason: null,
+    })
+
+    expect(resolveAiAccess(hostedContext(), 'debrief.generate')).toEqual({
+      allowed: true,
+      source: 'hosted-entitlement',
+      reason: null,
+    })
   })
 
   it('allows hosted trial and grace access', () => {

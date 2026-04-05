@@ -2,15 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { Plus, Sparkles, Trash2 } from 'lucide-react'
 import { assembleResume } from '../../engine/assembler'
 import { useCoverLetterStore } from '../../store/coverLetterStore'
+import { useMatchStore } from '../../store/matchStore'
 import { usePipelineStore } from '../../store/pipelineStore'
 import { useResumeStore } from '../../store/resumeStore'
 import type { CoverLetterParagraph } from '../../types/coverLetter'
 import { createId, sanitizeEndpointUrl } from '../../utils/idUtils'
 import { generateCoverLetter } from '../../utils/coverLetterGenerator'
+import { createMatchMaterialContext } from '../../utils/matchMaterial'
 import { VectorPriorityEditor } from '../../components/VectorPriorityEditor'
 import './letters.css'
-
-const AI_ENDPOINT = sanitizeEndpointUrl((import.meta.env.VITE_ANTHROPIC_PROXY_URL as string | undefined) ?? '')
 
 function buildResearchDraft(positioning: string, notes: string, url: string) {
   return [positioning, notes, url].filter(Boolean).join('\n\n')
@@ -18,11 +18,13 @@ function buildResearchDraft(positioning: string, notes: string, url: string) {
 
 export function LettersPage() {
   const { templates, addTemplate, updateTemplate, deleteTemplate } = useCoverLetterStore()
+  const currentReport = useMatchStore((state) => state.currentReport)
   const pipelineEntries = usePipelineStore((state) => state.entries)
   const resumeData = useResumeStore((state) => state.data)
   const { vectors } = resumeData
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
+  const [generationSource, setGenerationSource] = useState<'match' | 'pipeline'>(currentReport ? 'match' : 'pipeline')
   const [selectedEntryId, setSelectedEntryId] = useState('')
   const [selectedVectorId, setSelectedVectorId] = useState('')
   const [companyResearchDraft, setCompanyResearchDraft] = useState('')
@@ -33,21 +35,37 @@ export function LettersPage() {
     () => [...pipelineEntries].sort((left, right) => right.lastAction.localeCompare(left.lastAction)),
     [pipelineEntries],
   )
+  const aiEndpoint = useMemo(
+    () => sanitizeEndpointUrl((import.meta.env.VITE_ANTHROPIC_PROXY_URL as string | undefined) ?? ''),
+    [],
+  )
 
   const activeTemplateId = selectedTemplateId ?? templates[0]?.id ?? null
   const activeTemplate = templates.find(t => t.id === activeTemplateId)
+  const matchMaterial = useMemo(
+    () => (currentReport ? createMatchMaterialContext(resumeData, currentReport) : null),
+    [currentReport, resumeData],
+  )
   const selectedEntry = useMemo(
     () => pipelineEntries.find((entry) => entry.id === selectedEntryId) ?? null,
     [pipelineEntries, selectedEntryId],
   )
   const helperMessage =
-    !AI_ENDPOINT
+    !aiEndpoint
       ? 'AI generation is disabled. Configure VITE_ANTHROPIC_PROXY_URL.'
-      : selectedEntry && !selectedEntry.jobDescription.trim()
+      : generationSource === 'match'
+        ? (!matchMaterial ? 'Generate a Phase 1 match report before generating a cover letter draft.' : null)
+        : selectedEntry && !selectedEntry.jobDescription.trim()
         ? 'This pipeline entry needs a job description before AI generation will work.'
         : candidateEntries.length === 0
           ? 'Add a pipeline opportunity with a job description to generate a cover letter draft.'
           : null
+
+  useEffect(() => {
+    if (!currentReport && generationSource === 'match') {
+      setGenerationSource('pipeline')
+    }
+  }, [currentReport, generationSource])
 
   useEffect(() => {
     if (selectedEntryId) return
@@ -66,6 +84,12 @@ export function LettersPage() {
       setSelectedEntryId('')
     }
   }, [selectedEntry, selectedEntryId])
+
+  useEffect(() => {
+    if (generationSource !== 'match' || !matchMaterial) return
+    setSelectedVectorId(matchMaterial.vector.id)
+    setCompanyResearchDraft((current) => current || matchMaterial.briefingNotes)
+  }, [generationSource, matchMaterial])
 
   const handleCreateTemplate = () => {
     const id = createId('clt')
@@ -119,30 +143,28 @@ export function LettersPage() {
     setSelectedVectorId(nextEntry.vectorId ?? vectors[0]?.id ?? '')
   }
 
+  const handleSourceChange = (nextSource: 'match' | 'pipeline') => {
+    setGenerationSource(nextSource)
+    setGenerationError(null)
+
+    if (nextSource === 'match' && matchMaterial) {
+      setSelectedVectorId(matchMaterial.vector.id)
+      setCompanyResearchDraft(matchMaterial.briefingNotes)
+      return
+    }
+
+    if (nextSource === 'pipeline' && selectedEntry) {
+      setSelectedVectorId(selectedEntry.vectorId ?? vectors[0]?.id ?? '')
+      setCompanyResearchDraft(buildResearchDraft(selectedEntry.positioning, selectedEntry.notes, selectedEntry.url))
+    }
+  }
+
   const handleGenerate = async () => {
     if (isGenerating) {
       return
     }
-    if (!AI_ENDPOINT) {
+    if (!aiEndpoint) {
       setGenerationError('AI generation is disabled. Configure VITE_ANTHROPIC_PROXY_URL.')
-      return
-    }
-    if (!selectedEntry) {
-      setGenerationError('Choose a pipeline entry before generating a cover letter.')
-      return
-    }
-    if (!selectedVectorId) {
-      setGenerationError('Choose a vector before generating a cover letter.')
-      return
-    }
-    if (!selectedEntry.jobDescription.trim()) {
-      setGenerationError('The selected pipeline entry does not have a job description yet.')
-      return
-    }
-
-    const vector = resumeData.vectors.find((item) => item.id === selectedVectorId)
-    if (!vector) {
-      setGenerationError('The selected vector could not be found in resume data.')
       return
     }
 
@@ -151,6 +173,71 @@ export function LettersPage() {
 
     try {
       const freshResumeData = useResumeStore.getState().data
+      const activeMatchMaterial =
+        generationSource === 'match' && currentReport
+          ? createMatchMaterialContext(freshResumeData, currentReport)
+          : null
+
+      if (generationSource === 'match') {
+        if (!activeMatchMaterial) {
+          setGenerationError('Generate a Phase 1 match report before generating a cover letter.')
+          return
+        }
+
+        const generated = await generateCoverLetter(aiEndpoint, {
+          company: activeMatchMaterial.company,
+          role: activeMatchMaterial.role,
+          vectorId: activeMatchMaterial.vector.id,
+          vectorLabel: activeMatchMaterial.vector.label,
+          skillMatch: activeMatchMaterial.skillMatch,
+          positioning: activeMatchMaterial.positioning,
+          notes: activeMatchMaterial.notes,
+          companyResearch: companyResearchDraft || undefined,
+          jobDescription: activeMatchMaterial.jobDescription,
+          resumeContext: {
+            candidate: freshResumeData.meta,
+            vector: activeMatchMaterial.vector,
+            assembled: activeMatchMaterial.assembled,
+          },
+        })
+
+        const id = createId('clt')
+        addTemplate({
+          id,
+          name: generated.name,
+          header: generated.header,
+          greeting: generated.greeting,
+          paragraphs: generated.paragraphs.map((paragraph) => ({
+            id: createId('clp'),
+            label: paragraph.label,
+            text: paragraph.text,
+            vectors: { [activeMatchMaterial.vector.id]: 'include' },
+          })),
+          signOff: generated.signOff,
+        })
+        setSelectedTemplateId(id)
+        return
+      }
+
+      if (!selectedEntry) {
+        setGenerationError('Choose a pipeline entry before generating a cover letter.')
+        return
+      }
+      if (!selectedVectorId) {
+        setGenerationError('Choose a vector before generating a cover letter.')
+        return
+      }
+      if (!selectedEntry.jobDescription.trim()) {
+        setGenerationError('The selected pipeline entry does not have a job description yet.')
+        return
+      }
+
+      const vector = freshResumeData.vectors.find((item) => item.id === selectedVectorId)
+      if (!vector) {
+        setGenerationError('The selected vector could not be found in resume data.')
+        return
+      }
+
       const assembled = assembleResume(freshResumeData, {
         selectedVector: vector.id,
         manualOverrides: freshResumeData.manualOverrides?.[vector.id] ?? {},
@@ -159,7 +246,7 @@ export function LettersPage() {
         variables: freshResumeData.variables ?? {},
       }).resume
 
-      const generated = await generateCoverLetter(AI_ENDPOINT, {
+      const generated = await generateCoverLetter(aiEndpoint, {
         company: selectedEntry.company,
         role: selectedEntry.role,
         contact: selectedEntry.contact || undefined,
@@ -244,15 +331,15 @@ export function LettersPage() {
           <div className="letters-generator-header">
             <div>
               <p className="letters-generator-eyebrow">AI Draft</p>
-              <h3 id="letters-generator-title">Generate a cover letter from a pipeline opportunity</h3>
+              <h3 id="letters-generator-title">Generate a cover letter from the current match report or a pipeline opportunity</h3>
               <p className="letters-generator-copy">
-                Pick the target opportunity, confirm the vector, add any extra research notes, and create a draft you can keep editing below.
+                Match-first generation uses the current Phase 1 report. Pipeline mode remains available for older opportunities.
               </p>
             </div>
             <button
               className="letters-btn letters-btn-primary"
               onClick={() => void handleGenerate()}
-              disabled={isGenerating || candidateEntries.length === 0}
+              disabled={isGenerating || (generationSource === 'match' ? !matchMaterial : candidateEntries.length === 0)}
               aria-describedby={[
                 helperMessage ? 'letters-generator-help' : null,
                 generationError ? 'letters-generator-error' : null,
@@ -262,36 +349,74 @@ export function LettersPage() {
             </button>
           </div>
 
-          {candidateEntries.length > 0 ? (
+          {(currentReport || candidateEntries.length > 0) ? (
             <>
-              <div className="letters-generator-grid">
-                <div className="letters-field">
-                  <label htmlFor="cl-entry">Pipeline Entry</label>
-                  <select id="cl-entry" value={selectedEntryId} onChange={(event) => handleEntryChange(event.target.value)}>
-                    <option value="">Select an opportunity</option>
-                    {candidateEntries.map((entry) => (
-                      <option key={entry.id} value={entry.id}>
-                        {entry.company} - {entry.role}
-                      </option>
-                    ))}
-                  </select>
+              {currentReport && (
+                <div className="letters-generator-grid">
+                  <fieldset className="letters-field letters-fieldset">
+                    <legend>Source</legend>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <button
+                        className={`letters-btn ${generationSource === 'match' ? 'letters-btn-primary' : ''}`}
+                        type="button"
+                        onClick={() => handleSourceChange('match')}
+                        aria-pressed={generationSource === 'match'}
+                      >
+                        Current Match Report
+                      </button>
+                      <button
+                        className={`letters-btn ${generationSource === 'pipeline' ? 'letters-btn-primary' : ''}`}
+                        type="button"
+                        onClick={() => handleSourceChange('pipeline')}
+                        aria-pressed={generationSource === 'pipeline'}
+                      >
+                        Pipeline Entry
+                      </button>
+                    </div>
+                  </fieldset>
                 </div>
+              )}
 
-                <div className="letters-field">
-                  <label htmlFor="cl-vector">Vector</label>
-                  <select id="cl-vector" value={selectedVectorId} onChange={(event) => setSelectedVectorId(event.target.value)}>
-                    <option value="">Select a vector</option>
-                    {vectors.map((vector) => (
-                      <option key={vector.id} value={vector.id}>
-                        {vector.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="letters-generator-grid">
+                {generationSource === 'match' && matchMaterial ? (
+                  <div className="letters-field" style={{ gridColumn: '1 / -1' }}>
+                    <label>Current match context</label>
+                    <div className="letters-generator-note">
+                      {matchMaterial.company} - {matchMaterial.role} · Match {Math.round(matchMaterial.matchScore * 100)}%
+                      {matchMaterial.skillMatch ? ` · Skills: ${matchMaterial.skillMatch}` : ''}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="letters-field">
+                      <label htmlFor="cl-entry">Pipeline Entry</label>
+                      <select id="cl-entry" value={selectedEntryId} onChange={(event) => handleEntryChange(event.target.value)}>
+                        <option value="">Select an opportunity</option>
+                        {candidateEntries.map((entry) => (
+                          <option key={entry.id} value={entry.id}>
+                            {entry.company} - {entry.role}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="letters-field">
+                      <label htmlFor="cl-vector">Vector</label>
+                      <select id="cl-vector" value={selectedVectorId} onChange={(event) => setSelectedVectorId(event.target.value)}>
+                        <option value="">Select a vector</option>
+                        {vectors.map((vector) => (
+                          <option key={vector.id} value={vector.id}>
+                            {vector.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="letters-field">
-                <label htmlFor="cl-research">Company Research Notes</label>
+                <label htmlFor="cl-research">Additional Notes</label>
                 <textarea
                   id="cl-research"
                   value={companyResearchDraft}
@@ -302,14 +427,14 @@ export function LettersPage() {
               </div>
             </>
           ) : (
-            <p id="letters-generator-help" className="letters-generator-note">Add a pipeline opportunity with a job description to generate a cover letter draft.</p>
+            <p id="letters-generator-help" className="letters-generator-note">Generate a match report or add a pipeline opportunity with a job description to generate a cover letter draft.</p>
           )}
 
           {candidateEntries.length > 0 && helperMessage && (
             <p
               id="letters-generator-help"
-              className={`letters-generator-note ${!AI_ENDPOINT ? 'letters-generator-note-error' : ''}`}
-              role={!AI_ENDPOINT ? 'alert' : undefined}
+              className={`letters-generator-note ${!aiEndpoint ? 'letters-generator-note-error' : ''}`}
+              role={!aiEndpoint ? 'alert' : undefined}
             >
               {helperMessage}
             </p>

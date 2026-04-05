@@ -4,10 +4,15 @@ import {
   Cloud,
   HardDrive,
   Layers,
+  Fingerprint,
+  Target,
   ListChecks,
   Search,
   BookOpen,
   FileText,
+  AtSign,
+  BadgeCheck,
+  MessageSquareQuote,
   HelpCircle,
   Moon,
   Sun,
@@ -34,10 +39,15 @@ const CURRENT_YEAR = new Date().getFullYear()
 
 const NAV_ITEMS = [
   { to: '/build' as const, icon: Layers, label: 'Build' },
+  { to: '/identity' as const, icon: Fingerprint, label: 'Identity' },
+  { to: '/match' as const, icon: Target, label: 'Match' },
   { to: '/pipeline' as const, icon: ListChecks, label: 'Pipeline' },
   { to: '/research' as const, icon: Search, label: 'Research' },
   { to: '/prep' as const, icon: BookOpen, label: 'Prep' },
   { to: '/letters' as const, icon: FileText, label: 'Letters' },
+  { to: '/linkedin' as const, icon: AtSign, label: 'LinkedIn' },
+  { to: '/recruiter' as const, icon: BadgeCheck, label: 'Recruiter' },
+  { to: '/debrief' as const, icon: MessageSquareQuote, label: 'Debrief' },
 ] as const
 
 export function AppShell() {

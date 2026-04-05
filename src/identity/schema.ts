@@ -1,0 +1,581 @@
+export interface ProfessionalIdentityLink {
+  id: string
+  url: string
+}
+
+export interface ProfessionalIdentityCore {
+  name: string
+  display_name?: string
+  email: string
+  phone: string
+  location: string
+  remote?: boolean
+  title?: string
+  links: ProfessionalIdentityLink[]
+  thesis: string
+  elaboration?: string
+  origin?: string
+}
+
+export interface ProfessionalIdentityArcEntry {
+  company: string
+  chapter: string
+}
+
+export interface ProfessionalPhilosophyEntry {
+  id: string
+  text: string
+  tags: string[]
+}
+
+export interface ProfessionalInterviewStyle {
+  strengths: string[]
+  weaknesses: string[]
+  prep_strategy: string
+}
+
+export interface ProfessionalSelfModel {
+  arc: ProfessionalIdentityArcEntry[]
+  philosophy: ProfessionalPhilosophyEntry[]
+  interview_style: ProfessionalInterviewStyle
+}
+
+export interface ProfessionalPreferencePriority {
+  item: string
+  weight: string
+  notes?: string
+}
+
+export interface ProfessionalCompensationPreferences {
+  base_floor?: number
+  base_target?: number
+  notes?: string
+  priorities: ProfessionalPreferencePriority[]
+}
+
+export interface ProfessionalWorkModelPreferences {
+  preference: string
+  flexibility?: string
+  hard_no?: string
+}
+
+export interface ProfessionalRoleFitPreferences {
+  ideal: string[]
+  red_flags: string[]
+  evaluation_criteria: string[]
+}
+
+export interface ProfessionalPreferences {
+  compensation: ProfessionalCompensationPreferences
+  work_model: ProfessionalWorkModelPreferences
+  role_fit: ProfessionalRoleFitPreferences
+}
+
+export interface ProfessionalSkillItem {
+  name: string
+  proficiency?: string
+  tags: string[]
+}
+
+export interface ProfessionalSkillGroup {
+  id: string
+  label: string
+  items: ProfessionalSkillItem[]
+}
+
+export interface ProfessionalSkills {
+  groups: ProfessionalSkillGroup[]
+}
+
+export interface ProfessionalProfile {
+  id: string
+  tags: string[]
+  text: string
+}
+
+export interface ProfessionalRoleBullet {
+  id: string
+  problem: string
+  action: string
+  outcome: string
+  impact: string[]
+  metrics: Record<string, string | number | boolean>
+  technologies: string[]
+  portfolio_dive?: string | null
+  tags: string[]
+}
+
+export interface ProfessionalRole {
+  id: string
+  company: string
+  subtitle?: string | null
+  title: string
+  dates: string
+  portfolio_anchor?: string | null
+  bullets: ProfessionalRoleBullet[]
+}
+
+export interface ProfessionalProject {
+  id: string
+  name: string
+  url?: string
+  description: string
+  portfolio_dive?: string | null
+  tags: string[]
+}
+
+export interface ProfessionalEducationEntry {
+  school: string
+  location: string
+  degree: string
+  year?: string
+}
+
+export interface ProfessionalGeneratorRules {
+  voice_skill: string
+  resume_skill: string
+  accuracy?: Record<string, string | string[]>
+}
+
+export interface ProfessionalIdentityV3 {
+  $schema?: string
+  version: 3
+  identity: ProfessionalIdentityCore
+  self_model: ProfessionalSelfModel
+  preferences: ProfessionalPreferences
+  skills: ProfessionalSkills
+  profiles: ProfessionalProfile[]
+  roles: ProfessionalRole[]
+  projects: ProfessionalProject[]
+  education: ProfessionalEducationEntry[]
+  generator_rules: ProfessionalGeneratorRules
+}
+
+export type ProfessionalIdentityDocument = ProfessionalIdentityV3
+
+const FORBIDDEN_OBJECT_KEYS = new Set(['__proto__', 'prototype', 'constructor'])
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' &&
+  value !== null &&
+  !Array.isArray(value) &&
+  (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
+
+const assertRecord = (value: unknown, context: string): Record<string, unknown> => {
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`)
+  }
+
+  for (const key of Object.keys(value)) {
+    if (FORBIDDEN_OBJECT_KEYS.has(key)) {
+      throw new Error(`${context} contains unsupported key "${key}".`)
+    }
+  }
+
+  return value
+}
+
+const assertArray = (value: unknown, context: string): unknown[] => {
+  if (!Array.isArray(value)) {
+    throw new Error(`${context} must be an array.`)
+  }
+
+  return value
+}
+
+const assertString = (value: unknown, context: string): string => {
+  if (typeof value !== 'string') {
+    throw new Error(`${context} must be a string.`)
+  }
+
+  return value
+}
+
+const assertOptionalString = (value: unknown, context: string): string | undefined => {
+  if (value === undefined || value === null) {
+    return undefined
+  }
+
+  return assertString(value, context)
+}
+
+const assertOptionalNullableString = (value: unknown, context: string): string | null | undefined => {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (value === null) {
+    return null
+  }
+
+  return assertString(value, context)
+}
+
+const assertNumber = (value: unknown, context: string): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`${context} must be a number.`)
+  }
+
+  return value
+}
+
+const assertBoolean = (value: unknown, context: string): boolean => {
+  if (typeof value !== 'boolean') {
+    throw new Error(`${context} must be a boolean.`)
+  }
+
+  return value
+}
+
+const assertStringArray = (value: unknown, context: string): string[] =>
+  assertArray(value, context).map((entry, index) => assertString(entry, `${context}[${index}]`))
+
+const normalizeTagArray = (value: unknown, context: string, warnings: string[]): string[] => {
+  const tags = assertStringArray(value, context)
+  const normalized: string[] = []
+  const seen = new Set<string>()
+
+  for (const rawTag of tags) {
+    const tag = rawTag.trim().toLowerCase()
+    if (!tag) {
+      warnings.push(`${context} contained an empty tag that was removed.`)
+      continue
+    }
+
+    if (seen.has(tag)) {
+      warnings.push(`${context} contained duplicate tag "${tag}" that was deduplicated.`)
+      continue
+    }
+
+    seen.add(tag)
+    normalized.push(tag)
+  }
+
+  return normalized
+}
+
+const assertUniqueId = (seen: Set<string>, id: string, context: string): void => {
+  if (seen.has(id)) {
+    throw new Error(`${context} has duplicate id "${id}".`)
+  }
+
+  seen.add(id)
+}
+
+export const looksLikeProfessionalIdentity = (value: unknown): boolean => {
+  if (!isRecord(value)) {
+    return false
+  }
+
+  return (
+    value.version === 3 &&
+    'identity' in value &&
+    'self_model' in value &&
+    'preferences' in value &&
+    'skills' in value &&
+    'profiles' in value &&
+    'roles' in value &&
+    'projects' in value &&
+    'education' in value &&
+    'generator_rules' in value
+  )
+}
+
+export const importProfessionalIdentity = (
+  value: unknown,
+): { data: ProfessionalIdentityV3; warnings: string[] } => {
+  const warnings: string[] = []
+  const root = assertRecord(value, 'identity')
+  const version = assertNumber(root.version, 'version')
+  if (version !== 3) {
+    throw new Error('version must be 3.')
+  }
+
+  const identity = assertRecord(root.identity, 'identity')
+  const selfModel = assertRecord(root.self_model, 'self_model')
+  const interviewStyle = assertRecord(selfModel.interview_style, 'self_model.interview_style')
+  const preferences = assertRecord(root.preferences, 'preferences')
+  const compensation = assertRecord(preferences.compensation, 'preferences.compensation')
+  const workModel = assertRecord(preferences.work_model, 'preferences.work_model')
+  const roleFit = assertRecord(preferences.role_fit, 'preferences.role_fit')
+  const skills = assertRecord(root.skills, 'skills')
+  const generatorRules = assertRecord(root.generator_rules, 'generator_rules')
+
+  const skillGroupIds = new Set<string>()
+  const linkIds = new Set<string>()
+  const profileIds = new Set<string>()
+  const philosophyIds = new Set<string>()
+  const roleIds = new Set<string>()
+  const bulletIds = new Set<string>()
+  const projectIds = new Set<string>()
+
+  const parsed: ProfessionalIdentityV3 = {
+    ...(root.$schema ? { $schema: assertString(root.$schema, '$schema') } : {}),
+    version: 3,
+    identity: {
+      name: assertString(identity.name, 'identity.name'),
+      ...(identity.display_name !== undefined
+        ? { display_name: assertString(identity.display_name, 'identity.display_name') }
+        : {}),
+      email: assertString(identity.email, 'identity.email'),
+      phone: assertString(identity.phone, 'identity.phone'),
+      location: assertString(identity.location, 'identity.location'),
+      ...(identity.remote !== undefined ? { remote: assertBoolean(identity.remote, 'identity.remote') } : {}),
+      ...(identity.title !== undefined ? { title: assertString(identity.title, 'identity.title') } : {}),
+      links: assertArray(identity.links, 'identity.links').map((entry, index) => {
+        const link = assertRecord(entry, `identity.links[${index}]`)
+        const id = assertString(link.id, `identity.links[${index}].id`)
+        assertUniqueId(linkIds, id, 'identity.links')
+        return {
+          id,
+          url: assertString(link.url, `identity.links[${index}].url`),
+        }
+      }),
+      thesis: assertString(identity.thesis, 'identity.thesis'),
+      ...(identity.elaboration !== undefined
+        ? { elaboration: assertString(identity.elaboration, 'identity.elaboration') }
+        : {}),
+      ...(identity.origin !== undefined ? { origin: assertString(identity.origin, 'identity.origin') } : {}),
+    },
+    self_model: {
+      arc: assertArray(selfModel.arc, 'self_model.arc').map((entry, index) => {
+        const arc = assertRecord(entry, `self_model.arc[${index}]`)
+        return {
+          company: assertString(arc.company, `self_model.arc[${index}].company`),
+          chapter: assertString(arc.chapter, `self_model.arc[${index}].chapter`),
+        }
+      }),
+      philosophy: assertArray(selfModel.philosophy, 'self_model.philosophy').map((entry, index) => {
+        const philosophy = assertRecord(entry, `self_model.philosophy[${index}]`)
+        const id = assertString(philosophy.id, `self_model.philosophy[${index}].id`)
+        assertUniqueId(philosophyIds, id, 'self_model.philosophy')
+        return {
+          id,
+          text: assertString(philosophy.text, `self_model.philosophy[${index}].text`),
+          tags: normalizeTagArray(philosophy.tags, `self_model.philosophy[${index}].tags`, warnings),
+        }
+      }),
+      interview_style: {
+        strengths: assertStringArray(interviewStyle.strengths, 'self_model.interview_style.strengths'),
+        weaknesses: assertStringArray(interviewStyle.weaknesses, 'self_model.interview_style.weaknesses'),
+        prep_strategy: assertString(
+          interviewStyle.prep_strategy,
+          'self_model.interview_style.prep_strategy',
+        ),
+      },
+    },
+    preferences: {
+      compensation: {
+        ...(compensation.base_floor !== undefined
+          ? { base_floor: assertNumber(compensation.base_floor, 'preferences.compensation.base_floor') }
+          : {}),
+        ...(compensation.base_target !== undefined
+          ? { base_target: assertNumber(compensation.base_target, 'preferences.compensation.base_target') }
+          : {}),
+        ...(compensation.notes !== undefined
+          ? { notes: assertString(compensation.notes, 'preferences.compensation.notes') }
+          : {}),
+        priorities: assertArray(compensation.priorities, 'preferences.compensation.priorities').map(
+          (entry, index) => {
+            const priority = assertRecord(entry, `preferences.compensation.priorities[${index}]`)
+            return {
+              item: assertString(priority.item, `preferences.compensation.priorities[${index}].item`),
+              weight: assertString(priority.weight, `preferences.compensation.priorities[${index}].weight`),
+              ...(priority.notes !== undefined
+                ? {
+                    notes: assertOptionalString(
+                      priority.notes,
+                      `preferences.compensation.priorities[${index}].notes`,
+                    ),
+                  }
+                : {}),
+            }
+          },
+        ),
+      },
+      work_model: {
+        preference: assertString(workModel.preference, 'preferences.work_model.preference'),
+        ...(workModel.flexibility !== undefined
+          ? { flexibility: assertOptionalString(workModel.flexibility, 'preferences.work_model.flexibility') }
+          : {}),
+        ...(workModel.hard_no !== undefined
+          ? { hard_no: assertOptionalString(workModel.hard_no, 'preferences.work_model.hard_no') }
+          : {}),
+      },
+      role_fit: {
+        ideal: assertStringArray(roleFit.ideal, 'preferences.role_fit.ideal'),
+        red_flags: assertStringArray(roleFit.red_flags, 'preferences.role_fit.red_flags'),
+        evaluation_criteria: assertStringArray(
+          roleFit.evaluation_criteria,
+          'preferences.role_fit.evaluation_criteria',
+        ),
+      },
+    },
+    skills: {
+      groups: assertArray(skills.groups, 'skills.groups').map((entry, index) => {
+        const group = assertRecord(entry, `skills.groups[${index}]`)
+        const id = assertString(group.id, `skills.groups[${index}].id`)
+        assertUniqueId(skillGroupIds, id, 'skills.groups')
+
+        return {
+          id,
+          label: assertString(group.label, `skills.groups[${index}].label`),
+          items: assertArray(group.items, `skills.groups[${index}].items`).map((itemEntry, itemIndex) => {
+            const item = assertRecord(itemEntry, `skills.groups[${index}].items[${itemIndex}]`)
+            return {
+              name: assertString(item.name, `skills.groups[${index}].items[${itemIndex}].name`),
+              ...(item.proficiency !== undefined
+                ? {
+                    proficiency: assertOptionalString(
+                      item.proficiency,
+                      `skills.groups[${index}].items[${itemIndex}].proficiency`,
+                    ),
+                  }
+                : {}),
+              tags: normalizeTagArray(
+                item.tags,
+                `skills.groups[${index}].items[${itemIndex}].tags`,
+                warnings,
+              ),
+            }
+          }),
+        }
+      }),
+    },
+    profiles: assertArray(root.profiles, 'profiles').map((entry, index) => {
+      const profile = assertRecord(entry, `profiles[${index}]`)
+      const id = assertString(profile.id, `profiles[${index}].id`)
+      assertUniqueId(profileIds, id, 'profiles')
+
+      return {
+        id,
+        tags: normalizeTagArray(profile.tags, `profiles[${index}].tags`, warnings),
+        text: assertString(profile.text, `profiles[${index}].text`),
+      }
+    }),
+    roles: assertArray(root.roles, 'roles').map((entry, index) => {
+      const role = assertRecord(entry, `roles[${index}]`)
+      const id = assertString(role.id, `roles[${index}].id`)
+      assertUniqueId(roleIds, id, 'roles')
+
+      return {
+        id,
+        company: assertString(role.company, `roles[${index}].company`),
+        ...(role.subtitle !== undefined
+          ? { subtitle: assertOptionalNullableString(role.subtitle, `roles[${index}].subtitle`) }
+          : {}),
+        title: assertString(role.title, `roles[${index}].title`),
+        dates: assertString(role.dates, `roles[${index}].dates`),
+        ...(role.portfolio_anchor !== undefined
+          ? {
+              portfolio_anchor: assertOptionalNullableString(
+                role.portfolio_anchor,
+                `roles[${index}].portfolio_anchor`,
+              ),
+            }
+          : {}),
+        bullets: assertArray(role.bullets, `roles[${index}].bullets`).map((bulletEntry, bulletIndex) => {
+          const bullet = assertRecord(bulletEntry, `roles[${index}].bullets[${bulletIndex}]`)
+          const bulletId = assertString(bullet.id, `roles[${index}].bullets[${bulletIndex}].id`)
+          assertUniqueId(bulletIds, bulletId, 'roles.bullets')
+
+          const metricsRecord = assertRecord(
+            bullet.metrics,
+            `roles[${index}].bullets[${bulletIndex}].metrics`,
+          )
+          const metrics = Object.fromEntries(
+            Object.entries(metricsRecord).map(([key, metricValue]) => {
+              if (
+                typeof metricValue !== 'string' &&
+                (typeof metricValue !== 'number' || !Number.isFinite(metricValue)) &&
+                typeof metricValue !== 'boolean'
+              ) {
+                throw new Error(`roles[${index}].bullets[${bulletIndex}].metrics.${key} must be a string, number, or boolean.`)
+              }
+
+              return [key, metricValue]
+            }),
+          )
+
+          return {
+            id: bulletId,
+            problem: assertString(bullet.problem, `roles[${index}].bullets[${bulletIndex}].problem`),
+            action: assertString(bullet.action, `roles[${index}].bullets[${bulletIndex}].action`),
+            outcome: assertString(bullet.outcome, `roles[${index}].bullets[${bulletIndex}].outcome`),
+            impact: assertStringArray(bullet.impact, `roles[${index}].bullets[${bulletIndex}].impact`),
+            metrics,
+            technologies: assertStringArray(
+              bullet.technologies,
+              `roles[${index}].bullets[${bulletIndex}].technologies`,
+            ),
+            ...(bullet.portfolio_dive !== undefined
+              ? {
+                  portfolio_dive: assertOptionalNullableString(
+                    bullet.portfolio_dive,
+                    `roles[${index}].bullets[${bulletIndex}].portfolio_dive`,
+                  ),
+                }
+              : {}),
+            tags: normalizeTagArray(
+              bullet.tags,
+              `roles[${index}].bullets[${bulletIndex}].tags`,
+              warnings,
+            ),
+          }
+        }),
+      }
+    }),
+    projects: assertArray(root.projects, 'projects').map((entry, index) => {
+      const project = assertRecord(entry, `projects[${index}]`)
+      const id = assertString(project.id, `projects[${index}].id`)
+      assertUniqueId(projectIds, id, 'projects')
+
+      return {
+        id,
+        name: assertString(project.name, `projects[${index}].name`),
+        ...(project.url !== undefined ? { url: assertOptionalString(project.url, `projects[${index}].url`) } : {}),
+        description: assertString(project.description, `projects[${index}].description`),
+        ...(project.portfolio_dive !== undefined
+          ? {
+              portfolio_dive: assertOptionalNullableString(
+                project.portfolio_dive,
+                `projects[${index}].portfolio_dive`,
+              ),
+            }
+          : {}),
+        tags: normalizeTagArray(project.tags, `projects[${index}].tags`, warnings),
+      }
+    }),
+    education: assertArray(root.education, 'education').map((entry, index) => {
+      const education = assertRecord(entry, `education[${index}]`)
+      return {
+        school: assertString(education.school, `education[${index}].school`),
+        location: assertString(education.location, `education[${index}].location`),
+        degree: assertString(education.degree, `education[${index}].degree`),
+        ...(education.year !== undefined ? { year: assertOptionalString(education.year, `education[${index}].year`) } : {}),
+      }
+    }),
+    generator_rules: {
+      voice_skill: assertString(generatorRules.voice_skill, 'generator_rules.voice_skill'),
+      resume_skill: assertString(generatorRules.resume_skill, 'generator_rules.resume_skill'),
+      ...(generatorRules.accuracy !== undefined
+        ? {
+            accuracy: Object.fromEntries(
+              Object.entries(assertRecord(generatorRules.accuracy, 'generator_rules.accuracy')).map(
+                ([key, entry]) => {
+                  if (typeof entry === 'string') {
+                    return [key, entry]
+                  }
+
+                  return [key, assertStringArray(entry, `generator_rules.accuracy.${key}`)]
+                },
+              ),
+            ),
+          }
+        : {}),
+    },
+  }
+
+  return { data: parsed, warnings }
+}
+
