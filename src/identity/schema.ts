@@ -101,6 +101,7 @@ export interface ProfessionalRoleBullet {
   impact: string[]
   metrics: Record<string, string | number | boolean>
   technologies: string[]
+  source_text?: string
   portfolio_dive?: string | null
   tags: string[]
 }
@@ -508,6 +509,14 @@ export const importProfessionalIdentity = (
               bullet.technologies,
               `roles[${index}].bullets[${bulletIndex}].technologies`,
             ),
+            ...(bullet.source_text !== undefined
+              ? {
+                  source_text: assertOptionalString(
+                    bullet.source_text,
+                    `roles[${index}].bullets[${bulletIndex}].source_text`,
+                  ),
+                }
+              : {}),
             ...(bullet.portfolio_dive !== undefined
               ? {
                   portfolio_dive: assertOptionalNullableString(
@@ -578,4 +587,3 @@ export const importProfessionalIdentity = (
 
   return { data: parsed, warnings }
 }
-

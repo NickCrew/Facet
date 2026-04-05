@@ -13,6 +13,7 @@ const IDENTITY_EXTRACTION_TIMEOUT_MS = 120000
 
 const EXTRACTION_SYSTEM_PROMPT = `You are Facet's extraction agent.
 Build a Professional Identity Schema v3 draft from messy source material.
+When a scanned structure is provided, treat it as the canonical role/skills/education skeleton and deepen it rather than reparsing the resume from scratch.
 Return JSON only with this exact top-level shape:
 {
   "summary": string,
@@ -79,6 +80,7 @@ Use this minimal valid shape for the identity object:
       "impact": string[],
       "metrics": {},
       "technologies": string[],
+      "source_text": string,
       "tags": string[]
     }]
   }],
@@ -102,6 +104,7 @@ Rules:
 - In identity.self_model use philosophy entries shaped as {id, text, tags}, not a string array.
 - In self_model, put strengths/weaknesses/prep_strategy inside interview_style. Do not invent self_model.strengths, self_model.interests, or self_model.goals.
 - In identity.roles[].bullets[] use decomposed fields: problem, action, outcome, impact, metrics, technologies, tags.
+- If source_text is present on a bullet, preserve the role and bullet ids, keep source_text intact, and use it as the basis for the decomposed fields.
 - Use roles[].dates as a single string. Do not emit start_date or end_date.
 - impact must be a string array, not a single string.
 - metrics must be an object whose values are strings, numbers, or booleans. Do not emit metrics as an array.
@@ -169,6 +172,17 @@ const normalizeAssumptions = (value: unknown, context: string): IdentityAssumpti
 const composeRewrite = (problem: string, action: string, outcome: string): string =>
   [problem, action, outcome].map((value) => value.trim()).filter(Boolean).join(' ')
 
+const composeBulletRewrite = (
+  bullet: ProfessionalIdentityV3['roles'][number]['bullets'][number],
+): string => {
+  const composed = composeRewrite(bullet.problem, bullet.action, bullet.outcome)
+  if (composed) {
+    return composed
+  }
+
+  return bullet.source_text?.trim() ?? ''
+}
+
 const defaultRewrite = (identity: ProfessionalIdentityV3, roleId: string, bulletId: string): string => {
   const role = identity.roles.find((entry) => entry.id === roleId)
   const bullet = role?.bullets.find((entry) => entry.id === bulletId)
@@ -176,7 +190,7 @@ const defaultRewrite = (identity: ProfessionalIdentityV3, roleId: string, bullet
     throw new Error(`Draft bullet ${roleId}/${bulletId} does not exist in identity.roles.`)
   }
 
-  return composeRewrite(bullet.problem, bullet.action, bullet.outcome)
+  return composeBulletRewrite(bullet)
 }
 
 const buildBulletMap = (identity: ProfessionalIdentityV3) => {
@@ -189,7 +203,7 @@ const buildBulletMap = (identity: ProfessionalIdentityV3) => {
         roleId: role.id,
         roleLabel,
         bulletId: bullet.id,
-        rewrite: composeRewrite(bullet.problem, bullet.action, bullet.outcome),
+        rewrite: composeBulletRewrite(bullet),
         tags: bullet.tags,
         assumptions: [],
       })
@@ -420,15 +434,25 @@ const buildExtractionPrompt = ({
   sourceMaterial,
   correctionNotes,
   existingDraft,
+  seedIdentity,
 }: {
   sourceMaterial: string
   correctionNotes?: string
   existingDraft?: ProfessionalIdentityV3 | null
+  seedIdentity?: ProfessionalIdentityV3 | null
 }): string => {
   const parts = [
     'Source material:',
     sourceMaterial.trim(),
   ]
+
+  if (seedIdentity) {
+    parts.push(
+      '',
+      'Scanned resume structure to deepen (preserve ids and role boundaries; decompose bullets from source_text):',
+      JSON.stringify(seedIdentity, null, 2),
+    )
+  }
 
   if (existingDraft) {
     parts.push(
@@ -455,16 +479,18 @@ export const generateIdentityDraft = async ({
   sourceMaterial,
   correctionNotes,
   existingDraft,
+  seedIdentity,
 }: {
   endpoint: string
   sourceMaterial: string
   correctionNotes?: string
   existingDraft?: ProfessionalIdentityV3 | null
+  seedIdentity?: ProfessionalIdentityV3 | null
 }): Promise<IdentityExtractionDraft> => {
   const rawResponse = await callLlmProxy(
     endpoint,
     EXTRACTION_SYSTEM_PROMPT,
-    buildExtractionPrompt({ sourceMaterial, correctionNotes, existingDraft }),
+    buildExtractionPrompt({ sourceMaterial, correctionNotes, existingDraft, seedIdentity }),
     {
       model: 'sonnet',
       temperature: 0.2,

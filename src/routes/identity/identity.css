@@ -157,6 +157,10 @@
   gap: 6px;
 }
 
+.identity-field-wide {
+  grid-column: 1 / -1;
+}
+
 .identity-label,
 .identity-stat-label {
   font-size: 11px;
@@ -180,6 +184,24 @@
   transition: border-color var(--duration-fast) var(--easing), box-shadow var(--duration-fast) var(--easing);
 }
 
+.identity-input {
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 10px 12px;
+  transition: border-color var(--duration-fast) var(--easing), box-shadow var(--duration-fast) var(--easing);
+}
+
+.identity-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 16%, transparent);
+}
+
 .identity-textarea:focus {
   outline: none;
   border-color: var(--accent-primary);
@@ -201,6 +223,10 @@
   gap: var(--space-2);
 }
 
+.identity-stats-compact {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
 .identity-stat {
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
@@ -217,7 +243,9 @@
 }
 
 .identity-bullet-list,
-.identity-changelog {
+.identity-changelog,
+.identity-scan-stack,
+.identity-scan-editor {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -292,6 +320,71 @@
 .identity-chip-empty {
   background: transparent;
   color: var(--text-tertiary);
+}
+
+.identity-upload-zone {
+  border: 1px dashed color-mix(in srgb, var(--accent-primary) 45%, var(--border-subtle));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent-primary) 6%, var(--bg-surface));
+  color: var(--text-primary);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--duration-fast) var(--easing), background var(--duration-fast) var(--easing);
+}
+
+.identity-upload-zone:hover {
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-surface));
+}
+
+.identity-upload-zone span,
+.identity-scan-section p,
+.identity-scan-status span {
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.identity-scan-status,
+.identity-scan-card,
+.identity-scan-section {
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-inset) 86%, transparent);
+  padding: var(--space-3);
+}
+
+.identity-scan-status-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.identity-scan-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+@media (max-width: 960px) {
+  .identity-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .identity-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .identity-scan-form-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 [data-theme='dark'] .identity-chip-stated {

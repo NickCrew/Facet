@@ -1,14 +1,16 @@
-import { useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowRight,
   Download,
   FileJson,
   GitMerge,
+  ScanSearch,
   RefreshCcw,
   ShieldCheck,
   Sparkles,
   Upload,
+  X,
 } from 'lucide-react'
 import { professionalIdentityToResumeData } from '../../identity/resumeAdapter'
 import { useIdentityStore } from '../../store/identityStore'
@@ -20,11 +22,13 @@ import {
   generateIdentityDraft,
   parseIdentityExtractionResponse,
 } from '../../utils/identityExtraction'
+import { scanResumePdf } from '../../utils/resumeScanner'
 import {
   resolveComparisonVectorAfterReplaceImport,
   resolveSelectedVectorAfterReplaceImport,
 } from '../../utils/importSelection'
 import { parseJsonWithRepair } from '../../utils/jsonParsing'
+import { ScannedIdentityEditor } from './ScannedIdentityEditor'
 import './identity.css'
 
 const CONFIDENCE_LABELS: Record<IdentityConfidence, string> = {
@@ -47,20 +51,32 @@ const downloadJson = (filename: string, content: string) => {
 export function IdentityPage() {
   const navigate = useNavigate()
   const importRef = useRef<HTMLInputElement>(null)
+  const uploadRef = useRef<HTMLInputElement>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isScanning, setIsScanning] = useState(false)
   const [pageError, setPageError] = useState<string | null>(null)
   const [pageNotice, setPageNotice] = useState<string | null>(null)
+  const intakeMode = useIdentityStore((state) => state.intakeMode)
   const sourceMaterial = useIdentityStore((state) => state.sourceMaterial)
   const correctionNotes = useIdentityStore((state) => state.correctionNotes)
   const currentIdentity = useIdentityStore((state) => state.currentIdentity)
   const draft = useIdentityStore((state) => state.draft)
   const draftDocument = useIdentityStore((state) => state.draftDocument)
+  const scanResult = useIdentityStore((state) => state.scanResult)
   const warnings = useIdentityStore((state) => state.warnings)
   const changelog = useIdentityStore((state) => state.changelog)
+  const setIntakeMode = useIdentityStore((state) => state.setIntakeMode)
   const setSourceMaterial = useIdentityStore((state) => state.setSourceMaterial)
   const setCorrectionNotes = useIdentityStore((state) => state.setCorrectionNotes)
   const setDraft = useIdentityStore((state) => state.setDraft)
   const setDraftDocument = useIdentityStore((state) => state.setDraftDocument)
+  const setScanResult = useIdentityStore((state) => state.setScanResult)
+  const updateScannedIdentityCore = useIdentityStore((state) => state.updateScannedIdentityCore)
+  const updateScannedRole = useIdentityStore((state) => state.updateScannedRole)
+  const updateScannedBulletSourceText = useIdentityStore((state) => state.updateScannedBulletSourceText)
+  const updateScannedSkillGroupLabel = useIdentityStore((state) => state.updateScannedSkillGroupLabel)
+  const updateScannedSkillItemName = useIdentityStore((state) => state.updateScannedSkillItemName)
+  const updateScannedEducationEntry = useIdentityStore((state) => state.updateScannedEducationEntry)
   const importIdentity = useIdentityStore((state) => state.importIdentity)
   const applyDraft = useIdentityStore((state) => state.applyDraft)
   const selectedVector = useUiStore((state) => state.selectedVector)
@@ -90,6 +106,41 @@ export function IdentityPage() {
     }
   }, [currentIdentity, draft])
 
+  const scanCompletion = useMemo(() => {
+    if (!scanResult) {
+      return null
+    }
+
+    const activeIdentity = draft?.identity ?? currentIdentity
+    if (!activeIdentity) {
+      return {
+        extractedBullets: scanResult.counts.extractedBullets,
+        decomposedBullets: 0,
+      }
+    }
+
+    const activeBulletMap = new Map(
+      activeIdentity.roles.flatMap((role) =>
+        role.bullets.map((bullet) => [
+          `${role.id}::${bullet.id}`,
+          Boolean([bullet.problem, bullet.action, bullet.outcome].some((entry) => entry.trim())),
+        ]),
+      ),
+    )
+
+    const decomposedBullets = scanResult.identity.roles.reduce(
+      (total, role) =>
+        total +
+        role.bullets.filter((bullet) => activeBulletMap.get(`${role.id}::${bullet.id}`) === true).length,
+      0,
+    )
+
+    return {
+      extractedBullets: scanResult.counts.extractedBullets,
+      decomposedBullets,
+    }
+  }, [currentIdentity, draft, scanResult])
+
   const ensureEndpoint = () => {
     if (!aiEndpoint) {
       throw new Error('Identity extraction is disabled. Configure VITE_ANTHROPIC_PROXY_URL.')
@@ -97,7 +148,10 @@ export function IdentityPage() {
   }
 
   const runGenerate = async (mode: 'fresh' | 'regenerate') => {
-    if (!sourceMaterial.trim()) {
+    const shouldUseScan = intakeMode === 'upload' && Boolean(scanResult)
+    const effectiveSourceMaterial = shouldUseScan ? scanResult?.rawText ?? '' : sourceMaterial
+
+    if (!effectiveSourceMaterial.trim()) {
       setPageNotice(null)
       setPageError('Source material is required before generating a draft.')
       return
@@ -110,8 +164,9 @@ export function IdentityPage() {
       setIsGenerating(true)
       const nextDraft = await generateIdentityDraft({
         endpoint: aiEndpoint,
-        sourceMaterial,
+        sourceMaterial: effectiveSourceMaterial,
         correctionNotes,
+        seedIdentity: shouldUseScan ? scanResult?.identity ?? null : null,
         existingDraft: mode === 'regenerate' ? draft?.identity ?? currentIdentity : null,
       })
       setDraft(nextDraft)
@@ -126,6 +181,61 @@ export function IdentityPage() {
     } finally {
       setIsGenerating(false)
     }
+  }
+
+  const handleScannedFile = async (file: File) => {
+    if (!/\.pdf$/i.test(file.name)) {
+      setPageNotice(null)
+      setPageError('Resume Scanner v1 only supports PDF uploads.')
+      return
+    }
+
+    try {
+      setIsScanning(true)
+      setPageError(null)
+      setPageNotice(null)
+      const result = await scanResumePdf(file)
+      setSourceMaterial(result.rawText)
+
+      if (result.identity.roles.length === 0) {
+        setScanResult(null)
+        setIntakeMode('paste')
+        setPageNotice(
+          result.warnings.find((warning) => warning.code === 'role-parse-fallback')?.message ??
+            'Resume text extraction succeeded, but structural role parsing failed. The raw text is now loaded into paste-text mode.',
+        )
+        return
+      }
+
+      setScanResult(result)
+      setIntakeMode('upload')
+      setPageNotice(`Scanned ${file.name} into a structured identity shell.`)
+    } catch (error) {
+      setPageNotice(null)
+      setPageError(error instanceof Error ? error.message : 'Resume scan failed.')
+    } finally {
+      setIsScanning(false)
+    }
+  }
+
+  const handleUploadChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+
+    await handleScannedFile(file)
+    event.target.value = ''
+  }
+
+  const handleDrop = async (event: DragEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    const file = event.dataTransfer.files?.[0]
+    if (!file) {
+      return
+    }
+
+    await handleScannedFile(file)
   }
 
   const handleValidateDraft = () => {
@@ -307,14 +417,30 @@ export function IdentityPage() {
           <div className="identity-card-header">
             <div>
               <h2>Extraction Agent</h2>
-              <p>Start from a resume, LinkedIn dump, notes, or free-form work history.</p>
+              <p>Upload a PDF first, or fall back to pasted text if the scan is ambiguous.</p>
             </div>
             <div className="identity-card-actions">
+              <button
+                className={`identity-btn ${intakeMode === 'upload' ? 'identity-btn-primary' : ''}`}
+                type="button"
+                onClick={() => setIntakeMode('upload')}
+              >
+                <ScanSearch size={16} />
+                Upload Resume
+              </button>
+              <button
+                className={`identity-btn ${intakeMode === 'paste' ? 'identity-btn-primary' : ''}`}
+                type="button"
+                onClick={() => setIntakeMode('paste')}
+              >
+                <Upload size={16} />
+                Paste Text Instead
+              </button>
               <button
                 className="identity-btn identity-btn-primary"
                 type="button"
                 onClick={() => void runGenerate('fresh')}
-                disabled={isGenerating}
+                disabled={isGenerating || isScanning}
               >
                 <Sparkles size={16} />
                 {isGenerating ? 'Generating…' : 'Generate Draft'}
@@ -323,7 +449,7 @@ export function IdentityPage() {
                 className="identity-btn"
                 type="button"
                 onClick={() => void runGenerate('regenerate')}
-                disabled={isGenerating || (!draft && !currentIdentity)}
+                disabled={isGenerating || isScanning || (!draft && !currentIdentity)}
               >
                 <RefreshCcw size={16} />
                 Regenerate
@@ -331,15 +457,121 @@ export function IdentityPage() {
             </div>
           </div>
 
-          <label className="identity-field">
-            <span className="identity-label">Source Material</span>
-            <textarea
-              className="identity-textarea identity-textarea-lg"
-              value={sourceMaterial}
-              onChange={(event) => setSourceMaterial(event.target.value)}
-              placeholder="Paste resume bullets, LinkedIn text, portfolio notes, or a rough narrative here."
-            />
-          </label>
+          {intakeMode === 'upload' ? (
+            <>
+              <button
+                className="identity-upload-zone"
+                type="button"
+                onClick={() => uploadRef.current?.click()}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => void handleDrop(event)}
+              >
+                <Upload size={22} />
+                <strong>{isScanning ? 'Scanning PDF…' : 'Drop a PDF here or click to upload'}</strong>
+                <span>
+                  Resume Scanner v1 is PDF-only and performs a local structural parse before any AI call.
+                </span>
+              </button>
+              <input
+                ref={uploadRef}
+                hidden
+                type="file"
+                accept="application/pdf,.pdf"
+                onChange={(event) => void handleUploadChange(event)}
+              />
+
+              {scanResult ? (
+                <>
+                  <div className="identity-scan-status">
+                    <div className="identity-scan-status-row">
+                      <strong>{scanResult.fileName}</strong>
+                      <span>{scanResult.pageCount} page(s)</span>
+                    </div>
+                    <div className="identity-stats identity-stats-compact">
+                      <div className="identity-stat" aria-label={'Roles: ' + scanResult.counts.roles}>
+                        <span className="identity-stat-label">Roles</span>
+                        <strong>{scanResult.counts.roles}</strong>
+                      </div>
+                      <div className="identity-stat" aria-label={'Bullets: ' + scanResult.counts.bullets}>
+                        <span className="identity-stat-label">Bullets</span>
+                        <strong>{scanResult.counts.bullets}</strong>
+                      </div>
+                      <div
+                        className="identity-stat"
+                        aria-label={'Skill groups: ' + scanResult.counts.skillGroups}
+                      >
+                        <span className="identity-stat-label">Skill Groups</span>
+                        <strong>{scanResult.counts.skillGroups}</strong>
+                      </div>
+                      <div
+                        className="identity-stat"
+                        aria-label={'Education: ' + scanResult.counts.education}
+                      >
+                        <span className="identity-stat-label">Education</span>
+                        <strong>{scanResult.counts.education}</strong>
+                      </div>
+                      <div
+                        className="identity-stat"
+                        aria-label={
+                          'Decomposed bullets: ' +
+                          (scanCompletion?.decomposedBullets ?? 0) +
+                          ' of ' +
+                          (scanCompletion?.extractedBullets ?? scanResult.counts.extractedBullets)
+                        }
+                      >
+                        <span className="identity-stat-label">Deepened</span>
+                        <strong>
+                          {scanCompletion?.decomposedBullets ?? 0}/{scanCompletion?.extractedBullets ?? scanResult.counts.extractedBullets}
+                        </strong>
+                      </div>
+                    </div>
+                    <div className="identity-card-actions">
+                      <button className="identity-btn" type="button" onClick={() => uploadRef.current?.click()}>
+                        <RefreshCcw size={16} />
+                        Rescan PDF
+                      </button>
+                      <button
+                        className="identity-btn"
+                        type="button"
+                        onClick={() => {
+                          setScanResult(null)
+                          setPageNotice('Cleared the scanned resume structure.')
+                        }}
+                      >
+                        <X size={16} />
+                        Clear Scan
+                      </button>
+                    </div>
+                  </div>
+
+                  <ScannedIdentityEditor
+                    scanResult={scanResult}
+                    onUpdateIdentityCore={updateScannedIdentityCore}
+                    onUpdateRole={updateScannedRole}
+                    onUpdateBulletSourceText={updateScannedBulletSourceText}
+                    onUpdateSkillGroupLabel={updateScannedSkillGroupLabel}
+                    onUpdateSkillItemName={updateScannedSkillItemName}
+                    onUpdateEducationEntry={updateScannedEducationEntry}
+                  />
+                </>
+              ) : (
+                <div className="identity-empty">
+                  <h3>No scanned resume yet</h3>
+                  <p>Upload a text-based PDF to build a partial identity shell without a network call.</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <label className="identity-field">
+              <span className="identity-label">Source Material</span>
+              <textarea
+                className="identity-textarea identity-textarea-lg"
+                value={sourceMaterial}
+                onChange={(event) => setSourceMaterial(event.target.value)}
+                placeholder="Paste resume bullets, LinkedIn text, portfolio notes, or a rough narrative here."
+              />
+            </label>
+          )}
 
           <label className="identity-field">
             <span className="identity-label">Correction Notes</span>
@@ -413,7 +645,7 @@ export function IdentityPage() {
               className="identity-textarea identity-textarea-code"
               value={draftDocument}
               onChange={(event) => setDraftDocument(event.target.value)}
-              placeholder='{"version": 2, "...": "..."}'
+              placeholder='{"version": 3, "...": "..."}'
             />
           </label>
 

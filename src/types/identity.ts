@@ -27,6 +27,8 @@ export interface IdentityExtractionDraft {
 
 export type IdentityApplyMode = 'replace' | 'merge'
 
+export type IdentityIntakeMode = 'upload' | 'paste'
+
 export interface IdentityApplyResult {
   data: ProfessionalIdentityV3
   warnings: string[]
@@ -35,6 +37,37 @@ export interface IdentityApplyResult {
 }
 
 export type IdentityChangeAction = 'draft-generated' | 'draft-applied' | 'identity-imported'
+
+export interface ResumeScanWarning {
+  code:
+    | 'two-column-layout'
+    | 'role-parse-fallback'
+    | 'missing-skills'
+    | 'missing-education'
+    | 'missing-contact'
+  severity: 'info' | 'warning'
+  message: string
+}
+
+export interface ResumeScanCounts {
+  roles: number
+  bullets: number
+  skillGroups: number
+  education: number
+  extractedBullets: number
+  decomposedBullets: number
+}
+
+export interface ResumeScanResult {
+  fileName: string
+  pageCount: number
+  scannedAt: string
+  rawText: string
+  identity: ProfessionalIdentityV3
+  warnings: ResumeScanWarning[]
+  counts: ResumeScanCounts
+  layout: 'single-column' | 'ambiguous-columns'
+}
 
 export interface IdentityChangeLogEntry {
   id: string

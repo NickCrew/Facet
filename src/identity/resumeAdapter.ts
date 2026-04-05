@@ -32,9 +32,26 @@ const buildEducationId = (
 const joinBulletText = (problem: string, action: string, outcome: string): string =>
   [problem.trim(), action.trim(), outcome.trim()].filter(Boolean).join(' ')
 
+const resolveBulletText = (
+  bullet: ProfessionalIdentityV3['roles'][number]['bullets'][number],
+): string => {
+  const composed = joinBulletText(bullet.problem, bullet.action, bullet.outcome)
+  if (composed) {
+    return composed
+  }
+
+  return bullet.source_text?.trim() ?? ''
+}
+
 const toBulletLabel = (
   bullet: ProfessionalIdentityV3['roles'][number]['bullets'][number],
-): string => bullet.impact[0]?.trim() || bullet.outcome.trim() || bullet.action.trim() || bullet.problem.trim()
+): string =>
+  bullet.impact[0]?.trim() ||
+  bullet.outcome.trim() ||
+  bullet.action.trim() ||
+  bullet.problem.trim() ||
+  bullet.source_text?.trim() ||
+  bullet.id
 
 export const professionalIdentityToResumeData = (
   identity: ProfessionalIdentityV3,
@@ -103,7 +120,7 @@ export const professionalIdentityToResumeData = (
           id: bullet.id,
           label: toBulletLabel(bullet),
           vectors: includeDefaultVector(),
-          text: joinBulletText(bullet.problem, bullet.action, bullet.outcome),
+          text: resolveBulletText(bullet),
         })),
       })),
       projects: identity.projects.map((project) => ({
@@ -127,4 +144,3 @@ export const professionalIdentityToResumeData = (
     warnings,
   }
 }
-

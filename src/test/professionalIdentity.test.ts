@@ -297,4 +297,23 @@ describe('professional identity schema', () => {
       'Rebuilt the product as a standalone edge sensor. Product deployable anywhere.',
     )
   })
+
+  it('falls back to source_text when decomposed fields are still empty', () => {
+    const scannedBullet = clone(baseIdentityFixture)
+    scannedBullet.roles[0].bullets[0].problem = ''
+    scannedBullet.roles[0].bullets[0].action = ''
+    scannedBullet.roles[0].bullets[0].outcome = ''
+    scannedBullet.roles[0].bullets[0].impact = []
+    scannedBullet.roles[0].bullets[0].source_text =
+      'Ported the platform to Kubernetes-based installs for on-prem customer environments.'
+
+    const parsed = importResumeConfig(JSON.stringify(scannedBullet), 'json')
+
+    expect(parsed.data.roles[0]?.bullets[0]?.label).toBe(
+      'Ported the platform to Kubernetes-based installs for on-prem customer environments.',
+    )
+    expect(parsed.data.roles[0]?.bullets[0]?.text).toBe(
+      'Ported the platform to Kubernetes-based installs for on-prem customer environments.',
+    )
+  })
 })
