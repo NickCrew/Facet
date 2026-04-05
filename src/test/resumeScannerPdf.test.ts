@@ -126,6 +126,14 @@ describe('resumeScanner pdf', () => {
     expect(getPage).toHaveBeenCalledTimes(1)
   })
 
+  it('surfaces pdf load failures from pdfjs', async () => {
+    getDocumentMock.mockReturnValue({
+      promise: Promise.reject(new Error('Password Required')),
+    })
+
+    await expect(extractPdfTextItems(buildPdfFile())).rejects.toThrow('Password Required')
+  })
+
   it('scans a parsed pdf into resume counts and identity content', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-05T16:45:00.000Z'))
@@ -176,5 +184,78 @@ describe('resumeScanner pdf', () => {
     )
     expect(result.warnings).toEqual([])
     expect(result.rawText).toContain('Senior Platform Engineer | A10 Networks | Feb 2025 - Mar 2026')
+  })
+
+  it('rejects image-only or empty pdfs at the top-level scan entrypoint', async () => {
+    getDocumentMock.mockReturnValue({
+      promise: Promise.resolve({
+        numPages: 1,
+        getPage: vi.fn().mockResolvedValue({
+          getTextContent: vi.fn().mockResolvedValue({
+            items: [],
+          }),
+        }),
+      }),
+    })
+
+    await expect(scanResumePdf(buildPdfFile())).rejects.toThrow(/image-only or unreadable/i)
+  })
+
+  it('aggregates roles and bullets that continue across multiple pages', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-05T17:15:00.000Z'))
+
+    getDocumentMock.mockReturnValue({
+      promise: Promise.resolve({
+        numPages: 2,
+        getPage: vi
+          .fn()
+          .mockResolvedValueOnce({
+            getTextContent: vi.fn().mockResolvedValue({
+              items: [
+                buildPdfTextItem('Nick Ferguson', 760),
+                buildPdfTextItem('Staff Engineer', 744),
+                buildPdfTextItem('nick@example.com | Tampa, FL | https://github.com/nick', 728),
+                buildPdfTextItem('Experience', 696),
+                buildPdfTextItem('Staff Engineer | Acme Corp | 2022 - Present', 680),
+                buildPdfTextItem('• Built the scanner ingestion path.', 664),
+              ],
+            }),
+          })
+          .mockResolvedValueOnce({
+            getTextContent: vi.fn().mockResolvedValue({
+              items: [
+                buildPdfTextItem('• Hardened parser edge cases.', 760),
+                buildPdfTextItem('Skills', 728),
+                buildPdfTextItem('Tooling: React, TypeScript', 712),
+              ],
+            }),
+          }),
+      }),
+    })
+
+    const result = await scanResumePdf(buildPdfFile())
+
+    expect(result.pageCount).toBe(2)
+    expect(result.scannedAt).toBe('2026-04-05T17:15:00.000Z')
+    expect(result.counts).toEqual({
+      roles: 1,
+      bullets: 2,
+      skillGroups: 1,
+      education: 0,
+      extractedBullets: 2,
+      decomposedBullets: 0,
+    })
+    expect(result.identity.roles).toEqual([
+      expect.objectContaining({
+        company: 'Acme Corp',
+        title: 'Staff Engineer',
+        dates: '2022 - Present',
+        bullets: [
+          expect.objectContaining({ source_text: 'Built the scanner ingestion path.' }),
+          expect.objectContaining({ source_text: 'Hardened parser edge cases.' }),
+        ],
+      }),
+    ])
   })
 })
