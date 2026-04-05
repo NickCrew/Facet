@@ -53,7 +53,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-1-5, 6px);
+  gap: var(--space-2);
   border-radius: var(--space-2);
   border: 1px solid var(--border-subtle);
   background: var(--bg-surface);
@@ -146,7 +146,7 @@
 .identity-summary-block p,
 .identity-muted,
 .identity-empty p {
-  margin: var(--space-1-5, 6px) 0 0;
+  margin: var(--space-2) 0 0;
   color: var(--text-secondary);
   line-height: 1.6;
 }
@@ -154,7 +154,7 @@
 .identity-field {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1-5, 6px);
+  gap: var(--space-2);
 }
 
 .identity-field-wide {
@@ -192,7 +192,7 @@
   color: var(--text-primary);
   font-size: 13px;
   line-height: 1.4;
-  padding: 10px var(--space-3);
+  padding: var(--space-2) var(--space-3);
   transition: border-color var(--duration-fast) var(--easing), box-shadow var(--duration-fast) var(--easing);
 }
 
@@ -278,7 +278,7 @@
 
 .identity-bullet-text,
 .identity-log-entry p {
-  margin: 10px 0 0;
+  margin: var(--space-2) 0 0;
   color: var(--text-primary);
   line-height: 1.6;
 }
@@ -287,7 +287,7 @@
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  padding: 5px 10px;
+  padding: var(--space-1) var(--space-2);
   font-size: 11px;
   font-weight: 600;
   border: 1px solid var(--border-subtle);
@@ -338,7 +338,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 10px;
+  gap: var(--space-2);
   cursor: pointer;
   text-align: left;
   transition: border-color var(--duration-fast) var(--easing), background var(--duration-fast) var(--easing);
@@ -419,8 +419,8 @@
 }
 
 .identity-question-list {
-  margin: 12px 0 0;
-  padding-left: 20px;
+  margin: var(--space-3) 0 0;
+  padding-left: var(--space-4);
   color: var(--text-primary);
 }
 
