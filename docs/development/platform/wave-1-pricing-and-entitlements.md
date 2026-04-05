@@ -97,4 +97,5 @@ Any future Wave 1 pricing change must update:
 - `src/types/hosted.ts`
 - `proxy/aiAccess.js`
 - this document
-- user-facing onboarding or upgrade docs
+- `docs/user-guides/hosted-accounts.md`
+- any other user-facing onboarding or upgrade docs

@@ -24,23 +24,21 @@ Wave 1 does not include:
 ## Rollout Checklist
 
 Before opening or expanding beta access:
-- confirm staging or production is not using local-only auth shortcuts
-- confirm hosted bootstrap, workspace selection, migration import, and hosted save flows pass
-- confirm one paid hosted AI request succeeds
-- confirm one free or delinquent hosted AI request returns the expected denial state
+- complete the staging validation pass in `docs/development/platform/wave-1-beta-readiness-gate.md`
 - confirm support has the current pricing and hosted-account guide
 - confirm known-limit messaging is visible to the beta team
+- confirm the named release owner, support owner, and rollback owner are current
 
-## Rollback Triggers
+## Escalation Signals
 
-Pause or roll back the beta when any of these happen:
+Treat these as signals to pause expansion and escalate to the operator:
 - hosted sign-in failures spike
 - workspace bootstrap failures block account access
 - hosted saves fail or regress to unsafe behavior
 - billing-state loading fails broadly
 - AI entitlement checks incorrectly deny paid customers or allow unpaid access
 
-Operator rollback mechanics live in:
+Authoritative rollback criteria and mechanics live in:
 - `docs/development/platform/wave-1-operations-runbook.md`
 
 ## Common Support Scenarios
