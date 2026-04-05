@@ -140,12 +140,54 @@ For the actual launch decision, record:
 - launch decision: go or no-go
 - if no-go, the blocking issue and owner
 
+## Current Validation Snapshot
+
+Date: 2026-04-05
+
+Scope executed from this checkout:
+- local repository validation only
+- no staging frontend, API, Supabase auth session, or Stripe test environment was exercised from this machine
+
+Environment blockers found before attempting a staging pass:
+- no frontend hosted env is configured in this checkout for `VITE_FACET_DEPLOYMENT_MODE=hosted`, `VITE_SUPABASE_URL`, or `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `proxy/.env` is missing `SUPABASE_JWKS_URL` and `SUPABASE_JWT_ISSUER`, so hosted bearer-token validation cannot run locally against the proxy
+- `proxy/.env` is missing `STRIPE_SECRET_KEY` and `STRIPE_PRICE_AI_MONTHLY`, so the hosted billing path cannot be exercised honestly
+- the browser app has no in-repo sign-in flow; hosted bootstrap expects an existing Supabase browser session
+
+Local evidence captured:
+- `npm run typecheck` -> pass
+- `npm run build` -> pass
+- `npx vitest run src/test/facetServer.test.ts src/test/billingApi.test.ts src/test/hostedAppStore.test.ts src/test/AppShell.test.tsx src/test/windowLocation.test.ts` -> pass (`5` files, `74` tests)
+
+Implication:
+- the hosted implementation is locally consistent and the targeted Wave 1 contracts are covered in tests
+- the staging validation pass defined above is still incomplete, because the required hosted staging environment and credentials were not available from this checkout
+
+## Decision Log
+
+| Field | Value |
+|---|---|
+| Candidate build | `c5b3f14` |
+| Validation date | `2026-04-05` |
+| Validator or owner | Codex local validation pass |
+| Validation environment | local repository evidence only; staging not exercised |
+| Auth validation | fail |
+| Persistence validation | fail |
+| Migration validation | fail |
+| AI entitlement validation | fail |
+| Restore rehearsal | fail |
+| Rollback rehearsal | fail |
+| Launch decision | no-go |
+| Blocking issue | staging-hosted validation was not executed because hosted frontend env, Supabase JWT validation config, and billing credentials were unavailable from this checkout |
+| Blocking owner | hosted platform or release owner |
+
 ## Decision Log Template
 
 | Field | Value |
 |---|---|
 | Candidate build |  |
 | Staging validation date |  |
+| Validator or owner |  |
 | Auth validation | pass / fail |
 | Persistence validation | pass / fail |
 | Migration validation | pass / fail |
@@ -153,4 +195,4 @@ For the actual launch decision, record:
 | Restore rehearsal | pass / fail |
 | Rollback rehearsal | pass / fail |
 | Launch decision | go / no-go |
-| Notes |  |
+| Blocking issue and owner |  |
