@@ -20,12 +20,24 @@ const isPdfTextItem = (value: unknown): value is {
   'transform' in value &&
   Array.isArray((value as { transform: unknown }).transform)
 
-export const extractPdfTextItems = async (file: File): Promise<{ items: ResumeTextItem[]; pageCount: number }> => {
+const throwIfAborted = (signal?: AbortSignal) => {
+  if (signal?.aborted) {
+    throw new DOMException('The operation was aborted.', 'AbortError')
+  }
+}
+
+export const extractPdfTextItems = async (
+  file: File,
+  options: { signal?: AbortSignal } = {},
+): Promise<{ items: ResumeTextItem[]; pageCount: number }> => {
+  throwIfAborted(options.signal)
   const data = new Uint8Array(await file.arrayBuffer())
+  throwIfAborted(options.signal)
   const document = await pdfjs.getDocument({ data }).promise
   const items: ResumeTextItem[] = []
 
   for (let pageIndex = 1; pageIndex <= document.numPages; pageIndex += 1) {
+    throwIfAborted(options.signal)
     const page = await document.getPage(pageIndex)
     const textContent = await page.getTextContent()
 
@@ -57,8 +69,8 @@ export const extractPdfTextItems = async (file: File): Promise<{ items: ResumeTe
   }
 }
 
-export const scanResumePdf = async (file: File) => {
-  const extracted = await extractPdfTextItems(file)
+export const scanResumePdf = async (file: File, options: { signal?: AbortSignal } = {}) => {
+  const extracted = await extractPdfTextItems(file, options)
   const parsed = parseResumeTextItems(extracted.items)
 
   return {
@@ -75,7 +87,7 @@ export const scanResumePdf = async (file: File) => {
       education: parsed.identity.education.length,
       extractedBullets: parsed.identity.roles.reduce(
         (total, role) =>
-          total + role.bullets.filter((bullet) => Boolean(bullet.source_text?.trim())).length,
+          total + role.bullets.filter((bullet) => bullet.source_text?.trim()).length,
         0,
       ),
       decomposedBullets: 0,

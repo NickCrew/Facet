@@ -478,7 +478,12 @@ export const importProfessionalIdentity = (
         bullets: assertArray(role.bullets, `roles[${index}].bullets`).map((bulletEntry, bulletIndex) => {
           const bullet = assertRecord(bulletEntry, `roles[${index}].bullets[${bulletIndex}]`)
           const bulletId = assertString(bullet.id, `roles[${index}].bullets[${bulletIndex}].id`)
-          assertUniqueId(bulletIds, bulletId, 'roles.bullets')
+          if (bulletIds.has(bulletId)) {
+            throw new Error(
+              `roles.bullets has duplicate id "${bulletId}" - bullet IDs must be unique across all roles because they are resolved globally in the override system.`,
+            )
+          }
+          bulletIds.add(bulletId)
 
           const metricsRecord = assertRecord(
             bullet.metrics,

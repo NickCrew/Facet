@@ -480,12 +480,14 @@ export const generateIdentityDraft = async ({
   correctionNotes,
   existingDraft,
   seedIdentity,
+  signal,
 }: {
   endpoint: string
   sourceMaterial: string
   correctionNotes?: string
   existingDraft?: ProfessionalIdentityV3 | null
   seedIdentity?: ProfessionalIdentityV3 | null
+  signal?: AbortSignal
 }): Promise<IdentityExtractionDraft> => {
   const rawResponse = await callLlmProxy(
     endpoint,
@@ -495,6 +497,7 @@ export const generateIdentityDraft = async ({
       model: 'sonnet',
       temperature: 0.2,
       timeoutMs: IDENTITY_EXTRACTION_TIMEOUT_MS,
+      signal,
     },
   )
 

@@ -1,22 +1,11 @@
-import { useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import {
-  ArrowRight,
-  Download,
-  FileJson,
-  GitMerge,
-  ScanSearch,
-  RefreshCcw,
-  ShieldCheck,
-  Sparkles,
-  Upload,
-  X,
-} from 'lucide-react'
+import { Download, FileJson, Upload } from 'lucide-react'
 import { professionalIdentityToResumeData } from '../../identity/resumeAdapter'
 import { useIdentityStore } from '../../store/identityStore'
 import { useResumeStore } from '../../store/resumeStore'
 import { useUiStore } from '../../store/uiStore'
-import { type IdentityApplyMode, type IdentityConfidence } from '../../types/identity'
+import { type IdentityApplyMode } from '../../types/identity'
 import { sanitizeEndpointUrl } from '../../utils/idUtils'
 import {
   generateIdentityDraft,
@@ -28,15 +17,11 @@ import {
   resolveSelectedVectorAfterReplaceImport,
 } from '../../utils/importSelection'
 import { parseJsonWithRepair } from '../../utils/jsonParsing'
-import { ScannedIdentityEditor } from './ScannedIdentityEditor'
+import { BulletConfidenceCard } from './BulletConfidenceCard'
+import { DraftSummaryCard } from './DraftSummaryCard'
+import { ExtractionAgentCard } from './ExtractionAgentCard'
+import { IdentityModelBuilderCard } from './IdentityModelBuilderCard'
 import './identity.css'
-
-const CONFIDENCE_LABELS: Record<IdentityConfidence, string> = {
-  stated: 'Stated',
-  confirmed: 'Confirmed',
-  guessing: 'Guessing',
-  corrected: 'Corrected',
-}
 
 const downloadJson = (filename: string, content: string) => {
   const blob = new Blob([content], { type: 'application/json' })
@@ -44,14 +29,18 @@ const downloadJson = (filename: string, content: string) => {
   const anchor = document.createElement('a')
   anchor.href = url
   anchor.download = filename
+  document.body.append(anchor)
   anchor.click()
-  URL.revokeObjectURL(url)
+  anchor.remove()
+  globalThis.setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
 export function IdentityPage() {
   const navigate = useNavigate()
   const importRef = useRef<HTMLInputElement>(null)
   const uploadRef = useRef<HTMLInputElement>(null)
+  const generateAbortRef = useRef<AbortController | null>(null)
+  const scanAbortRef = useRef<AbortController | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isScanning, setIsScanning] = useState(false)
   const [pageError, setPageError] = useState<string | null>(null)
@@ -90,8 +79,16 @@ export function IdentityPage() {
     [],
   )
 
+  useEffect(
+    () => () => {
+      generateAbortRef.current?.abort()
+      scanAbortRef.current?.abort()
+    },
+    [],
+  )
+
   const counts = useMemo(() => {
-    const identity = currentIdentity ?? draft?.identity ?? null
+    const identity = draft?.identity ?? currentIdentity ?? null
     if (!identity) {
       return null
     }
@@ -123,7 +120,7 @@ export function IdentityPage() {
       activeIdentity.roles.flatMap((role) =>
         role.bullets.map((bullet) => [
           `${role.id}::${bullet.id}`,
-          Boolean([bullet.problem, bullet.action, bullet.outcome].some((entry) => entry.trim())),
+          [bullet.problem, bullet.action, bullet.outcome].some((entry) => entry.trim()),
         ]),
       ),
     )
@@ -150,6 +147,7 @@ export function IdentityPage() {
   const runGenerate = async (mode: 'fresh' | 'regenerate') => {
     const shouldUseScan = intakeMode === 'upload' && Boolean(scanResult)
     const effectiveSourceMaterial = shouldUseScan ? scanResult?.rawText ?? '' : sourceMaterial
+    let controller: AbortController | null = null
 
     if (!effectiveSourceMaterial.trim()) {
       setPageNotice(null)
@@ -158,6 +156,9 @@ export function IdentityPage() {
     }
 
     try {
+      generateAbortRef.current?.abort()
+      controller = new AbortController()
+      generateAbortRef.current = controller
       ensureEndpoint()
       setPageError(null)
       setPageNotice(null)
@@ -168,7 +169,11 @@ export function IdentityPage() {
         correctionNotes,
         seedIdentity: shouldUseScan ? scanResult?.identity ?? null : null,
         existingDraft: mode === 'regenerate' ? draft?.identity ?? currentIdentity : null,
+        signal: controller.signal,
       })
+      if (controller.signal.aborted) {
+        return
+      }
       setDraft(nextDraft)
       setPageNotice(
         mode === 'regenerate'
@@ -176,10 +181,18 @@ export function IdentityPage() {
           : 'Generated a new Professional Identity draft.',
       )
     } catch (error) {
+      if (controller?.signal.aborted && error instanceof DOMException) {
+        return
+      }
       setPageNotice(null)
       setPageError(error instanceof Error ? error.message : 'Identity draft generation failed.')
     } finally {
-      setIsGenerating(false)
+      if (controller && generateAbortRef.current === controller && !controller.signal.aborted) {
+        setIsGenerating(false)
+      }
+      if (controller && generateAbortRef.current === controller) {
+        generateAbortRef.current = null
+      }
     }
   }
 
@@ -190,11 +203,18 @@ export function IdentityPage() {
       return
     }
 
+    let controller: AbortController | null = null
     try {
+      scanAbortRef.current?.abort()
+      controller = new AbortController()
+      scanAbortRef.current = controller
       setIsScanning(true)
       setPageError(null)
       setPageNotice(null)
-      const result = await scanResumePdf(file)
+      const result = await scanResumePdf(file, { signal: controller.signal })
+      if (controller.signal.aborted) {
+        return
+      }
       setSourceMaterial(result.rawText)
 
       if (result.identity.roles.length === 0) {
@@ -211,10 +231,18 @@ export function IdentityPage() {
       setIntakeMode('upload')
       setPageNotice(`Scanned ${file.name} into a structured identity shell.`)
     } catch (error) {
+      if (controller?.signal.aborted && error instanceof DOMException) {
+        return
+      }
       setPageNotice(null)
       setPageError(error instanceof Error ? error.message : 'Resume scan failed.')
     } finally {
-      setIsScanning(false)
+      if (controller && scanAbortRef.current === controller && !controller.signal.aborted) {
+        setIsScanning(false)
+      }
+      if (controller && scanAbortRef.current === controller) {
+        scanAbortRef.current = null
+      }
     }
   }
 
@@ -357,7 +385,11 @@ export function IdentityPage() {
       resolveComparisonVectorAfterReplaceImport(comparisonVector, adapted.data.vectors),
     )
     setPageError(null)
-    setPageNotice('Pushed the current identity model into Build.')
+    setPageNotice(
+      adapted.warnings.length > 0
+        ? `Pushed the current identity model into Build. ${adapted.warnings.join(' ')}`
+        : 'Pushed the current identity model into Build.',
+    )
     void navigate({ to: '/build' })
   }
 
@@ -396,16 +428,20 @@ export function IdentityPage() {
         </div>
       </header>
 
-      {pageError ? (
-        <div className="identity-alert" role="alert">
-          {pageError}
-        </div>
-      ) : null}
-      {pageNotice ? (
-        <div className="identity-notice" role="status" aria-live="polite">
-          {pageNotice}
-        </div>
-      ) : null}
+      <div
+        className={`identity-alert${pageError ? '' : ' identity-message-empty'}`}
+        role="alert"
+        aria-live="assertive"
+      >
+        {pageError ?? ''}
+      </div>
+      <div
+        className={`identity-notice${pageNotice ? '' : ' identity-message-empty'}`}
+        role="status"
+        aria-live="polite"
+      >
+        {pageNotice ?? ''}
+      </div>
       {warnings.length > 0 ? (
         <div className="identity-warning" role="alert">
           <strong>Warnings:</strong> {warnings.join(' ')}
@@ -413,343 +449,49 @@ export function IdentityPage() {
       ) : null}
 
       <div className="identity-grid">
-        <section className="identity-card">
-          <div className="identity-card-header">
-            <div>
-              <h2>Extraction Agent</h2>
-              <p>Upload a PDF first, or fall back to pasted text if the scan is ambiguous.</p>
-            </div>
-            <div className="identity-card-actions">
-              <button
-                className={`identity-btn ${intakeMode === 'upload' ? 'identity-btn-primary' : ''}`}
-                type="button"
-                onClick={() => setIntakeMode('upload')}
-              >
-                <ScanSearch size={16} />
-                Upload Resume
-              </button>
-              <button
-                className={`identity-btn ${intakeMode === 'paste' ? 'identity-btn-primary' : ''}`}
-                type="button"
-                onClick={() => setIntakeMode('paste')}
-              >
-                <Upload size={16} />
-                Paste Text Instead
-              </button>
-              <button
-                className="identity-btn identity-btn-primary"
-                type="button"
-                onClick={() => void runGenerate('fresh')}
-                disabled={isGenerating || isScanning}
-              >
-                <Sparkles size={16} />
-                {isGenerating ? 'Generating…' : 'Generate Draft'}
-              </button>
-              <button
-                className="identity-btn"
-                type="button"
-                onClick={() => void runGenerate('regenerate')}
-                disabled={isGenerating || isScanning || (!draft && !currentIdentity)}
-              >
-                <RefreshCcw size={16} />
-                Regenerate
-              </button>
-            </div>
-          </div>
+        <ExtractionAgentCard
+          intakeMode={intakeMode}
+          sourceMaterial={sourceMaterial}
+          correctionNotes={correctionNotes}
+          currentIdentity={currentIdentity}
+          draft={draft}
+          scanResult={scanResult}
+          scanCompletion={scanCompletion}
+          isGenerating={isGenerating}
+          isScanning={isScanning}
+          uploadRef={uploadRef}
+          onSetIntakeMode={setIntakeMode}
+          onSetSourceMaterial={setSourceMaterial}
+          onSetCorrectionNotes={setCorrectionNotes}
+          onGenerate={runGenerate}
+          onUploadChange={handleUploadChange}
+          onDrop={handleDrop}
+          onClearScan={() => {
+            setScanResult(null)
+            setPageNotice('Cleared the scanned resume structure.')
+          }}
+          onUpdateIdentityCore={updateScannedIdentityCore}
+          onUpdateRole={updateScannedRole}
+          onUpdateBulletSourceText={updateScannedBulletSourceText}
+          onUpdateSkillGroupLabel={updateScannedSkillGroupLabel}
+          onUpdateSkillItemName={updateScannedSkillItemName}
+          onUpdateEducationEntry={updateScannedEducationEntry}
+        />
 
-          {intakeMode === 'upload' ? (
-            <>
-              <button
-                className="identity-upload-zone"
-                type="button"
-                onClick={() => uploadRef.current?.click()}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => void handleDrop(event)}
-              >
-                <Upload size={22} />
-                <strong>{isScanning ? 'Scanning PDF…' : 'Drop a PDF here or click to upload'}</strong>
-                <span>
-                  Resume Scanner v1 is PDF-only and performs a local structural parse before any AI call.
-                </span>
-              </button>
-              <input
-                ref={uploadRef}
-                hidden
-                type="file"
-                accept="application/pdf,.pdf"
-                onChange={(event) => void handleUploadChange(event)}
-              />
-
-              {scanResult ? (
-                <>
-                  <div className="identity-scan-status">
-                    <div className="identity-scan-status-row">
-                      <strong>{scanResult.fileName}</strong>
-                      <span>{scanResult.pageCount} page(s)</span>
-                    </div>
-                    <div className="identity-stats identity-stats-compact">
-                      <div className="identity-stat" aria-label={'Roles: ' + scanResult.counts.roles}>
-                        <span className="identity-stat-label">Roles</span>
-                        <strong>{scanResult.counts.roles}</strong>
-                      </div>
-                      <div className="identity-stat" aria-label={'Bullets: ' + scanResult.counts.bullets}>
-                        <span className="identity-stat-label">Bullets</span>
-                        <strong>{scanResult.counts.bullets}</strong>
-                      </div>
-                      <div
-                        className="identity-stat"
-                        aria-label={'Skill groups: ' + scanResult.counts.skillGroups}
-                      >
-                        <span className="identity-stat-label">Skill Groups</span>
-                        <strong>{scanResult.counts.skillGroups}</strong>
-                      </div>
-                      <div
-                        className="identity-stat"
-                        aria-label={'Education: ' + scanResult.counts.education}
-                      >
-                        <span className="identity-stat-label">Education</span>
-                        <strong>{scanResult.counts.education}</strong>
-                      </div>
-                      <div
-                        className="identity-stat"
-                        aria-label={
-                          'Decomposed bullets: ' +
-                          (scanCompletion?.decomposedBullets ?? 0) +
-                          ' of ' +
-                          (scanCompletion?.extractedBullets ?? scanResult.counts.extractedBullets)
-                        }
-                      >
-                        <span className="identity-stat-label">Deepened</span>
-                        <strong>
-                          {scanCompletion?.decomposedBullets ?? 0}/{scanCompletion?.extractedBullets ?? scanResult.counts.extractedBullets}
-                        </strong>
-                      </div>
-                    </div>
-                    <div className="identity-card-actions">
-                      <button className="identity-btn" type="button" onClick={() => uploadRef.current?.click()}>
-                        <RefreshCcw size={16} />
-                        Rescan PDF
-                      </button>
-                      <button
-                        className="identity-btn"
-                        type="button"
-                        onClick={() => {
-                          setScanResult(null)
-                          setPageNotice('Cleared the scanned resume structure.')
-                        }}
-                      >
-                        <X size={16} />
-                        Clear Scan
-                      </button>
-                    </div>
-                  </div>
-
-                  <ScannedIdentityEditor
-                    scanResult={scanResult}
-                    onUpdateIdentityCore={updateScannedIdentityCore}
-                    onUpdateRole={updateScannedRole}
-                    onUpdateBulletSourceText={updateScannedBulletSourceText}
-                    onUpdateSkillGroupLabel={updateScannedSkillGroupLabel}
-                    onUpdateSkillItemName={updateScannedSkillItemName}
-                    onUpdateEducationEntry={updateScannedEducationEntry}
-                  />
-                </>
-              ) : (
-                <div className="identity-empty">
-                  <h3>No scanned resume yet</h3>
-                  <p>Upload a text-based PDF to build a partial identity shell without a network call.</p>
-                </div>
-              )}
-            </>
-          ) : (
-            <label className="identity-field">
-              <span className="identity-label">Source Material</span>
-              <textarea
-                className="identity-textarea identity-textarea-lg"
-                value={sourceMaterial}
-                onChange={(event) => setSourceMaterial(event.target.value)}
-                placeholder="Paste resume bullets, LinkedIn text, portfolio notes, or a rough narrative here."
-              />
-            </label>
-          )}
-
-          <label className="identity-field">
-            <span className="identity-label">Correction Notes</span>
-            <textarea
-              className="identity-textarea"
-              value={correctionNotes}
-              onChange={(event) => setCorrectionNotes(event.target.value)}
-              placeholder="Use this after the first draft to mark what is wrong, missing, or overstated."
-            />
-          </label>
-        </section>
-
-        <section className="identity-card">
-          <div className="identity-card-header">
-            <div>
-              <h2>Identity Model Builder</h2>
-              <p>Validate the current draft JSON, then apply it as a replace or merge operation.</p>
-            </div>
-            <div className="identity-card-actions">
-              <button className="identity-btn" type="button" onClick={handleValidateDraft}>
-                <ShieldCheck size={16} />
-                Validate Draft
-              </button>
-              <button
-                className="identity-btn"
-                type="button"
-                onClick={() => handleApply('merge')}
-                disabled={!draftDocument.trim()}
-              >
-                <GitMerge size={16} />
-                Merge Draft
-              </button>
-              <button
-                className="identity-btn identity-btn-primary"
-                type="button"
-                onClick={() => handleApply('replace')}
-                disabled={!draftDocument.trim()}
-              >
-                <RefreshCcw size={16} />
-                Replace Identity
-              </button>
-            </div>
-          </div>
-
-          <div className="identity-stats">
-            <div className="identity-stat" aria-label={'Roles: ' + (counts?.roles ?? 0)}>
-              <span className="identity-stat-label">Roles</span>
-              <strong>{counts?.roles ?? 0}</strong>
-            </div>
-            <div className="identity-stat" aria-label={'Bullets: ' + (counts?.bullets ?? 0)}>
-              <span className="identity-stat-label">Bullets</span>
-              <strong>{counts?.bullets ?? 0}</strong>
-            </div>
-            <div className="identity-stat" aria-label={'Profiles: ' + (counts?.profiles ?? 0)}>
-              <span className="identity-stat-label">Profiles</span>
-              <strong>{counts?.profiles ?? 0}</strong>
-            </div>
-            <div className="identity-stat" aria-label={'Projects: ' + (counts?.projects ?? 0)}>
-              <span className="identity-stat-label">Projects</span>
-              <strong>{counts?.projects ?? 0}</strong>
-            </div>
-            <div className="identity-stat" aria-label={'Skill Groups: ' + (counts?.skillGroups ?? 0)}>
-              <span className="identity-stat-label">Skill Groups</span>
-              <strong>{counts?.skillGroups ?? 0}</strong>
-            </div>
-          </div>
-
-          <label className="identity-field">
-            <span className="identity-label">Draft JSON</span>
-            <textarea
-              className="identity-textarea identity-textarea-code"
-              value={draftDocument}
-              onChange={(event) => setDraftDocument(event.target.value)}
-              placeholder='{"version": 3, "...": "..."}'
-            />
-          </label>
-
-          <div className="identity-card-actions">
-            <button
-              className="identity-btn identity-btn-primary"
-              type="button"
-              onClick={handlePushToBuild}
-              disabled={!currentIdentity}
-            >
-              <ArrowRight size={16} />
-              Push To Build
-            </button>
-          </div>
-        </section>
+        <IdentityModelBuilderCard
+          counts={counts}
+          draftDocument={draftDocument}
+          hasCurrentIdentity={Boolean(currentIdentity)}
+          onSetDraftDocument={setDraftDocument}
+          onValidateDraft={handleValidateDraft}
+          onApply={handleApply}
+          onPushToBuild={handlePushToBuild}
+        />
       </div>
 
       <div className="identity-grid">
-        <section className="identity-card">
-          <div className="identity-card-header">
-            <div>
-              <h2>Confidence-Tagged Bullets</h2>
-              <p>
-                Phase 0 gate: a populated identity model plus bullets that expose what is stated,
-                confirmed, corrected, or still guessed.
-              </p>
-            </div>
-          </div>
-
-          {draft?.bullets.length ? (
-            <div className="identity-bullet-list">
-              {draft.bullets.map((bullet) => (
-                <article className="identity-bullet-card" key={bullet.roleId + '::' + bullet.bulletId}>
-                  <div className="identity-bullet-meta">
-                    <span className="identity-bullet-role">{bullet.roleLabel}</span>
-                    <span className="identity-bullet-id">{bullet.bulletId}</span>
-                  </div>
-                  <p className="identity-bullet-text">{bullet.rewrite}</p>
-                  <div className="identity-chip-row">
-                    {bullet.assumptions.length > 0 ? (
-                      bullet.assumptions.map((assumption, index) => (
-                        <span
-                          key={bullet.bulletId + ':' + index + ':' + assumption.label}
-                          className={'identity-chip identity-chip-' + assumption.confidence}
-                        >
-                          {assumption.label} · {CONFIDENCE_LABELS[assumption.confidence]}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="identity-chip identity-chip-empty">No explicit assumptions</span>
-                    )}
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="identity-empty">
-              <h3>No draft bullets yet</h3>
-              <p>Generate a draft to inspect the assumption-tagged rewrite output.</p>
-            </div>
-          )}
-        </section>
-
-        <section className="identity-card">
-          <div className="identity-card-header">
-            <div>
-              <h2>Draft Summary And Changelog</h2>
-              <p>Track what the extraction loop generated and what the write layer actually applied.</p>
-            </div>
-          </div>
-
-          <div className="identity-summary-block">
-            <h3>Draft Summary</h3>
-            <p>{draft?.summary ?? 'No draft summary yet.'}</p>
-            {draft?.followUpQuestions.length ? (
-              <ul className="identity-question-list">
-                {draft.followUpQuestions.map((question, index) => (
-                  <li key={index + ':' + question}>{question}</li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-
-          <div className="identity-summary-block">
-            <h3>Changelog</h3>
-            {changelog.length ? (
-              <div className="identity-changelog">
-                {changelog.map((entry) => (
-                  <article className="identity-log-entry" key={entry.id}>
-                    <div className="identity-log-header">
-                      <strong>{entry.summary}</strong>
-                      <span>{new Date(entry.createdAt).toLocaleString()}</span>
-                    </div>
-                    {entry.details.map((detail, index) => (
-                      <p key={index + ':' + detail}>{detail}</p>
-                    ))}
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <p className="identity-muted">No builder events yet.</p>
-            )}
-          </div>
-        </section>
+        <BulletConfidenceCard draft={draft} />
+        <DraftSummaryCard draft={draft} changelog={changelog} />
       </div>
     </div>
   )

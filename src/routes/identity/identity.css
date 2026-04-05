@@ -18,7 +18,7 @@
 }
 
 .identity-eyebrow {
-  margin: 0 0 4px;
+  margin: 0 0 var(--space-1);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -35,7 +35,7 @@
 }
 
 .identity-copy {
-  margin: 8px 0 0;
+  margin: var(--space-2) 0 0;
   max-width: 72ch;
   color: var(--text-secondary);
   line-height: 1.6;
@@ -53,12 +53,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  border-radius: 8px;
+  gap: var(--space-1-5, 6px);
+  border-radius: var(--space-2);
   border: 1px solid var(--border-subtle);
   background: var(--bg-surface);
   color: var(--text-secondary);
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -146,7 +146,7 @@
 .identity-summary-block p,
 .identity-muted,
 .identity-empty p {
-  margin: 6px 0 0;
+  margin: var(--space-1-5, 6px) 0 0;
   color: var(--text-secondary);
   line-height: 1.6;
 }
@@ -154,7 +154,7 @@
 .identity-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1-5, 6px);
 }
 
 .identity-field-wide {
@@ -178,7 +178,7 @@
   color: var(--text-primary);
   font-size: 13px;
   line-height: 1.6;
-  padding: 12px;
+  padding: var(--space-3);
   resize: vertical;
   min-height: 120px;
   transition: border-color var(--duration-fast) var(--easing), box-shadow var(--duration-fast) var(--easing);
@@ -192,7 +192,7 @@
   color: var(--text-primary);
   font-size: 13px;
   line-height: 1.4;
-  padding: 10px 12px;
+  padding: 10px var(--space-3);
   transition: border-color var(--duration-fast) var(--easing), box-shadow var(--duration-fast) var(--easing);
 }
 
@@ -231,10 +231,10 @@
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   background: color-mix(in srgb, var(--bg-inset) 88%, transparent);
-  padding: 12px;
+  padding: var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .identity-stat strong {
@@ -291,6 +291,13 @@
   font-size: 11px;
   font-weight: 600;
   border: 1px solid var(--border-subtle);
+}
+
+.identity-message-empty {
+  padding: 0;
+  border: 0;
+  font-size: 0;
+  min-height: 0;
 }
 
 .identity-chip-stated {

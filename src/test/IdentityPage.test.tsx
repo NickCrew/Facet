@@ -149,7 +149,7 @@ describe('IdentityPage', () => {
     expect(
       useIdentityStore.getState().scanResult?.identity.roles[0]?.bullets[0]?.source_text,
     ).toBe('Ported the platform to Kubernetes-based installs for on-prem customers.')
-    expect(screen.getByRole('alert').textContent).toContain('two-column layout')
+    expect(screen.getByText(/two-column layout/i)).toBeTruthy()
 
     fireEvent.click(screen.getByText('Generate Draft'))
 

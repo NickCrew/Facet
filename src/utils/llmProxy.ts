@@ -59,6 +59,8 @@ export interface LlmProxyOptions {
   proxyApiKey?: string
   /** Identifies the hosted AI feature for entitlement checks. */
   feature?: FacetAiFeatureKey
+  /** Optional external abort signal for cancellation. */
+  signal?: AbortSignal
 }
 
 /**
@@ -74,10 +76,17 @@ export async function callLlmProxy(
   options: LlmProxyOptions = {},
 ): Promise<string> {
   const controller = new AbortController()
+  const onAbort = () => controller.abort()
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs)
 
   try {
+    if (options.signal?.aborted) {
+      controller.abort()
+    } else if (options.signal) {
+      options.signal.addEventListener('abort', onAbort, { once: true })
+    }
+
     const bearerToken = await getHostedAccessToken()
     const resolvedProxyApiKey =
       options.proxyApiKey ??
@@ -138,6 +147,7 @@ export async function callLlmProxy(
     }
     throw error
   } finally {
+    options.signal?.removeEventListener('abort', onAbort)
     globalThis.clearTimeout(timeoutId)
   }
 }
