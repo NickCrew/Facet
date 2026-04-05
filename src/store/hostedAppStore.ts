@@ -96,7 +96,16 @@ const resolveHostedClientConfig = (state: HostedAppState): HostedClientConfig =>
   }
 }
 
-export const useHostedAppStore = create<HostedAppState>((set, get) => ({
+export const useHostedAppStore = create<HostedAppState>((set, get) => {
+  let hostedDirectoryRequestId = 0
+  const beginHostedDirectoryRequest = () => {
+    hostedDirectoryRequestId += 1
+    return hostedDirectoryRequestId
+  }
+  const isLatestHostedDirectoryRequest = (requestId: number) =>
+    requestId === hostedDirectoryRequestId
+
+  return ({
   deploymentMode: getFacetDeploymentMode(),
   bootstrapStatus: getFacetDeploymentMode() === 'hosted' ? 'idle' : 'ready',
   mutationState: null,
@@ -112,6 +121,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
 
   bootstrap: async (options = {}) => {
     const deploymentMode = getFacetDeploymentMode()
+    const requestId = beginHostedDirectoryRequest()
     if (deploymentMode !== 'hosted') {
       set({
         deploymentMode,
@@ -141,6 +151,9 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
 
     try {
       const bearerToken = await getHostedAccessToken()
+      if (!isLatestHostedDirectoryRequest(requestId)) {
+        return
+      }
       if (!bearerToken) {
         set({
           bearerToken: null,
@@ -166,6 +179,9 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
       ])
       const sortedWorkspaces = sortWorkspaces(workspaces)
       const selectedWorkspaceId = resolveSelectedWorkspaceId(context, sortedWorkspaces, null)
+      if (!isLatestHostedDirectoryRequest(requestId)) {
+        return
+      }
 
       set({
         deploymentMode,
@@ -192,6 +208,9 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
       const message = error instanceof Error ? error.message : 'Failed to bootstrap hosted account.'
       const errorCode = isFacetApiError(error) ? error.code : null
       const errorReason = isFacetApiError(error) ? error.reason : null
+      if (!isLatestHostedDirectoryRequest(requestId)) {
+        return
+      }
       set({
         bootstrapStatus: errorCode === 'auth_required' ? 'auth-required' : 'error',
         bearerToken: null,
@@ -223,6 +242,8 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
       return
     }
 
+    const requestId = beginHostedDirectoryRequest()
+
     try {
       const client = resolveHostedClientConfig(state)
       const [{ context }, { workspaces }] = await Promise.all([
@@ -230,6 +251,9 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
         listHostedWorkspaces(client),
       ])
       const sortedWorkspaces = sortWorkspaces(workspaces)
+      if (!isLatestHostedDirectoryRequest(requestId)) {
+        return
+      }
 
       set((current) => ({
         context: {
@@ -247,6 +271,9 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
         lastErrorReason: null,
       }))
     } catch (error) {
+      if (!isLatestHostedDirectoryRequest(requestId)) {
+        return
+      }
       set({
         lastError:
           error instanceof Error ? error.message : 'Failed to refresh hosted workspace directory.',
@@ -407,4 +434,5 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
     set({ lastError: message, lastErrorCode: code, lastErrorReason: reason }),
 
   clearError: () => set({ lastError: null, lastErrorCode: null, lastErrorReason: null }),
-}))
+  })
+})

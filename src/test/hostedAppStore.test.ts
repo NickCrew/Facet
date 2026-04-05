@@ -2,6 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FacetApiError } from '../utils/facetApiErrors'
 import { buildWorkspaceSnapshot } from './fixtures/workspaceSnapshot'
 
+const createDeferred = <T>() => {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 const hostedSessionMocks = vi.hoisted(() => ({
   getFacetDeploymentMode: vi.fn(),
   getHostedAccessToken: vi.fn(),
@@ -104,6 +114,46 @@ describe('hostedAppStore', () => {
         role: 'owner',
         isDefault: false,
       },
+    ])
+  })
+
+  it('sorts non-default hosted workspaces alphabetically after the default workspace', async () => {
+    hostedAccountClientMocks.listHostedWorkspaces.mockResolvedValue({
+      workspaces: [
+        {
+          workspaceId: 'ws-z',
+          name: 'Zulu Workspace',
+          revision: 1,
+          updatedAt: '2026-03-14T12:00:00.000Z',
+          role: 'owner',
+          isDefault: false,
+        },
+        {
+          workspaceId: 'ws-b',
+          name: 'Bravo Workspace',
+          revision: 1,
+          updatedAt: '2026-03-14T12:00:00.000Z',
+          role: 'owner',
+          isDefault: false,
+        },
+        {
+          workspaceId: 'ws-a',
+          name: 'Alpha Workspace',
+          revision: 1,
+          updatedAt: '2026-03-14T12:00:00.000Z',
+          role: 'owner',
+          isDefault: true,
+        },
+      ],
+    })
+    const { useHostedAppStore } = await import('../store/hostedAppStore')
+
+    await useHostedAppStore.getState().bootstrap()
+
+    expect(useHostedAppStore.getState().workspaces.map((workspace) => workspace.workspaceId)).toEqual([
+      'ws-a',
+      'ws-b',
+      'ws-z',
     ])
   })
 
@@ -296,6 +346,25 @@ describe('hostedAppStore', () => {
     expect(useHostedAppStore.getState().context?.account.defaultWorkspaceId).toBe('ws-3')
   })
 
+  it('returns from refresh without network calls when not hosted or missing a token', async () => {
+    const { useHostedAppStore } = await import('../store/hostedAppStore')
+
+    useHostedAppStore.setState({
+      deploymentMode: 'self-hosted',
+      bearerToken: null,
+    })
+    await expect(useHostedAppStore.getState().refresh()).resolves.toBeUndefined()
+
+    useHostedAppStore.setState({
+      deploymentMode: 'hosted',
+      bearerToken: null,
+    })
+    await expect(useHostedAppStore.getState().refresh()).resolves.toBeUndefined()
+
+    expect(hostedAccountClientMocks.fetchHostedAccountContext).not.toHaveBeenCalled()
+    expect(hostedAccountClientMocks.listHostedWorkspaces).not.toHaveBeenCalled()
+  })
+
   it('stores refresh failures for recovery UI', async () => {
     const { useHostedAppStore } = await import('../store/hostedAppStore')
     await useHostedAppStore.getState().bootstrap()
@@ -352,6 +421,202 @@ describe('hostedAppStore', () => {
     })
   })
 
+  it('ignores stale bootstrap results when a newer bootstrap resolves first', async () => {
+    const firstContext = createDeferred<{ context: typeof hostedContext }>()
+    const firstDirectory = createDeferred<{ workspaces: typeof workspaces }>()
+    const secondContext = createDeferred<{ context: typeof hostedContext }>()
+    const secondDirectory = createDeferred<{ workspaces: typeof workspaces }>()
+    const { useHostedAppStore } = await import('../store/hostedAppStore')
+
+    hostedAccountClientMocks.fetchHostedAccountContext
+      .mockImplementationOnce(() => firstContext.promise)
+      .mockImplementationOnce(() => secondContext.promise)
+    hostedAccountClientMocks.listHostedWorkspaces
+      .mockImplementationOnce(() => firstDirectory.promise)
+      .mockImplementationOnce(() => secondDirectory.promise)
+
+    const firstBootstrap = useHostedAppStore.getState().bootstrap({
+      localMigrationSnapshot: buildWorkspaceSnapshot({
+        workspace: { id: 'local-1', name: 'Local One', revision: 1, updatedAt: '2026-03-14T12:00:00.000Z' },
+      }),
+    })
+    await vi.waitFor(() => {
+      expect(hostedAccountClientMocks.fetchHostedAccountContext).toHaveBeenCalledTimes(1)
+      expect(hostedAccountClientMocks.listHostedWorkspaces).toHaveBeenCalledTimes(1)
+    })
+    const secondBootstrap = useHostedAppStore.getState().bootstrap({
+      localMigrationSnapshot: buildWorkspaceSnapshot({
+        workspace: { id: 'local-2', name: 'Local Two', revision: 2, updatedAt: '2026-03-14T12:01:00.000Z' },
+      }),
+    })
+
+    secondContext.resolve({
+      context: {
+        ...hostedContext,
+        account: {
+          ...hostedContext.account,
+          defaultWorkspaceId: 'ws-9',
+        },
+      },
+    })
+    secondDirectory.resolve({
+      workspaces: [
+        {
+          workspaceId: 'ws-9',
+          name: 'Newest Workspace',
+          revision: 1,
+          updatedAt: '2026-03-14T12:20:00.000Z',
+          role: 'owner',
+          isDefault: true,
+        },
+      ],
+    })
+    await secondBootstrap
+
+    expect(useHostedAppStore.getState()).toMatchObject({
+      bootstrapStatus: 'ready',
+      selectedWorkspaceId: 'ws-9',
+      localMigrationSnapshot: expect.objectContaining({
+        workspace: expect.objectContaining({ id: 'local-2' }),
+      }),
+    })
+
+    firstContext.resolve({ context: hostedContext })
+    firstDirectory.resolve({ workspaces })
+    await firstBootstrap
+
+    expect(useHostedAppStore.getState()).toMatchObject({
+      bootstrapStatus: 'ready',
+      selectedWorkspaceId: 'ws-9',
+      workspaces: [
+        expect.objectContaining({
+          workspaceId: 'ws-9',
+          name: 'Newest Workspace',
+        }),
+      ],
+      localMigrationSnapshot: expect.objectContaining({
+        workspace: expect.objectContaining({ id: 'local-2' }),
+      }),
+    })
+  })
+
+  it('ignores stale hosted bootstrap results after switching to self-hosted mode', async () => {
+    const firstContext = createDeferred<{ context: typeof hostedContext }>()
+    const firstDirectory = createDeferred<{ workspaces: typeof workspaces }>()
+    const { useHostedAppStore } = await import('../store/hostedAppStore')
+
+    hostedAccountClientMocks.fetchHostedAccountContext.mockImplementationOnce(() => firstContext.promise)
+    hostedAccountClientMocks.listHostedWorkspaces.mockImplementationOnce(() => firstDirectory.promise)
+
+    const firstBootstrap = useHostedAppStore.getState().bootstrap()
+    await vi.waitFor(() => {
+      expect(hostedAccountClientMocks.fetchHostedAccountContext).toHaveBeenCalledTimes(1)
+      expect(hostedAccountClientMocks.listHostedWorkspaces).toHaveBeenCalledTimes(1)
+    })
+
+    hostedSessionMocks.getFacetDeploymentMode.mockReturnValue('self-hosted')
+    await useHostedAppStore.getState().bootstrap()
+
+    firstContext.resolve({ context: hostedContext })
+    firstDirectory.resolve({ workspaces })
+    await firstBootstrap
+
+    expect(useHostedAppStore.getState()).toMatchObject({
+      deploymentMode: 'self-hosted',
+      bootstrapStatus: 'ready',
+      bearerToken: null,
+      context: null,
+      workspaces: [],
+      selectedWorkspaceId: null,
+    })
+  })
+
+  it('ignores stale refresh failures when a newer refresh succeeds', async () => {
+    const { useHostedAppStore } = await import('../store/hostedAppStore')
+    await useHostedAppStore.getState().bootstrap()
+
+    const firstContext = createDeferred<{ context: typeof hostedContext }>()
+    const firstDirectory = createDeferred<{ workspaces: typeof workspaces }>()
+    const secondContext = createDeferred<{ context: typeof hostedContext }>()
+    const secondDirectory = createDeferred<{ workspaces: typeof workspaces }>()
+
+    hostedAccountClientMocks.fetchHostedAccountContext
+      .mockImplementationOnce(() => firstContext.promise)
+      .mockImplementationOnce(() => secondContext.promise)
+    hostedAccountClientMocks.listHostedWorkspaces
+      .mockImplementationOnce(() => firstDirectory.promise)
+      .mockImplementationOnce(() => secondDirectory.promise)
+
+    const firstRefresh = useHostedAppStore.getState().refresh()
+    const secondRefresh = useHostedAppStore.getState().refresh()
+
+    secondContext.resolve({
+      context: {
+        ...hostedContext,
+        account: {
+          ...hostedContext.account,
+          defaultWorkspaceId: 'ws-3',
+        },
+      },
+    })
+    secondDirectory.resolve({
+      workspaces: [
+        {
+          workspaceId: 'ws-3',
+          name: 'Recovered Workspace',
+          revision: 1,
+          updatedAt: '2026-03-14T12:30:00.000Z',
+          role: 'owner',
+          isDefault: true,
+        },
+      ],
+    })
+    await secondRefresh
+
+    firstContext.resolve({ context: hostedContext })
+    firstDirectory.reject(new Error('Stale refresh failed'))
+    await expect(firstRefresh).resolves.toBeUndefined()
+
+    expect(useHostedAppStore.getState()).toMatchObject({
+      selectedWorkspaceId: 'ws-3',
+      workspaces: [
+        expect.objectContaining({
+          workspaceId: 'ws-3',
+          name: 'Recovered Workspace',
+        }),
+      ],
+      lastError: null,
+      lastErrorCode: null,
+      lastErrorReason: null,
+    })
+  })
+
+  it('ignores invalid workspace selections and clears transient errors on valid selection', async () => {
+    const { useHostedAppStore } = await import('../store/hostedAppStore')
+    await useHostedAppStore.getState().bootstrap()
+
+    useHostedAppStore.setState({
+      selectedWorkspaceId: 'ws-2',
+      lastError: 'Previous workspace error',
+      lastErrorCode: 'offline',
+      lastErrorReason: 'billing_issue',
+    })
+
+    useHostedAppStore.getState().selectWorkspace('missing-workspace')
+    expect(useHostedAppStore.getState().selectedWorkspaceId).toBe('ws-2')
+
+    useHostedAppStore.getState().selectWorkspace(null)
+    expect(useHostedAppStore.getState().selectedWorkspaceId).toBe('ws-2')
+
+    useHostedAppStore.getState().selectWorkspace('ws-1')
+    expect(useHostedAppStore.getState()).toMatchObject({
+      selectedWorkspaceId: 'ws-1',
+      lastError: null,
+      lastErrorCode: null,
+      lastErrorReason: null,
+    })
+  })
+
   it('updates workspace directory state for create, rename, and delete mutations', async () => {
     const { useHostedAppStore } = await import('../store/hostedAppStore')
     await useHostedAppStore.getState().bootstrap()
@@ -402,6 +667,53 @@ describe('hostedAppStore', () => {
     expect(useHostedAppStore.getState().selectedWorkspaceId).toBe('ws-2')
   })
 
+  it('handles deleting the final workspace without leaving a dangling selection', async () => {
+    const { useHostedAppStore } = await import('../store/hostedAppStore')
+    await useHostedAppStore.getState().bootstrap()
+
+    useHostedAppStore.setState({
+      workspaces: [
+        {
+          workspaceId: 'ws-2',
+          name: 'Bravo Workspace',
+          revision: 3,
+          updatedAt: '2026-03-14T12:05:00.000Z',
+          role: 'owner',
+          isDefault: true,
+        },
+      ],
+      selectedWorkspaceId: 'ws-2',
+      context: {
+        ...hostedContext,
+        memberships: [
+          {
+            workspaceId: 'ws-2',
+            role: 'owner',
+            isDefault: true,
+          },
+        ],
+        account: {
+          ...hostedContext.account,
+          defaultWorkspaceId: 'ws-2',
+        },
+      },
+    })
+
+    hostedAccountClientMocks.deleteHostedWorkspace.mockResolvedValue({
+      deletedWorkspaceId: 'ws-2',
+      defaultWorkspaceId: null,
+    })
+
+    await useHostedAppStore.getState().deleteWorkspace('ws-2')
+
+    expect(useHostedAppStore.getState()).toMatchObject({
+      workspaces: [],
+      selectedWorkspaceId: null,
+    })
+    expect(useHostedAppStore.getState().context?.account.defaultWorkspaceId).toBeNull()
+    expect(useHostedAppStore.getState().context?.memberships).toEqual([])
+  })
+
   it('cleans up mutation state when a create request fails', async () => {
     const { useHostedAppStore } = await import('../store/hostedAppStore')
     await useHostedAppStore.getState().bootstrap()
@@ -417,6 +729,32 @@ describe('hostedAppStore', () => {
       mutationState: null,
       lastError: 'Create failed',
     })
+  })
+
+  it('rejects hosted mutations without a bearer token and resets mutation state', async () => {
+    const { useHostedAppStore } = await import('../store/hostedAppStore')
+    await useHostedAppStore.getState().bootstrap()
+    useHostedAppStore.setState({ bearerToken: null })
+
+    await expect(
+      useHostedAppStore.getState().createWorkspace({
+        name: 'Broken Workspace',
+      }),
+    ).rejects.toThrow('Hosted session is not available.')
+    expect(useHostedAppStore.getState()).toMatchObject({
+      mutationState: null,
+      lastError: 'Hosted session is not available.',
+    })
+
+    await expect(useHostedAppStore.getState().renameWorkspace('ws-1', 'Broken Rename')).rejects.toThrow(
+      'Hosted session is not available.',
+    )
+    expect(useHostedAppStore.getState().mutationState).toBeNull()
+
+    await expect(useHostedAppStore.getState().deleteWorkspace('ws-1')).rejects.toThrow(
+      'Hosted session is not available.',
+    )
+    expect(useHostedAppStore.getState().mutationState).toBeNull()
   })
 
   it('cleans up mutation state when a rename request fails', async () => {
@@ -446,6 +784,24 @@ describe('hostedAppStore', () => {
     expect(useHostedAppStore.getState()).toMatchObject({
       mutationState: null,
       lastError: 'Delete failed',
+    })
+  })
+
+  it('reports and clears manual error state', async () => {
+    const { useHostedAppStore } = await import('../store/hostedAppStore')
+
+    useHostedAppStore.getState().reportError('Manual error', 'manual_code', 'billing_issue')
+    expect(useHostedAppStore.getState()).toMatchObject({
+      lastError: 'Manual error',
+      lastErrorCode: 'manual_code',
+      lastErrorReason: 'billing_issue',
+    })
+
+    useHostedAppStore.getState().clearError()
+    expect(useHostedAppStore.getState()).toMatchObject({
+      lastError: null,
+      lastErrorCode: null,
+      lastErrorReason: null,
     })
   })
 })
