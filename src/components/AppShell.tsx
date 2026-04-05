@@ -37,6 +37,11 @@ import { WorkspaceBackupDialog } from './WorkspaceBackupDialog'
 import { WorkspaceBackupReminder } from './WorkspaceBackupReminder'
 
 const CURRENT_YEAR = new Date().getFullYear()
+const AI_ENABLED = !!import.meta.env.VITE_ANTHROPIC_PROXY_URL
+
+const AI_ROUTES: ReadonlySet<string> = new Set([
+  '/identity', '/match', '/research', '/prep', '/letters', '/linkedin', '/debrief',
+])
 
 const NAV_ITEMS = [
   { to: '/build' as const, icon: Layers, label: 'Build' },
@@ -515,7 +520,7 @@ export function AppShell() {
         </div>
 
         <div className="sidebar-nav">
-          {NAV_ITEMS.map(({ to, icon: Icon, label }) => (
+          {NAV_ITEMS.filter(({ to }) => AI_ENABLED || !AI_ROUTES.has(to)).map(({ to, icon: Icon, label }) => (
             <Link
               key={to}
               to={to}
