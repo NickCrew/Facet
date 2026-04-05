@@ -63,6 +63,7 @@ export function AppShell() {
   >('idle')
   const [hostedRuntimeError, setHostedRuntimeError] = useState<string | null>(null)
   const [hostedRuntimeErrorCode, setHostedRuntimeErrorCode] = useState<string | null>(null)
+  const [hostedRuntimeErrorReason, setHostedRuntimeErrorReason] = useState<string | null>(null)
   const [activeHostedWorkspaceId, setActiveHostedWorkspaceId] = useState<string | null>(null)
   const [hostedRuntimeRetryToken, setHostedRuntimeRetryToken] = useState(0)
   const configuredHostedWorkspaceKeyRef = useRef<string | null>(null)
@@ -168,6 +169,7 @@ export function AppShell() {
       setHostedRuntimePhase('loading')
       setHostedRuntimeError(null)
       setHostedRuntimeErrorCode(null)
+      setHostedRuntimeErrorReason(null)
       setActiveHostedWorkspaceId(null)
       useHostedAppStore.getState().clearError()
 
@@ -207,6 +209,7 @@ export function AppShell() {
         setHostedRuntimePhase('ready')
         setHostedRuntimeError(null)
         setHostedRuntimeErrorCode(null)
+        setHostedRuntimeErrorReason(null)
         setActiveHostedWorkspaceId(selectedHostedWorkspace.workspaceId)
         setWorkspaceDialogOpen(false)
       }
@@ -216,13 +219,15 @@ export function AppShell() {
       const message =
         error instanceof Error ? error.message : 'Failed to start hosted workspace sync.'
       const errorCode = isFacetApiError(error) ? error.code : null
+      const errorReason = isFacetApiError(error) ? error.reason : null
       console.error('[hosted-runtime]', error)
       configuredHostedWorkspaceKeyRef.current = null
-      useHostedAppStore.getState().reportError(message, errorCode)
+      useHostedAppStore.getState().reportError(message, errorCode, errorReason)
       if (!cancelled) {
         setHostedRuntimePhase('error')
         setHostedRuntimeError(message)
         setHostedRuntimeErrorCode(errorCode)
+        setHostedRuntimeErrorReason(errorReason)
         setActiveHostedWorkspaceId(null)
       }
     })
@@ -339,6 +344,8 @@ export function AppShell() {
 
     if (hostedApp.bootstrapStatus === 'error') {
       const isBillingStateError = hostedApp.lastErrorCode === 'billing_state_error'
+      const isBillingIssue = hostedApp.lastErrorReason === 'billing_issue'
+      const isUpgradeRequired = hostedApp.lastErrorReason === 'upgrade_required'
       const isOffline = hostedApp.lastErrorCode === 'offline'
       return (
         <div className="hosted-workspace-state-card" role="alert">
@@ -347,6 +354,10 @@ export function AppShell() {
             <strong>
               {isBillingStateError
                 ? 'Hosted billing state unavailable'
+                : isBillingIssue
+                  ? 'Hosted billing issue'
+                  : isUpgradeRequired
+                    ? 'Hosted upgrade required'
                 : isOffline
                   ? 'You appear to be offline'
                   : 'Hosted bootstrap failed'}
@@ -423,6 +434,9 @@ export function AppShell() {
 
     if (hostedRuntimePhase === 'error') {
       const isAuthError = hostedRuntimeErrorCode === 'auth_required'
+      const isBillingStateError = hostedRuntimeErrorCode === 'billing_state_error'
+      const isBillingIssue = hostedRuntimeErrorReason === 'billing_issue'
+      const isUpgradeRequired = hostedRuntimeErrorReason === 'upgrade_required'
       const isOffline = hostedRuntimeErrorCode === 'offline'
       return (
         <div className="hosted-workspace-state-card" role="alert">
@@ -431,6 +445,12 @@ export function AppShell() {
             <strong>
               {isAuthError
                 ? 'Hosted session expired'
+                : isBillingStateError
+                  ? 'Hosted billing state unavailable'
+                  : isBillingIssue
+                    ? 'Hosted billing issue'
+                    : isUpgradeRequired
+                      ? 'Hosted upgrade required'
                 : isOffline
                   ? 'Hosted sync is offline'
                   : 'Hosted workspace sync failed'}

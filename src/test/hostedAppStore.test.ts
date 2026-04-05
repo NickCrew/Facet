@@ -205,6 +205,26 @@ describe('hostedAppStore', () => {
     })
   })
 
+  it('retains entitlement-related bootstrap reasons for recovery UX', async () => {
+    hostedAccountClientMocks.fetchHostedAccountContext.mockRejectedValue(
+      new FacetApiError('Upgrade required for hosted access (402)', {
+        status: 402,
+        code: 'ai_access_denied',
+        reason: 'upgrade_required',
+      }),
+    )
+    const { useHostedAppStore } = await import('../store/hostedAppStore')
+
+    await useHostedAppStore.getState().bootstrap()
+
+    expect(useHostedAppStore.getState()).toMatchObject({
+      bootstrapStatus: 'error',
+      lastErrorCode: 'ai_access_denied',
+      lastErrorReason: 'upgrade_required',
+      lastError: 'Upgrade required for hosted access (402)',
+    })
+  })
+
   it('refreshes workspace listings while preserving or falling back selection', async () => {
     const { useHostedAppStore } = await import('../store/hostedAppStore')
     await useHostedAppStore.getState().bootstrap()
@@ -307,6 +327,28 @@ describe('hostedAppStore', () => {
     expect(useHostedAppStore.getState()).toMatchObject({
       lastError: 'Facet could not reach the network.',
       lastErrorCode: 'offline',
+    })
+  })
+
+  it('stores billing-issue refresh failures with a structured reason', async () => {
+    const { useHostedAppStore } = await import('../store/hostedAppStore')
+    await useHostedAppStore.getState().bootstrap()
+
+    hostedAccountClientMocks.listHostedWorkspaces.mockRejectedValue(
+      new FacetApiError('Billing issue on hosted account (402)', {
+        status: 402,
+        code: 'ai_access_denied',
+        reason: 'billing_issue',
+      }),
+    )
+
+    await expect(useHostedAppStore.getState().refresh()).rejects.toThrow(
+      'Billing issue on hosted account (402)',
+    )
+    expect(useHostedAppStore.getState()).toMatchObject({
+      lastError: 'Billing issue on hosted account (402)',
+      lastErrorCode: 'ai_access_denied',
+      lastErrorReason: 'billing_issue',
     })
   })
 

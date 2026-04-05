@@ -38,6 +38,7 @@ export interface HostedAppState {
   localMigrationSnapshot: FacetWorkspaceSnapshot | null
   lastError: string | null
   lastErrorCode: string | null
+  lastErrorReason: string | null
   bootstrap: (options?: { localMigrationSnapshot?: FacetWorkspaceSnapshot | null }) => Promise<void>
   selectWorkspace: (workspaceId: string | null) => void
   refresh: () => Promise<void>
@@ -47,7 +48,7 @@ export interface HostedAppState {
   }) => Promise<FacetHostedWorkspaceSummary>
   renameWorkspace: (workspaceId: string, name: string) => Promise<FacetHostedWorkspaceSummary>
   deleteWorkspace: (workspaceId: string) => Promise<FacetHostedWorkspaceDeleteResponse>
-  reportError: (message: string, code?: string | null) => void
+  reportError: (message: string, code?: string | null, reason?: string | null) => void
   clearError: () => void
 }
 
@@ -107,6 +108,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
   localMigrationSnapshot: null,
   lastError: null,
   lastErrorCode: null,
+  lastErrorReason: null,
 
   bootstrap: async (options = {}) => {
     const deploymentMode = getFacetDeploymentMode()
@@ -122,6 +124,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
         localMigrationSnapshot: null,
         lastError: null,
         lastErrorCode: null,
+        lastErrorReason: null,
       })
       return
     }
@@ -133,6 +136,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
       localMigrationSnapshot: options.localMigrationSnapshot ?? null,
       lastError: null,
       lastErrorCode: null,
+      lastErrorReason: null,
     })
 
     try {
@@ -146,6 +150,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
           selectedWorkspaceId: null,
           lastError: 'Hosted sign-in is required before we can load your account.',
           lastErrorCode: 'auth_required',
+          lastErrorReason: null,
         })
         return
       }
@@ -181,10 +186,12 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
         selectedWorkspaceId,
         lastError: null,
         lastErrorCode: null,
+        lastErrorReason: null,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to bootstrap hosted account.'
       const errorCode = isFacetApiError(error) ? error.code : null
+      const errorReason = isFacetApiError(error) ? error.reason : null
       set({
         bootstrapStatus: errorCode === 'auth_required' ? 'auth-required' : 'error',
         bearerToken: null,
@@ -193,6 +200,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
         selectedWorkspaceId: null,
         lastError: message,
         lastErrorCode: errorCode,
+        lastErrorReason: errorReason,
       })
     }
   },
@@ -205,6 +213,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
           : state.selectedWorkspaceId,
       lastError: null,
       lastErrorCode: null,
+      lastErrorReason: null,
     }))
   },
 
@@ -235,19 +244,21 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
         ),
         lastError: null,
         lastErrorCode: null,
+        lastErrorReason: null,
       }))
     } catch (error) {
       set({
         lastError:
           error instanceof Error ? error.message : 'Failed to refresh hosted workspace directory.',
         lastErrorCode: isFacetApiError(error) ? error.code : null,
+        lastErrorReason: isFacetApiError(error) ? error.reason : null,
       })
       throw error
     }
   },
 
   createWorkspace: async (input = {}) => {
-    set({ mutationState: 'creating', lastError: null })
+    set({ mutationState: 'creating', lastError: null, lastErrorCode: null, lastErrorReason: null })
 
     try {
       const client = resolveHostedClientConfig(get())
@@ -279,6 +290,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
             : state.context,
           lastError: null,
           lastErrorCode: null,
+          lastErrorReason: null,
         }
       })
 
@@ -289,13 +301,14 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
         mutationState: null,
         lastError: message,
         lastErrorCode: isFacetApiError(error) ? error.code : null,
+        lastErrorReason: isFacetApiError(error) ? error.reason : null,
       })
       throw error
     }
   },
 
   renameWorkspace: async (workspaceId, name) => {
-    set({ mutationState: 'renaming', lastError: null })
+    set({ mutationState: 'renaming', lastError: null, lastErrorCode: null, lastErrorReason: null })
 
     try {
       const client = resolveHostedClientConfig(get())
@@ -320,6 +333,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
             : state.context,
           lastError: null,
           lastErrorCode: null,
+          lastErrorReason: null,
         }
       })
 
@@ -330,13 +344,14 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
         mutationState: null,
         lastError: message,
         lastErrorCode: isFacetApiError(error) ? error.code : null,
+        lastErrorReason: isFacetApiError(error) ? error.reason : null,
       })
       throw error
     }
   },
 
   deleteWorkspace: async (workspaceId) => {
-    set({ mutationState: 'deleting', lastError: null })
+    set({ mutationState: 'deleting', lastError: null, lastErrorCode: null, lastErrorReason: null })
 
     try {
       const client = resolveHostedClientConfig(get())
@@ -371,6 +386,7 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
             : state.context,
           lastError: null,
           lastErrorCode: null,
+          lastErrorReason: null,
         }
       })
 
@@ -381,12 +397,14 @@ export const useHostedAppStore = create<HostedAppState>((set, get) => ({
         mutationState: null,
         lastError: message,
         lastErrorCode: isFacetApiError(error) ? error.code : null,
+        lastErrorReason: isFacetApiError(error) ? error.reason : null,
       })
       throw error
     }
   },
 
-  reportError: (message, code = null) => set({ lastError: message, lastErrorCode: code }),
+  reportError: (message, code = null, reason = null) =>
+    set({ lastError: message, lastErrorCode: code, lastErrorReason: reason }),
 
-  clearError: () => set({ lastError: null, lastErrorCode: null }),
+  clearError: () => set({ lastError: null, lastErrorCode: null, lastErrorReason: null }),
 }))

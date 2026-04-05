@@ -121,11 +121,11 @@ const setPersistenceHydration = (hydrated: boolean, activeWorkspaceId = 'facet-l
 const setHostedStore = (
   overrides: Partial<ReturnType<typeof useHostedAppStore.getState>>,
 ) => {
-  const reportError = vi.fn((message: string, code: string | null = null) => {
-    useHostedAppStore.setState({ lastError: message, lastErrorCode: code })
+  const reportError = vi.fn((message: string, code: string | null = null, reason: string | null = null) => {
+    useHostedAppStore.setState({ lastError: message, lastErrorCode: code, lastErrorReason: reason })
   })
   const clearError = vi.fn(() => {
-    useHostedAppStore.setState({ lastError: null, lastErrorCode: null })
+    useHostedAppStore.setState({ lastError: null, lastErrorCode: null, lastErrorReason: null })
   })
 
   useHostedAppStore.setState({
@@ -140,6 +140,7 @@ const setHostedStore = (
     localMigrationSnapshot: null,
     lastError: null,
     lastErrorCode: null,
+    lastErrorReason: null,
     bootstrap: vi.fn().mockResolvedValue(undefined),
     selectWorkspace: vi.fn((workspaceId: string | null) => {
       useHostedAppStore.setState({ selectedWorkspaceId: workspaceId })
@@ -248,6 +249,7 @@ describe('AppShell hosted workspace bootstrap', () => {
     })
 
     expect(remoteBackendMocks.createRemotePersistenceBackend).toHaveBeenCalledWith({
+      authMode: 'hosted',
       endpoint: 'https://facet.example/api/persistence',
       bearerToken: 'token-123',
     })
@@ -294,6 +296,22 @@ describe('AppShell hosted workspace bootstrap', () => {
     expect(screen.getByRole('button', { name: /refresh billing state/i })).toBeTruthy()
   })
 
+  it('surfaces hosted billing issues distinctly during bootstrap recovery', async () => {
+    setHostedStore({
+      bootstrapStatus: 'error',
+      selectedWorkspaceId: null,
+      workspaces: [],
+      lastError: 'Your hosted subscription needs attention (402)',
+      lastErrorCode: 'ai_access_denied',
+      lastErrorReason: 'billing_issue',
+    })
+
+    render(<AppShell />)
+
+    expect(screen.getByRole('alert').textContent).toContain('Hosted billing issue')
+    expect(screen.getByRole('alert').textContent).not.toContain('Hosted bootstrap failed')
+  })
+
   it('offers session refresh recovery when hosted runtime auth expires', async () => {
     setHostedStore({})
     setPersistenceHydration(true, 'ws-previous')
@@ -320,6 +338,38 @@ describe('AppShell hosted workspace bootstrap', () => {
 
     expect(screen.getByRole('button', { name: /refresh session/i })).toBeTruthy()
     expect(screen.getByRole('button', { name: /backup workspace/i })).toBeTruthy()
+  })
+
+  it('surfaces hosted upgrade requirements distinctly from generic runtime sync failures', async () => {
+    setHostedStore({})
+    setPersistenceHydration(true, 'ws-previous')
+
+    runtimeMocks.captureLocalWorkspaceSnapshotForMigration.mockResolvedValue(null)
+    runtimeMocks.replacePersistenceRuntime.mockResolvedValue({
+      start: vi.fn().mockRejectedValue(
+        new FacetApiError('Upgrade required to keep this hosted workspace in sync (402)', {
+          status: 402,
+          code: 'ai_access_denied',
+          reason: 'upgrade_required',
+        }),
+      ),
+      flush: vi.fn().mockResolvedValue(undefined),
+      exportWorkspaceSnapshot: vi.fn().mockResolvedValue(buildWorkspaceSnapshot()),
+      importWorkspaceSnapshot: vi.fn().mockResolvedValue(buildWorkspaceSnapshot()),
+      dispose: vi.fn(),
+    })
+
+    render(<AppShell />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('Hosted upgrade required')
+    })
+
+    expect(screen.getByRole('alert').textContent).not.toContain('Hosted workspace sync failed')
+    expect(useHostedAppStore.getState()).toMatchObject({
+      lastErrorCode: 'ai_access_denied',
+      lastErrorReason: 'upgrade_required',
+    })
   })
 
   it('surfaces migration import failures after create-from-local-data instead of treating them as success', async () => {
