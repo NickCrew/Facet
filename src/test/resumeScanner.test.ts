@@ -41,6 +41,18 @@ const sampleItems: ResumeTextItem[] = [
 ]
 
 describe('resumeScanner parser', () => {
+  it('only inserts spaces between neighboring text items once the x-gap exceeds tolerance', () => {
+    const items: ResumeTextItem[] = [
+      { text: 'Nick', x: 72, y: 760, width: 24, height: 12, page: 1 },
+      { text: 'Ferguson', x: 98, y: 760, width: 52, height: 12, page: 1 },
+      { text: 'Platform', x: 153, y: 760, width: 50, height: 12, page: 1 },
+    ]
+
+    const [line] = groupTextItemsIntoLines(items)
+
+    expect(line?.text).toBe('NickFerguson Platform')
+  })
+
   it('extracts segmented date entries from pipe-delimited headers', () => {
     const line = 'Staff Engineer at Acme Corp | 2022 - Present'
     const segments = line.split(/\s*[|•]\s*/).map((entry) => entry.trim())
@@ -175,6 +187,29 @@ describe('resumeScanner parser', () => {
       },
     ]).flat()
     expect(detectAmbiguousColumnLayout(lines)).toBe(true)
+  })
+
+  it('skips two-column warnings for short documents under the minimum line threshold', () => {
+    const lines = Array.from({ length: 5 }, (_, index) => [
+      {
+        page: 1,
+        y: 760 - index * 20,
+        x: 72,
+        width: 90,
+        text: `Left ${index + 1}`,
+        items: [],
+      },
+      {
+        page: 1,
+        y: 760 - index * 20,
+        x: 330,
+        width: 90,
+        text: `Right ${index + 1}`,
+        items: [],
+      },
+    ]).flat()
+
+    expect(detectAmbiguousColumnLayout(lines)).toBe(false)
   })
 
   it('parses role headers that use "at" syntax and merges continuation lines into the current bullet', () => {
