@@ -293,7 +293,7 @@ const pickAtSplit = (text: string): { title: string; company: string } | null =>
   return best ? { title: best.title, company: best.company } : null
 }
 
-const extractDateFromRoleHeader = (
+export const extractDateFromRoleHeader = (
   line: string,
   segments: string[],
   nextLine?: string,

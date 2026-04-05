@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   detectAmbiguousColumnLayout,
+  extractDateFromRoleHeader,
   extractContact,
   extractEducation,
   extractRoles,
@@ -40,6 +41,64 @@ const sampleItems: ResumeTextItem[] = [
 ]
 
 describe('resumeScanner parser', () => {
+  it('extracts segmented date entries from pipe-delimited headers', () => {
+    const line = 'Staff Engineer at Acme Corp | 2022 - Present'
+    const segments = line.split(/\s*[|•]\s*/).map((entry) => entry.trim())
+
+    expect(extractDateFromRoleHeader(line, segments)).toEqual({
+      dateSegment: '2022 - Present',
+      remaining: ['Staff Engineer at Acme Corp'],
+      textWithoutDates: 'Staff Engineer at Acme Corp',
+    })
+  })
+
+  it('extracts inline date ranges when no delimiter segment is present', () => {
+    const line = 'Staff Engineer at Acme Corp - 2022 - Present'
+    const segments = [line]
+
+    expect(extractDateFromRoleHeader(line, segments)).toEqual({
+      dateSegment: '2022 - Present',
+      // Inline matches leave the original single segment in place; only segmented
+      // date entries are removed from `remaining`.
+      remaining: ['Staff Engineer at Acme Corp - 2022 - Present'],
+      // The trailing dash is expected here and trimmed later by role parsing.
+      textWithoutDates: 'Staff Engineer at Acme Corp -',
+    })
+  })
+
+  it('extracts trailing single-year dates from dash-delimited headers', () => {
+    const line = 'Engineer at 2023 Labs - 2023'
+    const segments = [line]
+
+    expect(extractDateFromRoleHeader(line, segments)).toEqual({
+      dateSegment: '2023',
+      remaining: ['Engineer at 2023 Labs - 2023'],
+      textWithoutDates: 'Engineer at 2023 Labs',
+    })
+  })
+
+  it('falls back to a date-only next line when the header itself has no date segment', () => {
+    const line = 'Staff Engineer | Acme Corp'
+    const segments = line.split(/\s*[|•]\s*/).map((entry) => entry.trim())
+
+    expect(extractDateFromRoleHeader(line, segments, '2022')).toEqual({
+      dateSegment: '2022',
+      remaining: ['Staff Engineer', 'Acme Corp'],
+      textWithoutDates: 'Staff Engineer | Acme Corp',
+    })
+  })
+
+  it('returns an empty date segment when neither the header nor next line contains a date', () => {
+    const line = 'Staff Engineer | Acme Corp'
+    const segments = line.split(/\s*[|•]\s*/).map((entry) => entry.trim())
+
+    expect(extractDateFromRoleHeader(line, segments)).toEqual({
+      dateSegment: '',
+      remaining: ['Staff Engineer', 'Acme Corp'],
+      textWithoutDates: 'Staff Engineer | Acme Corp',
+    })
+  })
+
   it('groups positioned text into ordered lines', () => {
     const items: ResumeTextItem[] = [
       { text: 'Nick', x: 72, y: 760, width: 24, height: 12, page: 1 },

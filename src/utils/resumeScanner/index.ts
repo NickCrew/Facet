@@ -1,6 +1,7 @@
 export { scanResumePdf } from './pdf'
 export {
   detectAmbiguousColumnLayout,
+  extractDateFromRoleHeader,
   extractContact,
   extractEducation,
   extractRoles,
