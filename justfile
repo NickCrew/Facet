@@ -4,16 +4,16 @@
 
 set dotenv-load := false
 
-tx_app_window := "facet-app"
-tx_proxy_window := "facet-proxy"
+tmux_app_window := "facet-app"
+tmux_proxy_window := "facet-proxy"
 
 # List available recipes
 default:
     @just --list
 
-# Create the tmux session used by tx
+# Create the tmux session used by cortex tmux
 tmux-new:
-    @session="${TMUX_SESSION:-labs}"; \
+    @session="${TMUX_SESSION:-facet}"; \
     if tmux has-session -t "$session" 2>/dev/null; then \
         echo "tmux session '$session' already exists"; \
     else \
@@ -37,49 +37,68 @@ dev-proxy:
 dev-all:
     pnpm run dev:all
 
-# Start Vite dev server in a dedicated tx/tmux window
-tx-dev: tmux-new
-    @if tmux list-windows -t "${TMUX_SESSION:-labs}" -F "#{window_name}" | grep -qx "{{tx_app_window}}"; then \
-        if tx running {{tx_app_window}} >/dev/null 2>&1; then \
-            echo "{{tx_app_window}} is already running"; \
+# Start Vite dev server in a dedicated service window
+svc-dev: tmux-new
+    @if tmux list-windows -t "${TMUX_SESSION:-facet}" -F "#{window_name}" | grep -qx "{{tmux_app_window}}"; then \
+        if cortex tmux running {{tmux_app_window}} >/dev/null 2>&1; then \
+            echo "{{tmux_app_window}} is already running"; \
         else \
-            tx send {{tx_app_window}} "cd \"$PWD\" && ./scripts/tx-start-app.sh"; \
+            cortex tmux send {{tmux_app_window}} "cd \"$PWD\" && ./scripts/tx-start-app.sh"; \
         fi; \
     else \
-        tx new {{tx_app_window}}; \
-        tx send {{tx_app_window}} "cd \"$PWD\" && ./scripts/tx-start-app.sh"; \
+        cortex tmux new {{tmux_app_window}}; \
+        cortex tmux send {{tmux_app_window}} "cd \"$PWD\" && ./scripts/tx-start-app.sh"; \
     fi
-    @tx read {{tx_app_window}} 20
+    @cortex tmux read {{tmux_app_window}} 20
 
-# Start the local AI proxy in a dedicated tx/tmux window
-tx-proxy: tmux-new
-    @if tmux list-windows -t "${TMUX_SESSION:-labs}" -F "#{window_name}" | grep -qx "{{tx_proxy_window}}"; then \
-        if tx running {{tx_proxy_window}} >/dev/null 2>&1; then \
-            echo "{{tx_proxy_window}} is already running"; \
+# Start the local AI proxy in a dedicated service window
+svc-proxy: tmux-new
+    @if tmux list-windows -t "${TMUX_SESSION:-facet}" -F "#{window_name}" | grep -qx "{{tmux_proxy_window}}"; then \
+        if cortex tmux running {{tmux_proxy_window}} >/dev/null 2>&1; then \
+            echo "{{tmux_proxy_window}} is already running"; \
         else \
-            tx send {{tx_proxy_window}} "cd \"$PWD\" && ./scripts/tx-start-proxy.sh"; \
+            cortex tmux send {{tmux_proxy_window}} "cd \"$PWD\" && ./scripts/tx-start-proxy.sh"; \
         fi; \
     else \
-        tx new {{tx_proxy_window}}; \
-        tx send {{tx_proxy_window}} "cd \"$PWD\" && ./scripts/tx-start-proxy.sh"; \
+        cortex tmux new {{tmux_proxy_window}}; \
+        cortex tmux send {{tmux_proxy_window}} "cd \"$PWD\" && ./scripts/tx-start-proxy.sh"; \
     fi
-    @tx read {{tx_proxy_window}} 20
+    @cortex tmux read {{tmux_proxy_window}} 20
 
-# Start both app and proxy with tx/tmux
-tx-up: tx-dev tx-proxy
+# Start both app and proxy service windows
+svc-up: svc-dev svc-proxy
 
-# Show status for tx-managed app windows
-tx-status:
-    @echo "== {{tx_app_window}} =="
-    @tx status {{tx_app_window}} || true
+# Show status for service windows
+svc-status:
+    @echo "== {{tmux_app_window}} =="
+    @cortex tmux status {{tmux_app_window}} || true
     @echo ""
-    @echo "== {{tx_proxy_window}} =="
-    @tx status {{tx_proxy_window}} || true
+    @echo "== {{tmux_proxy_window}} =="
+    @cortex tmux status {{tmux_proxy_window}} || true
 
-# Stop tx-managed app windows
-tx-stop:
-    @if tmux list-windows -t "${TMUX_SESSION:-labs}" -F "#{window_name}" | grep -qx "{{tx_app_window}}"; then tx kill {{tx_app_window}}; else echo "{{tx_app_window}} is not running"; fi
-    @if tmux list-windows -t "${TMUX_SESSION:-labs}" -F "#{window_name}" | grep -qx "{{tx_proxy_window}}"; then tx kill {{tx_proxy_window}}; else echo "{{tx_proxy_window}} is not running"; fi
+# Print the tmux session name used by service recipes
+svc-session:
+    @echo "${TMUX_SESSION:-facet}"
+
+# Enter the shell window for the service tmux session
+svc-shell: tmux-new
+    @session="${TMUX_SESSION:-facet}"; \
+    tmux select-window -t "$session:shell"; \
+    if [ -n "$TMUX" ]; then \
+        tmux switch-client -t "$session"; \
+    else \
+        tmux attach-session -t "$session"; \
+    fi
+
+# Restart the Vite dev server service window
+svc-restart:
+    @if tmux list-windows -t "${TMUX_SESSION:-facet}" -F "#{window_name}" | grep -qx "{{tmux_app_window}}"; then cortex tmux kill {{tmux_app_window}}; fi
+    @just svc-dev
+
+# Stop service windows
+svc-stop:
+    @if tmux list-windows -t "${TMUX_SESSION:-facet}" -F "#{window_name}" | grep -qx "{{tmux_app_window}}"; then cortex tmux kill {{tmux_app_window}}; else echo "{{tmux_app_window}} is not running"; fi
+    @if tmux list-windows -t "${TMUX_SESSION:-facet}" -F "#{window_name}" | grep -qx "{{tmux_proxy_window}}"; then cortex tmux kill {{tmux_proxy_window}}; else echo "{{tmux_proxy_window}} is not running"; fi
 
 # TypeScript check + Vite production build
 build:

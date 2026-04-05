@@ -14,6 +14,14 @@ Use Node `>=20.19.0`.
 - `npm run lint` or `just lint`: run ESLint over the repo.
 - `npm run preview` or `just preview`: serve the production build locally.
 
+## Tooling Guidance
+Use the tool that keeps the work clearest and most reviewable.
+
+- Prefer normal shell commands for straightforward repo inspection, Git operations, and test/build runs.
+- Use `apply_patch` for manual file edits.
+- Use `js_repl` when it materially helps, for example when running small Node/TypeScript experiments, inspecting JavaScript behavior, or routing tool calls through `codex.tool(...)`.
+- Treat `js_repl` as optional, not mandatory. Agent discretion is appropriate.
+
 ## Coding Style & Naming Conventions
 Use TypeScript with ES modules, 2-space indentation, and no semicolons. Prefer `import type` for type-only imports. Components, stores, and route files use `PascalCase` (`ResearchPage.tsx`, `AppShell.tsx`); hooks and utilities use `camelCase` (`usePdfPreview.tsx`, `searchExecutor.ts`). Keep CSS route-scoped and prefixed by feature, for example `.research-*` in `src/routes/research/research.css`. Linting is configured in `eslint.config.js`; fix issues before opening a PR.
 

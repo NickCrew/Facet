@@ -175,3 +175,9 @@ vite.config.ts.timestamp-*
 test-results/
 data/
 .agents/
+
+# Playwright
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
