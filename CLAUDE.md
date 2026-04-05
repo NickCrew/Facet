@@ -19,18 +19,21 @@ npm run lint         # ESLint
 
 Tests use Vitest with jsdom. No separate vitest config file — configuration is inline via Vite. Test files live in `src/test/`.
 
+## Workflow
+
+- Always use atomic commits with conventional commit messages.
+
 ## Tools
 
 ### CLI
 
-- Use `committer` to commit your changes. To stage hunks, use the `--patch` option. If `committer` is not available, fails, or lacks capabilities, escalate to the user; do not work around with other git commands.
+- Use `cortex get commit` (file-based) to commit your changes. To commit hunks/lines, use `cortex git patch`.  If a `cortex git` sub-command is not available, fails, or lacks capabilities, escalate to the user; do not work around with other git commands.
 - Use `trash` to delete files. This moves the files to `~/.Trash` where it is recoverable in case of emergency Never delete with `rm`.
-- Use `tx` to manage local processes in a dedicated tmux window. 
+- Use `cortex tmux` to manage local processes in a dedicated tmux window.
 
 ### MCP
 
 - Use the **backlog.md** MCP server for task tracking. The `backlog/` folder e is never tracked in git.
-
 
 ### Data Flow
 
@@ -64,6 +67,7 @@ Overrides use a hierarchical key system defined in `src/utils/componentKeys.ts`.
 ### Type System
 
 `src/types.ts` defines the complete domain model. Key distinctions:
+
 - **Component types** (`TargetLineComponent`, `RoleBulletComponent`, etc.) — raw data with `PriorityByVector` maps
 - **Assembled types** (`AssembledTextComponent`, `AssembledRoleBullet`, etc.) — post-assembly with resolved single `IncludedPriority`
 - **Template types** (`src/templates/types.ts`) — simplified render-ready data with no priority/vector metadata
@@ -85,6 +89,7 @@ The app uses **TanStack Router** (code-based) with three routes:
 - `/prep` — Interview prep reference cards (in development)
 
 The root route renders `AppShell` (`src/components/AppShell.tsx`) which provides:
+
 - A 48px icon sidebar for navigation between routes
 - Global appearance/theme management
 - The app footer
@@ -116,3 +121,29 @@ Presets snapshot the current override state (manual overrides, variant text sele
 - **Geist Sans / Geist Mono** font stack
 - Drag-and-drop via `@dnd-kit`
 - Icons from `lucide-react`
+
+<!-- BACKLOG.MD MCP GUIDELINES START -->
+
+## BACKLOG WORKFLOW INSTRUCTIONS
+
+This project uses Backlog.md MCP for all task and project management activities.
+
+**CRITICAL GUIDANCE**
+
+- If your client supports MCP resources, read `backlog://workflow/overview` to understand when and how to use Backlog for this project.
+- If your client only supports tools or the above request fails, call `backlog.get_workflow_overview()` tool to load the tool-oriented overview (it lists the matching guide tools).
+
+- **First time working here?** Read the overview resource IMMEDIATELY to learn the workflow
+- **Already familiar?** You should have the overview cached ("## Backlog.md Overview (MCP)")
+- **When to read it**: BEFORE creating tasks, or when you're unsure whether to track work
+
+These guides cover:
+
+- Decision framework for when to create tasks
+- Search-first workflow to avoid duplicates
+- Links to detailed guides for task creation, execution, and finalization
+- MCP tools reference
+
+You MUST read the overview resource to understand the complete workflow. The information is NOT summarized here.
+
+<!-- BACKLOG.MD MCP GUIDELINES END -->
