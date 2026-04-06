@@ -355,6 +355,55 @@ const normalizeBulletTechnologies = (
   }
 }
 
+const normalizeTagArray = (
+  value: unknown,
+  context: string,
+): { value: string[]; warnings: string[] } => {
+  if (Array.isArray(value)) {
+    const warnings: string[] = []
+    const items = value.flatMap((entry, index) => {
+      if (typeof entry === 'string') {
+        return [entry]
+      }
+
+      if (typeof entry === 'number' || typeof entry === 'boolean') {
+        warnings.push(`Normalized ${context}[${index}] into a string for AI extraction output.`)
+        return [String(entry)]
+      }
+
+      warnings.push(`Dropped invalid ${context}[${index}] entry for AI extraction output.`)
+      return []
+    })
+
+    return {
+      value: Array.from(new Set(items.map((entry) => entry.trim().toLowerCase()).filter(Boolean))),
+      warnings,
+    }
+  }
+
+  if (typeof value === 'string') {
+    return {
+      value: Array.from(
+        new Set(
+          value
+            .split(',')
+            .map((entry) => entry.trim().toLowerCase())
+            .filter(Boolean),
+        ),
+      ),
+      warnings: [`Normalized ${context} from a string into a string array for AI extraction output.`],
+    }
+  }
+
+  return {
+    value: [],
+    warnings:
+      value === undefined
+        ? [`Added missing ${context} array for AI extraction output.`]
+        : [`Normalized invalid ${context} into an empty array for AI extraction output.`],
+  }
+}
+
 const findRoleBullet = (identity: ProfessionalIdentityV3, roleId: string, bulletId: string) => {
   const roleIndex = identity.roles.findIndex((entry) => entry.id === roleId)
   if (roleIndex < 0) {
@@ -437,6 +486,12 @@ const normalizeExtractedIdentityCandidate = (
           )
           normalizedBullet.technologies = technologies.value
           warnings.push(...technologies.warnings)
+          const tags = normalizeTagArray(
+            bullet.tags,
+            `roles[${roleIndex}].bullets[${bulletIndex}].tags`,
+          )
+          normalizedBullet.tags = tags.value
+          warnings.push(...tags.warnings)
           return normalizedBullet
         })
       }
@@ -484,6 +539,7 @@ const parseDeepenedBulletPayload = (
   const roleId = assertString(bulletRecord.role_id, 'bullet.role_id').trim()
   const bulletId = assertString(bulletRecord.bullet_id, 'bullet.bullet_id').trim()
   const technologies = normalizeBulletTechnologies(bulletRecord.technologies, 'bullet')
+  const tags = normalizeTagArray(bulletRecord.tags, 'bullet.tags')
   const bullet = {
     id: bulletId,
     problem: assertString(bulletRecord.problem, 'bullet.problem').trim(),
@@ -492,9 +548,7 @@ const parseDeepenedBulletPayload = (
     impact: assertStringArray(bulletRecord.impact, 'bullet.impact').map((entry) => entry.trim()).filter(Boolean),
     metrics: assertMetricObject(bulletRecord.metrics, 'bullet.metrics'),
     technologies: technologies.value,
-    tags: assertStringArray(bulletRecord.tags, 'bullet.tags')
-      .map((entry) => entry.trim().toLowerCase())
-      .filter(Boolean),
+    tags: tags.value,
   }
   return {
     summary,
@@ -509,7 +563,7 @@ const parseDeepenedBulletPayload = (
       bulletRecord.assumptions === undefined
         ? []
         : normalizeAssumptions(bulletRecord.assumptions, 'bullet.assumptions'),
-    warnings: technologies.warnings,
+    warnings: [...technologies.warnings, ...tags.warnings],
   }
 }
 
@@ -554,9 +608,7 @@ export const parseIdentityExtractionResponse = (rawResponse: string): IdentityEx
       const tagsValue =
         record.tags === undefined
           ? existing.tags
-          : assertStringArray(record.tags, `bullets[${index}].tags`)
-              .map((tag) => tag.trim().toLowerCase())
-              .filter(Boolean)
+          : normalizeTagArray(record.tags, `bullets[${index}].tags`).value
       bulletMap.set(key, {
         ...existing,
         rewrite: rewriteValue.trim(),

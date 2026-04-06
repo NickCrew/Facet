@@ -265,6 +265,53 @@ describe('identityExtraction', () => {
     )
   })
 
+  it('normalizes bullet tags when the AI returns a string', () => {
+    const malformedIdentity = cloneIdentityAsRecord()
+    const roles = malformedIdentity.roles as Array<Record<string, unknown>>
+    const bullets = roles[0]?.bullets as Array<Record<string, unknown>>
+    bullets[1] = {
+      ...bullets[1],
+      tags: 'Platform, Delivery',
+    }
+
+    const parsed = parseIdentityExtractionResponse(
+      JSON.stringify({
+        ...responseBody,
+        identity: malformedIdentity,
+      }),
+    )
+
+    expect(parsed.identity.roles[0]?.bullets[1]?.tags).toEqual(['platform', 'delivery'])
+    expect(parsed.warnings).toContain(
+      'Normalized roles[0].bullets[1].tags from a string into a string array for AI extraction output.',
+    )
+  })
+
+  it('normalizes mixed bullet tag arrays without failing extraction', () => {
+    const malformedIdentity = cloneIdentityAsRecord()
+    const roles = malformedIdentity.roles as Array<Record<string, unknown>>
+    const bullets = roles[0]?.bullets as Array<Record<string, unknown>>
+    bullets[1] = {
+      ...bullets[1],
+      tags: ['Platform', 2024, { invalid: true }, false],
+    }
+
+    const parsed = parseIdentityExtractionResponse(
+      JSON.stringify({
+        ...responseBody,
+        identity: malformedIdentity,
+      }),
+    )
+
+    expect(parsed.identity.roles[0]?.bullets[1]?.tags).toEqual(['platform', '2024', 'false'])
+    expect(parsed.warnings).toContain(
+      'Normalized roles[0].bullets[1].tags[1] into a string for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Dropped invalid roles[0].bullets[1].tags[2] entry for AI extraction output.',
+    )
+  })
+
   it('normalizes mixed technology arrays without failing extraction', () => {
     const malformedIdentity = cloneIdentityAsRecord()
     const roles = malformedIdentity.roles as Array<Record<string, unknown>>
@@ -439,6 +486,34 @@ describe('identity bullet deepening', () => {
     expect(parsed.bullet.technologies).toEqual(['EKS', 'Helm', 'Terraform'])
     expect(parsed.warnings).toContain(
       'Normalized bullet.technologies from a string into a string array for AI extraction output.',
+    )
+  })
+
+  it('normalizes deepened bullet tags when the AI returns a string', () => {
+    const parsed = parseDeepenIdentityBulletResponse(
+      JSON.stringify({
+        summary: 'Deepened the deployment migration bullet.',
+        bullet: {
+          role_id: 'acme',
+          bullet_id: 'acme-1',
+          problem: 'Deployment workflow was fragmented across EKS clusters.',
+          action: 'Led a migration to EKS with Helm charts and Terraform modules.',
+          outcome: 'Teams shipped through one deployment workflow.',
+          impact: ['Standardized delivery across 12 pipelines'],
+          metrics: { pipelines: 12 },
+          technologies: ['EKS', 'Helm', 'Terraform'],
+          tags: 'Platform, Delivery',
+          rewrite:
+            'Led a migration to EKS with Helm charts and Terraform modules, standardizing delivery across 12 pipelines.',
+          assumptions: [],
+        },
+      }),
+      responseBody.identity,
+    )
+
+    expect(parsed.bullet.tags).toEqual(['platform', 'delivery'])
+    expect(parsed.warnings).toContain(
+      'Normalized bullet.tags from a string into a string array for AI extraction output.',
     )
   })
 
