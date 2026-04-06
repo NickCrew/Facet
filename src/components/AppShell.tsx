@@ -31,6 +31,7 @@ import { useHostedAppStore } from '../store/hostedAppStore'
 import { isFacetApiError } from '../utils/facetApiErrors'
 import { getHostedPersistenceEndpoint } from '../utils/hostedApi'
 import { reloadPage } from '../utils/windowLocation'
+import { signInWithGitHub } from '../utils/hostedSession'
 import { FacetGemMark } from './FacetWordmark'
 import { HostedWorkspaceDialog } from './HostedWorkspaceDialog'
 import { WorkspaceBackupDialog } from './WorkspaceBackupDialog'
@@ -337,6 +338,13 @@ export function AppShell() {
             <div className="hosted-workspace-state-actions">
               <button
                 className="btn-secondary"
+                type="button"
+                onClick={() => void signInWithGitHub()}
+              >
+                Sign in with GitHub
+              </button>
+              <button
+                className="btn-ghost"
                 type="button"
                 onClick={handleSessionRefresh}
               >

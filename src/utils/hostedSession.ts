@@ -34,6 +34,20 @@ function getSupabaseClient() {
   return supabaseClient
 }
 
+export async function signInWithGitHub(): Promise<void> {
+  const client = getSupabaseClient()
+  if (!client) {
+    throw new Error('Supabase client is not configured.')
+  }
+
+  await client.auth.signInWithOAuth({
+    provider: 'github',
+    options: {
+      redirectTo: window.location.origin,
+    },
+  })
+}
+
 export async function getHostedAccessToken(): Promise<string | null> {
   if (getFacetDeploymentMode() !== 'hosted') {
     return null
