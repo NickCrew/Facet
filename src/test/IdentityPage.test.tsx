@@ -271,6 +271,39 @@ describe('IdentityPage', () => {
     )
   })
 
+  it('opens the file chooser when Upload Resume is clicked from paste mode', async () => {
+    const inputClickMock = vi
+      .spyOn(HTMLInputElement.prototype, 'click')
+      .mockImplementation(() => undefined)
+
+    useIdentityStore.setState({
+      intakeMode: 'paste',
+    })
+
+    render(<IdentityPage />)
+
+    fireEvent.click(screen.getByText('Upload Resume'))
+
+    await waitFor(() => {
+      expect(useIdentityStore.getState().intakeMode).toBe('upload')
+      expect(inputClickMock).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('scans a dropped PDF from the upload zone', async () => {
+    render(<IdentityPage />)
+
+    fireEvent.drop(screen.getByText('Drag a resume PDF here or click to browse'), {
+      dataTransfer: {
+        files: [new File(['%PDF-1.4'], 'resume.pdf', { type: 'application/pdf' })],
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Nick Ferguson')).toBeTruthy()
+    })
+  })
+
   it('falls back to paste-text mode when scan text exists but role parsing fails', async () => {
     const fallback = scanFixture()
     fallback.identity.roles = []

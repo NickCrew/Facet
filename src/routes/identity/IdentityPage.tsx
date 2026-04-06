@@ -248,8 +248,17 @@ export function IdentityPage() {
     event.target.value = ''
   }
 
-  const handleDrop = async (event: DragEvent<HTMLButtonElement>) => {
+  const handleRequestUpload = () => {
+    setIntakeMode('upload')
+    globalThis.setTimeout(() => {
+      uploadRef.current?.click()
+    }, 0)
+  }
+
+  const handleDrop = async (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
+    event.stopPropagation()
+    setIntakeMode('upload')
     const file = event.dataTransfer.files?.[0]
     if (!file) {
       return
@@ -639,6 +648,7 @@ export function IdentityPage() {
           isGenerating={isGenerating}
           isScanning={isScanning}
           uploadRef={uploadRef}
+          onRequestUpload={handleRequestUpload}
           onSetIntakeMode={setIntakeMode}
           onSetSourceMaterial={setSourceMaterial}
           onSetCorrectionNotes={setCorrectionNotes}

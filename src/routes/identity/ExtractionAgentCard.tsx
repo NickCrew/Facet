@@ -20,6 +20,7 @@ interface ExtractionAgentCardProps {
   isGenerating: boolean
   isScanning: boolean
   uploadRef: RefObject<HTMLInputElement | null>
+  onRequestUpload: () => void
   onSetIntakeMode: (mode: IdentityIntakeMode) => void
   onSetSourceMaterial: (value: string) => void
   onSetCorrectionNotes: (value: string) => void
@@ -27,7 +28,7 @@ interface ExtractionAgentCardProps {
   onDeepenAll: () => Promise<void>
   onCancelDeepenAll: () => void
   onUploadChange: (event: ChangeEvent<HTMLInputElement>) => Promise<void>
-  onDrop: (event: DragEvent<HTMLButtonElement>) => Promise<void>
+  onDrop: (event: DragEvent<HTMLDivElement>) => Promise<void>
   onClearScan: () => void
   onUpdateIdentityCore: (
     field: keyof ProfessionalIdentityV3['identity'],
@@ -78,6 +79,7 @@ export function ExtractionAgentCard({
   isGenerating,
   isScanning,
   uploadRef,
+  onRequestUpload,
   onSetIntakeMode,
   onSetSourceMaterial,
   onSetCorrectionNotes,
@@ -113,7 +115,7 @@ export function ExtractionAgentCard({
           <button
             className={`identity-btn ${intakeMode === 'upload' ? 'identity-btn-primary' : ''}`}
             type="button"
-            onClick={() => onSetIntakeMode('upload')}
+            onClick={onRequestUpload}
           >
             <ScanSearch size={16} />
             Upload Resume
@@ -149,16 +151,24 @@ export function ExtractionAgentCard({
 
       {intakeMode === 'upload' ? (
         <>
-          <button
+          <div
             className="identity-upload-zone"
-            type="button"
-            onClick={() => uploadRef.current?.click()}
+            role="button"
+            tabIndex={0}
+            onClick={onRequestUpload}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                onRequestUpload()
+              }
+            }}
+            onDragEnter={(event) => event.preventDefault()}
             onDragOver={(event) => event.preventDefault()}
             onDrop={(event) => void onDrop(event)}
           >
             <Upload size={22} aria-hidden="true" />
             <strong>{isScanning ? 'Scanning PDF…' : 'Drag a resume PDF here or click to browse'}</strong>
-          </button>
+          </div>
           <p className="identity-muted">
             Resume Scanner v1 is PDF-only and performs a local structural parse before any AI call. Use a
             text-based, single-column PDF. OCR and image-only resumes are out of scope for this pass.
