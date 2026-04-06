@@ -10,7 +10,7 @@ beforeEach(() => {
   useUiStore.setState({
     selectedVector: 'all',
     panelRatio: 0.45,
-    appearance: 'system',
+    appearance: 'light',
     backupRemindersEnabled: true,
     backupReminderIntervalDays: 7,
     backupReminderSnoozedUntil: null,
@@ -19,8 +19,8 @@ beforeEach(() => {
 })
 
 describe('uiStore', () => {
-  it('defaults to system appearance', () => {
-    expect(useUiStore.getState().appearance).toBe('system')
+  it('defaults to light appearance', () => {
+    expect(useUiStore.getState().appearance).toBe('light')
   })
 
   it('updates appearance', () => {

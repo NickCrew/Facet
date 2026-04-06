@@ -45,7 +45,7 @@ export const useUiStore = create<UiState>()(
     (set) => ({
       selectedVector: 'all',
       panelRatio: 0.45,
-      appearance: 'system',
+      appearance: 'light',
       viewMode: 'pdf',
       showHeatmap: false,
       showDesignHealth: false,
