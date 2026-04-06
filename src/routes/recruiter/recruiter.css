@@ -2,13 +2,21 @@
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   min-height: 100%;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 92%, var(--accent) 8%), var(--bg));
+  gap: var(--space-6);
+  padding: var(--space-6);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-primary) 92%, var(--accent-primary) 8%),
+    var(--bg-primary)
+  );
 }
 
 .recruiter-sidebar {
-  border-right: 1px solid var(--border);
-  padding: 1rem;
-  background: color-mix(in srgb, var(--panel) 94%, white 6%);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--bg-surface) 94%, white 6%);
+  box-shadow: var(--shadow-xs);
 }
 
 .recruiter-sidebar-header,
@@ -35,9 +43,9 @@
 .recruiter-card-button,
 .recruiter-btn,
 .recruiter-icon-btn {
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--text);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-primary);
   border-radius: 12px;
 }
 
@@ -49,28 +57,28 @@
 }
 
 .recruiter-card-button.active {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 55%, transparent);
 }
 
 .recruiter-card-button small {
-  color: var(--muted);
+  color: var(--text-secondary);
 }
 
 .recruiter-main {
-  padding: 1.5rem;
   display: grid;
-  gap: 1.25rem;
+  gap: var(--space-6);
 }
 
 .recruiter-panel,
 .recruiter-empty {
-  border: 1px solid var(--border);
-  background: var(--panel);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
   border-radius: 20px;
-  padding: 1.25rem;
+  padding: var(--space-6);
   display: grid;
-  gap: 1rem;
+  gap: var(--space-4);
+  box-shadow: var(--shadow-xs);
 }
 
 .recruiter-eyebrow {
@@ -78,13 +86,13 @@
   font-size: 0.8rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--accent-primary);
 }
 
 .recruiter-copy,
 .recruiter-note,
 .recruiter-empty-text {
-  color: var(--muted);
+  color: var(--text-secondary);
 }
 
 .recruiter-btn,
@@ -98,9 +106,9 @@
 }
 
 .recruiter-btn-primary {
-  background: var(--accent);
-  color: var(--accent-contrast);
-  border-color: color-mix(in srgb, var(--accent) 65%, black);
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+  border-color: color-mix(in srgb, var(--accent-primary) 65%, black);
 }
 
 .recruiter-icon-btn {
@@ -119,7 +127,8 @@
   gap: 0.75rem;
   padding: 0.85rem 1rem;
   border-radius: 14px;
-  background: color-mix(in srgb, var(--panel) 76%, var(--accent) 24%);
+  background: color-mix(in srgb, var(--bg-surface) 76%, var(--accent-primary) 24%);
+  color: var(--text-secondary);
 }
 
 .recruiter-grid {
@@ -140,16 +149,23 @@
 .recruiter-label {
   font-size: 0.9rem;
   font-weight: 600;
+  color: var(--text-secondary);
 }
 
 .recruiter-input,
 .recruiter-textarea {
   width: 100%;
   border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-primary);
   padding: 0.8rem 0.9rem;
+}
+
+.recruiter-input:focus,
+.recruiter-textarea:focus {
+  border-color: var(--accent-primary);
+  outline: none;
 }
 
 .recruiter-textarea {
@@ -164,11 +180,11 @@
 @media (max-width: 960px) {
   .recruiter-page {
     grid-template-columns: 1fr;
+    padding: var(--space-4);
   }
 
   .recruiter-sidebar {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border-subtle);
   }
 
   .recruiter-grid {

@@ -1,15 +1,20 @@
 .letters-page {
-  display: flex;
-  height: 100%;
-  overflow: hidden;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: var(--space-6);
+  min-height: 100%;
+  padding: var(--space-6);
+  background: var(--bg-primary);
 }
 
 .letters-sidebar {
-  width: 250px;
   background: var(--bg-surface);
-  border-right: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  box-shadow: var(--shadow-xs);
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .letters-sidebar-header {
@@ -104,10 +109,8 @@
 }
 
 .letters-main {
-  flex: 1;
+  min-width: 0;
   overflow-y: auto;
-  background: var(--bg-canvas);
-  padding: var(--space-6);
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
@@ -115,6 +118,7 @@
 
 .letters-generator {
   max-width: 800px;
+  width: 100%;
   margin: 0 auto;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -172,6 +176,7 @@
 
 .letters-editor {
   max-width: 800px;
+  width: 100%;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -356,7 +361,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
+  min-height: 320px;
+  max-width: 800px;
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--space-6);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-xs);
   color: var(--text-tertiary);
   font-size: 14px;
 }
@@ -371,13 +384,12 @@
 
 @media (max-width: 880px) {
   .letters-page {
-    flex-direction: column;
+    grid-template-columns: 1fr;
+    padding: var(--space-4);
   }
 
   .letters-sidebar {
     width: 100%;
-    border-right: none;
-    border-bottom: 1px solid var(--border-subtle);
     max-height: 220px;
   }
 
