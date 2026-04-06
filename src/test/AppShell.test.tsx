@@ -71,7 +71,7 @@ vi.mock('../utils/hostedApi', async () => {
   }
 })
 vi.mock('../components/FacetWordmark', () => ({
-  FacetGemMark: () => <span>Facet</span>,
+  FacetWordmark: () => <span>Facet</span>,
 }))
 vi.mock('../components/WorkspaceBackupReminder', () => ({
   WorkspaceBackupReminder: () => null,

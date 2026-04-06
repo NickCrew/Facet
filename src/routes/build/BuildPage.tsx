@@ -876,18 +876,7 @@ export function BuildPage() {
 
   return (
     <div className={`app-shell ${draggingSplit ? 'is-dragging' : ''}`}>
-      <header className="top-bar">
-        <div className="top-bar-brand">
-          <button
-            type="button"
-            className="brand btn-ghost"
-            onClick={() => setTourOpen(true)}
-            title="Restart Tour"
-          >
-            <FacetWordmark />
-          </button>
-          <p className="top-bar-tagline">AI-Powered Vector Resume</p>
-        </div>
+      <header className="top-bar top-bar--actions-only">
         <div className="top-bar-actions">
           <UndoRedoControls />
 

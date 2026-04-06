@@ -276,6 +276,10 @@ select {
   flex-shrink: 0;
 }
 
+.top-bar--actions-only {
+  justify-content: flex-end;
+}
+
 .top-bar-brand {
   display: flex;
   align-items: center;
@@ -306,14 +310,6 @@ select {
   font-size: 26px;
   letter-spacing: 0.5px;
   color: var(--text-primary);
-}
-
-.top-bar-tagline {
-  margin: 0;
-  color: var(--text-tertiary);
-  font-size: 11px;
-  font-family: var(--font-mono);
-  letter-spacing: 0.04em;
 }
 
 .top-bar-actions {
@@ -459,12 +455,6 @@ select {
 }
 
 /* ── Top-bar responsive ────────────────────────────── */
-
-@media (max-width: 1400px) {
-  .top-bar-tagline {
-    display: none;
-  }
-}
 
 @media (max-width: 1200px) {
   .top-bar-actions .btn-label {
@@ -3059,15 +3049,19 @@ select.component-input {
 .app-topbar-brand {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  color: var(--text-primary);
   text-decoration: none;
-  font-weight: 700;
-  letter-spacing: 0.01em;
 }
 
 .app-topbar-brand:hover {
-  color: var(--accent-primary);
+  opacity: 0.9;
+}
+
+.app-topbar-brand .facet-lockup {
+  gap: 8px;
+}
+
+.app-topbar-brand .facet-wordmark {
+  font-size: 28px;
 }
 
 .app-topbar-divider {
@@ -3096,7 +3090,7 @@ select.component-input {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 10px 14px;
+  padding: 8px 12px;
   border: 1px solid var(--border-default);
   border-radius: 999px;
   background: var(--bg-surface);
@@ -3246,7 +3240,7 @@ select.component-input {
     font-size: 18px;
   }
 
-  .app-topbar-brand span,
+  .app-topbar-brand .facet-wordmark,
   .app-topbar-divider {
     display: none;
   }

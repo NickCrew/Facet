@@ -32,7 +32,7 @@ import { isFacetApiError } from '../utils/facetApiErrors'
 import { getHostedPersistenceEndpoint } from '../utils/hostedApi'
 import { reloadPage } from '../utils/windowLocation'
 import { signInWithGitHub } from '../utils/hostedSession'
-import { FacetGemMark } from './FacetWordmark'
+import { FacetWordmark } from './FacetWordmark'
 import { HostedWorkspaceDialog } from './HostedWorkspaceDialog'
 import { WorkspaceBackupDialog } from './WorkspaceBackupDialog'
 import { WorkspaceBackupReminder } from './WorkspaceBackupReminder'
@@ -569,12 +569,11 @@ export function AppShell() {
         <header className="app-topbar">
           <div className="app-topbar-start">
             <Link to="/build" className="app-topbar-brand" aria-label="Facet home">
-              <FacetGemMark size={22} />
-              <span>Facet</span>
+              <FacetWordmark />
             </Link>
             <div className="app-topbar-divider" aria-hidden="true" />
             <div className="app-topbar-copy">
-              <h2 className="app-topbar-title">{currentNavLabel}</h2>
+              <h1 className="app-topbar-title">{currentNavLabel}</h1>
             </div>
           </div>
           <div className="app-topbar-actions">
