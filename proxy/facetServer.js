@@ -30,6 +30,9 @@ import {
   createFileHostedWorkspaceStore,
   createInMemoryHostedWorkspaceStore,
 } from './hostedWorkspaceStore.js'
+import { createPostgresWorkspaceStore } from './postgresWorkspaceStore.js'
+import { createPostgresBillingStore } from './postgresBillingStore.js'
+import pg from 'pg'
 
 const DEFAULT_MODEL = 'claude-sonnet-4-20250514'
 const DEFAULT_PROXY_API_KEY = 'facet-local-proxy'
@@ -958,9 +961,15 @@ export function createEnvFacetServer(env = process.env) {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean)
+  const hostedPool =
+    authMode === 'hosted' && env.DATABASE_URL
+      ? new pg.Pool({ connectionString: env.DATABASE_URL })
+      : null
   const hostedWorkspaceStore =
     authMode === 'hosted'
-      ? createFileHostedWorkspaceStore(env.HOSTED_WORKSPACE_FILE)
+      ? hostedPool
+        ? createPostgresWorkspaceStore(hostedPool)
+        : createFileHostedWorkspaceStore(env.HOSTED_WORKSPACE_FILE)
       : undefined
   const hostedAuth = authMode === 'hosted'
     ? {
@@ -983,7 +992,9 @@ export function createEnvFacetServer(env = process.env) {
     'http://localhost:5173'
   const billingStore =
     authMode === 'hosted'
-      ? createFileHostedBillingStore(env.HOSTED_BILLING_FILE)
+      ? hostedPool
+        ? createPostgresBillingStore(hostedPool)
+        : createFileHostedBillingStore(env.HOSTED_BILLING_FILE)
       : undefined
 
   if (authMode === 'hosted' && environment !== 'local') {
