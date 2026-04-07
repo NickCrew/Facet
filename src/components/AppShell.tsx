@@ -44,6 +44,7 @@ const AI_ROUTES: ReadonlySet<string> = new Set([
   '/identity', '/match', '/research', '/prep', '/letters', '/linkedin', '/debrief',
 ])
 const HELP_ROUTE = '/help' as const
+const HOME_ROUTE = '/' as const
 
 const NAV_ITEMS = [
   { to: '/build' as const, icon: Layers, label: 'Build' },
@@ -68,8 +69,9 @@ export function AppShell() {
   const routerState = useRouterState()
   const currentPath = routerState.location.pathname
   const isHelpRoute = isRouteActive(currentPath, HELP_ROUTE)
+  const isHomeRoute = currentPath === HOME_ROUTE
   const currentNavLabel =
-    NAV_ITEMS.find(({ to }) => isRouteActive(currentPath, to))?.label ??
+    (isHomeRoute ? 'Overview' : NAV_ITEMS.find(({ to }) => isRouteActive(currentPath, to))?.label) ??
     (isHelpRoute ? 'Help' : 'Facet')
   const [backupOpen, setBackupOpen] = useState(false)
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false)
@@ -568,7 +570,7 @@ export function AppShell() {
       <div className="app-content-column">
         <header className="app-topbar">
           <div className="app-topbar-start">
-            <Link to="/build" className="app-topbar-brand" aria-label="Facet home">
+            <Link to={HOME_ROUTE} className="app-topbar-brand" aria-label="Facet home">
               <FacetWordmark />
             </Link>
             <div className="app-topbar-divider" aria-hidden="true" />

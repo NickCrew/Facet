@@ -1,10 +1,11 @@
 import { lazy } from 'react'
-import { createRouter, createRootRoute, createRoute, redirect } from '@tanstack/react-router'
+import { createRouter, createRootRoute, createRoute } from '@tanstack/react-router'
 import { AppShell } from './components/AppShell'
 import { BuildPage } from './routes/build/BuildPage'
 import { PipelinePage } from './routes/pipeline/PipelinePage'
 import { RecruiterPage } from './routes/recruiter/RecruiterPage'
 
+const LazyHomePage = lazy(() => import('./routes/home/HomePage').then((m) => ({ default: m.HomePage })))
 // AI-dependent routes — lazy-loaded so they code-split into separate chunks
 const LazyIdentityPage = lazy(() => import('./routes/identity/IdentityPage').then((m) => ({ default: m.IdentityPage })))
 const LazyMatchPage = lazy(() => import('./routes/match/MatchPage').then((m) => ({ default: m.MatchPage })))
@@ -22,9 +23,7 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  beforeLoad: () => {
-    throw redirect({ to: '/build' })
-  },
+  component: LazyHomePage,
 })
 
 const buildRoute = createRoute({

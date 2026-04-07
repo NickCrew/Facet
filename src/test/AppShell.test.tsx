@@ -299,6 +299,23 @@ describe('AppShell hosted workspace bootstrap', () => {
     expect(screen.getByRole('button', { name: 'Theme: light' })).toBeTruthy()
   })
 
+  it('links the topbar brand to the landing page', () => {
+    setHostedStore({})
+    runtimeMocks.replacePersistenceRuntime.mockResolvedValue({
+      start: vi.fn(async () => {
+        setPersistenceHydration(true, 'ws-1')
+      }),
+      flush: vi.fn().mockResolvedValue(undefined),
+      exportWorkspaceSnapshot: vi.fn().mockResolvedValue(buildWorkspaceSnapshot()),
+      importWorkspaceSnapshot: vi.fn().mockResolvedValue(buildWorkspaceSnapshot()),
+      dispose: vi.fn(),
+    })
+
+    render(<AppShell />)
+
+    expect(screen.getByRole('link', { name: /facet home/i }).getAttribute('href')).toBe('/')
+  })
+
   it('blocks the editor and surfaces an error when the hosted runtime fails to load', async () => {
     setHostedStore({})
     setPersistenceHydration(true, 'ws-previous')
