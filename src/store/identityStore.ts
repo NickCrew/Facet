@@ -18,6 +18,11 @@ import { parseJsonWithRepair } from '../utils/jsonParsing'
 import { mergeProfessionalIdentity, replaceProfessionalIdentity } from '../utils/identityMerge'
 import { resolveStorage } from './storage'
 
+type EditableScannedProjectField = Extract<
+  keyof ProfessionalIdentityV3['projects'][number],
+  'name' | 'description' | 'url'
+>
+
 interface IdentityState {
   intakeMode: IdentityIntakeMode
   sourceMaterial: string
@@ -74,7 +79,7 @@ interface IdentityState {
   updateScannedSkillItemName: (groupIndex: number, itemIndex: number, value: string) => void
   updateScannedProjectEntry: (
     projectIndex: number,
-    field: 'name' | 'description' | 'url',
+    field: EditableScannedProjectField,
     value: string,
   ) => void
   updateScannedEducationEntry: (
@@ -284,6 +289,17 @@ const updateScanBulletById = (
       : role,
   ),
 })
+
+const normalizeScannedProjectFieldValue = (
+  field: EditableScannedProjectField,
+  value: string,
+): string | undefined => {
+  if (field === 'url' && !value.trim()) {
+    return undefined
+  }
+
+  return value
+}
 
 export const useIdentityStore = create<IdentityState>()(
   persist(
@@ -715,7 +731,7 @@ export const useIdentityStore = create<IdentityState>()(
               index === projectIndex
                 ? {
                     ...project,
-                    [field]: value,
+                    [field]: normalizeScannedProjectFieldValue(field, value),
                   }
                 : project,
             ),

@@ -151,6 +151,14 @@ describe('identityStore scan progress', () => {
     expect(state?.counts.projects).toBe(1)
   })
 
+  it('normalizes cleared scanned project urls back to undefined', () => {
+    useIdentityStore.getState().setScanResult(createScanResult())
+    useIdentityStore.getState().updateScannedProjectEntry(0, 'url', '   ')
+
+    const state = useIdentityStore.getState().scanResult
+    expect(state?.identity.projects[0]?.url).toBeUndefined()
+  })
+
   it('tracks failure, edit, and bulk cancellation state without clearing completed work', () => {
     useIdentityStore.getState().setScanResult(createScanResult())
     useIdentityStore.getState().startScanBulkDeepen()
