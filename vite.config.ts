@@ -8,6 +8,13 @@ export default defineConfig({
   worker: {
     format: 'es',
   },
+  // Explicitly forward VITE_ env vars for Vercel builds where
+  // import.meta.env may not pick them up automatically.
+  define: Object.fromEntries(
+    Object.entries(process.env)
+      .filter(([key]) => key.startsWith('VITE_'))
+      .map(([key, value]) => [`import.meta.env.${key}`, JSON.stringify(value)]),
+  ),
   build: {
     rollupOptions: {
       output: {

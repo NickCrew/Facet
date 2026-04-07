@@ -1,6 +1,6 @@
 {
   "framework": "vite",
-  "buildCommand": "rm -rf node_modules/.vite && pnpm run build",
+  "buildCommand": "pnpm run build",
   "outputDirectory": "dist",
   "installCommand": "pnpm install --frozen-lockfile"
 }
