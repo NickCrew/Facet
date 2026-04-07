@@ -19,12 +19,14 @@
 .home-hero {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.9fr);
-  gap: var(--space-5);
   align-items: stretch;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-xs);
+  border-radius: 28px;
+  overflow: hidden;
 }
 
-.home-hero-copy,
-.home-signal-panel,
 .home-cta-card,
 .home-flow-step,
 .home-output-card {
@@ -34,7 +36,6 @@
 }
 
 .home-hero-copy {
-  border-radius: 28px;
   padding: clamp(28px, 4vw, 48px);
   display: flex;
   flex-direction: column;
@@ -122,17 +123,19 @@
 }
 
 .home-signal-panel {
-  border-radius: 24px;
   padding: var(--space-4);
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
+  border-left: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-primary) 40%, var(--bg-surface));
 }
 
 .home-signal-card {
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--bg-primary) 30%, transparent);
-  padding: var(--space-4);
+  border-radius: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  padding: var(--space-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -250,6 +253,8 @@
 
   .home-signal-panel {
     grid-template-columns: 1fr 1fr;
+    border-left: none;
+    border-top: 1px solid var(--border-subtle);
   }
 }
 
@@ -259,8 +264,10 @@
     gap: var(--space-4);
   }
 
-  .home-hero-copy,
-  .home-signal-panel,
+  .home-hero {
+    border-radius: 18px;
+  }
+
   .home-cta-card,
   .home-flow-step,
   .home-output-card {
