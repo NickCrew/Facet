@@ -710,23 +710,45 @@ export const extractSkillGroups = (sections: ResumeSection[]): ParsedResumeSkill
 }
 
 const parseEducationEntry = (text: string): ParsedResumeEducation => {
-  const yearMatch = text.match(/\b(19|20)\d{2}(?:\s*[-–]\s*(?:19|20)\d{2})?\b/)
+  const normalizedText = normalizeWhitespace(
+    text.replace(
+      /\.\s+(?=(?:aas|bachelor|master|associate|doctor|phd|certificate|mba|b\.s\.|b\.a\.|m\.s\.)\b)/i,
+      ', ',
+    ),
+  )
+  const yearMatch = normalizedText.match(/\b(19|20)\d{2}(?:\s*[-–]\s*(?:19|20)\d{2})?\b/)
   const year = yearMatch?.[0]
-  const parts = text.split(/\s*[|•]\s*|,\s*/).map((entry) => normalizeWhitespace(entry)).filter(Boolean)
+  const textWithoutYear = year ? normalizeWhitespace(normalizedText.replace(year, ' ')) : normalizedText
+  const parts = textWithoutYear.split(/\s*[|•]\s*|,\s*/).map((entry) => normalizeWhitespace(entry)).filter(Boolean)
   const school =
     parts.find((entry) => /\b(university|college|institute|school)\b/i.test(entry)) ??
     parts[0] ??
     ''
-  const degree =
-    parts.find((entry) => DEGREE_PATTERN.test(entry)) ?? ''
+  const remaining = normalizeWhitespace(
+    textWithoutYear.startsWith(school)
+      ? textWithoutYear.slice(school.length)
+      : textWithoutYear.replace(school, ' '),
+  )
+  const locationMatch = remaining.match(/([A-Za-z .'-]+,\s*[A-Z]{2})(?=(?:\s*[|•,]|\.|$))/)
   const location =
-    parts.find(
+    normalizeWhitespace(locationMatch?.[1] ?? '') ||
+    (parts.find(
       (entry) =>
         entry !== school &&
-        entry !== degree &&
         entry !== year &&
         /\b[A-Z]{2}\b|remote|[A-Za-z]+,\s*[A-Z]{2}\b/.test(entry),
-    ) ?? ''
+    ) ??
+      '')
+  const degreeText = normalizeWhitespace(
+    remaining
+      .replace(location, ' ')
+      .replace(/^[,.;\s]+/, ' ')
+      .replace(/[|•]/g, ' '),
+  )
+  const degree =
+    (degreeText && DEGREE_PATTERN.test(degreeText) ? degreeText.replace(/[\s,.;]+$/g, '') : '') ||
+    parts.find((entry) => entry !== location && DEGREE_PATTERN.test(entry)) ||
+    ''
 
   return {
     school,

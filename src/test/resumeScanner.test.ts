@@ -999,6 +999,24 @@ describe('resumeScanner parser', () => {
     ])
   })
 
+  it('extracts location and degree from compact school-city-state education lines', () => {
+    const items: ResumeTextItem[] = [
+      ...buildLine('Education', 700),
+      ...buildLine('St. Petersburg College, Clearwater, FL. AAS, Computer Information Systems', 684),
+    ]
+
+    const sections = splitLinesIntoSections(groupTextItemsIntoLines(items))
+    const education = extractEducation(sections)
+
+    expect(education).toEqual([
+      {
+        school: 'St. Petersburg College',
+        location: 'Clearwater, FL',
+        degree: 'AAS, Computer Information Systems',
+      },
+    ])
+  })
+
   it('keeps sparse education entries when only the school name is present', () => {
     const items: ResumeTextItem[] = [
       ...buildLine('Education', 700),
