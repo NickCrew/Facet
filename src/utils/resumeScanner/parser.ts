@@ -746,7 +746,7 @@ export const extractEducation = (sections: ResumeSection[]): ParsedResumeEducati
 const parseProjectHeadingLine = (
   text: string,
 ): { name: string; description: string; url?: string } | null => {
-  const normalized = normalizeWhitespace(text)
+  const normalized = isBulletLine(text) ? cleanBulletText(text) : normalizeWhitespace(text)
   if (!normalized) {
     return null
   }

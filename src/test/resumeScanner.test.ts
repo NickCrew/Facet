@@ -944,6 +944,25 @@ describe('resumeScanner parser', () => {
     ])
   })
 
+  it('strips bullet prefixes from project names in project sections', () => {
+    const items: ResumeTextItem[] = [
+      ...buildLine('Projects', 700),
+      ...buildLine('• Cortex: AI development framework.', 684),
+      ...buildLine('Context orchestration for Claude Code and Codex.', 668),
+    ]
+
+    const parsed = parseResumeTextItems(items)
+
+    expect(parsed.identity.projects).toEqual([
+      {
+        id: 'cortex',
+        name: 'Cortex',
+        description: 'AI development framework. Context orchestration for Claude Code and Codex.',
+        tags: [],
+      },
+    ])
+  })
+
   it('throws a clear error for image-only or unreadable PDFs', () => {
     expect(() => parseResumeTextItems([])).toThrow(/image-only or unreadable/i)
   })
