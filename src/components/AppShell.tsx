@@ -594,6 +594,14 @@ export function AppShell() {
             <Cloud size={18} strokeWidth={1.5} />
             <span className="sidebar-nav-label">Backup</span>
           </button>
+          <Link
+            to="/help"
+            className={`sidebar-nav-item ${isHelpRoute ? 'active' : ''}`}
+            title="Help"
+          >
+            <HelpCircle size={18} strokeWidth={1.5} />
+            <span className="sidebar-nav-label">Help</span>
+          </Link>
         </div>
       </nav>
 
@@ -624,12 +632,11 @@ export function AppShell() {
             </div>
             <Link
               to={HELP_ROUTE}
-              className={`app-topbar-link ${isHelpRoute ? 'active' : ''}`}
+              className={`app-topbar-icon-link ${isHelpRoute ? 'active' : ''}`}
               aria-label="Help and docs"
               title="Help and docs"
             >
               <HelpCircle size={16} strokeWidth={1.75} />
-              <span>Docs</span>
             </Link>
             <Link
               to="/account"

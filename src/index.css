@@ -3130,10 +3130,34 @@ select.component-input {
   background: var(--bg-surface-hover);
 }
 
-.app-topbar-link.active {
+.app-topbar-link.active,
+.app-topbar-icon-link.active {
   border-color: color-mix(in srgb, var(--accent-primary) 55%, var(--border-default));
   background: var(--accent-primary-subtle);
   color: var(--accent-primary);
+}
+
+.app-topbar-icon-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--easing),
+    background var(--duration-fast) var(--easing),
+    color var(--duration-fast) var(--easing);
+}
+
+.app-topbar-icon-link:hover {
+  border-color: color-mix(in srgb, var(--accent-primary) 55%, var(--border-default));
+  background: var(--bg-surface-hover);
 }
 
 .app-topbar-link span,
