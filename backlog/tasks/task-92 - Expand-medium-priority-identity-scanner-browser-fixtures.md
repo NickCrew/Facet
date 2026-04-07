@@ -11,29 +11,29 @@ labels:
 dependencies: []
 references:
   - /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-020456.md
+  - /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022233.md
 priority: medium
 ---
 
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Deferred from test audit artifact /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-020456.md.
+Deferred from test audit artifacts /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-020456.md and /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022233.md.
 
 Remaining medium-severity browser acceptance gaps:
-- P2-001: multiple skill categories
-- P2-002: multiple education entries
-- P2-003: unicode and international characters
-- P2-004: role date format variations
-- P2-005: empty or non-resume PDF content
-- P2-006: current role bullet assertions are shallow
+- P2-001: multiple projects parsed
+- P2-002: multiple education entries parsed
+- P2-003: scanned fields remain user-editable after parse
+- P2-004: zero-byte or content-empty PDF handling
+- P2-005: scan persistence across route navigation
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The browser acceptance fixtures include multiple skill groups, multiple education entries, and role date variants.
-- [ ] #2 The suite covers non-ASCII content and verifies rendered values survive PDF extraction.
-- [ ] #3 The suite covers a valid but non-resume PDF and verifies the fallback/error behavior.
-- [ ] #4 The suite strengthens bullet assertions beyond a single hasText check.
+- [ ] #1 The browser acceptance fixtures include multiple projects and multiple education entries.
+- [ ] #2 The suite proves scanned fields remain editable after parsing.
+- [ ] #3 The suite covers zero-byte or content-empty PDF uploads and verifies graceful handling.
+- [ ] #4 The suite defines and verifies the expected scan persistence behavior across route navigation.
 <!-- AC:END -->
 
 ## Implementation Plan

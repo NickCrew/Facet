@@ -11,29 +11,28 @@ labels:
 dependencies: []
 references:
   - /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-020456.md
+  - /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022233.md
 priority: high
 ---
 
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Deferred from test audit artifact /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-020456.md.
+Deferred from test audit artifacts /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-020456.md and /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022233.md.
 
 Remaining high-priority browser acceptance gaps:
-- P1-001: re-uploading a different PDF without clearing first
-- P1-002: resume with missing optional sections
-- P1-003: multiple roles parsed and rendered correctly
-- P1-004: multiple bullet points per role preserve order
-- P1-005: initial page state before upload
+- P1-001: multiple roles parsed and rendered correctly
+- P1-002: multiple bullet points per role preserve order
+- P1-003: multiple skill groups parsed independently
+- P1-004: empty or minimally structured valid PDF handling
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The browser acceptance suite covers uploading a second PDF without clearing and verifies the first scan is fully replaced.
-- [ ] #2 The suite covers a resume with no projects or education and asserts the scanner renders only the available sections.
-- [ ] #3 The suite covers multiple roles and verifies role metadata is rendered for each role.
-- [ ] #4 The suite covers multiple bullets in one role and verifies bullet ordering.
-- [ ] #5 The suite verifies the initial /identity page state before any upload.
+- [ ] #1 The browser acceptance suite covers multiple roles and verifies role metadata is rendered for each role.
+- [ ] #2 The suite covers multiple bullets in one role and verifies bullet ordering.
+- [ ] #3 The suite covers multiple skill groups and verifies they render independently.
+- [ ] #4 The suite covers a valid PDF with no resume structure and verifies graceful fallback or empty-state behavior.
 <!-- AC:END -->
 
 ## Implementation Plan
