@@ -5,6 +5,8 @@ import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 
 const QPDF_BIN = process.env.QPDF_BIN ?? 'qpdf'
+const OVERSIZED_PDF_BYTES = 10 * 1024 * 1024 + 1
+const OVERLONG_PAGE_COUNT = 11
 
 const escapePdfText = (value: string): string =>
   value.replaceAll('\\', '\\\\').replaceAll('(', '\\(').replaceAll(')', '\\)')
@@ -204,6 +206,26 @@ const contactOnlyPdf = () =>
     'Tampa, FL',
   ])
 
+const oversizedPdf = () =>
+  Buffer.concat([
+    Buffer.from('%PDF-1.4\n%%EOF\n', 'utf8'),
+    Buffer.alloc(OVERSIZED_PDF_BYTES - Buffer.byteLength('%PDF-1.4\n%%EOF\n', 'utf8'), 0x20),
+  ])
+
+const tooManyPagesPdf = () =>
+  buildMultiPagePdf(
+    Array.from({ length: OVERLONG_PAGE_COUNT }, (_, index) =>
+      index === 0
+        ? [
+            'NICK FERGUSON',
+            'nick@atlascrew.dev',
+            'PROFESSIONAL EXPERIENCE',
+            'Senior Platform Engineer | A10 Networks | Feb 2025 - Mar 2026',
+          ]
+        : [`Page ${index + 1}`],
+    ),
+  )
+
 const unstructuredPdf = () =>
   buildPdf([
     'Meeting notes from Tuesday',
@@ -386,6 +408,21 @@ test('shows an error for circular-reference pdf uploads without rendering scanne
   await expect(page.locator('section.identity-scan-section')).toHaveCount(0)
 })
 
+test('shows an error for oversized pdf uploads before rendering scanned sections', async ({
+  page,
+}) => {
+  await page.goto('/identity')
+
+  await page.locator('input[type="file"][accept="application/pdf,.pdf"]').setInputFiles({
+    name: 'oversized.pdf',
+    mimeType: 'application/pdf',
+    buffer: oversizedPdf(),
+  })
+
+  await expect(page.getByRole('alert')).toContainText(/10 mb|smaller pdf|paste the resume text/i)
+  await expect(page.locator('section.identity-scan-section')).toHaveCount(0)
+})
+
 test('shows an error for password-protected pdf uploads without rendering scanned sections', async ({
   page,
 }) => {
@@ -400,6 +437,21 @@ test('shows an error for password-protected pdf uploads without rendering scanne
   await expect(page.getByRole('alert')).toContainText(
     /resume scan failed|password|encrypted|no password given|incorrect password/i,
   )
+  await expect(page.locator('section.identity-scan-section')).toHaveCount(0)
+})
+
+test('shows an error for pdfs that exceed the page-count limit without rendering scanned sections', async ({
+  page,
+}) => {
+  await page.goto('/identity')
+
+  await page.locator('input[type="file"][accept="application/pdf,.pdf"]').setInputFiles({
+    name: 'too-many-pages.pdf',
+    mimeType: 'application/pdf',
+    buffer: tooManyPagesPdf(),
+  })
+
+  await expect(page.getByRole('alert')).toContainText(/10 pages|shorter pdf|split the resume/i)
   await expect(page.locator('section.identity-scan-section')).toHaveCount(0)
 })
 
