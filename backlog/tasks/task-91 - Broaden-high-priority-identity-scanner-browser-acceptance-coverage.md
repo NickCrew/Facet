@@ -19,23 +19,26 @@ references:
   - /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-031956.md
   - /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-032434.md
   - /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-033156.md
+  - /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-033718.md
 priority: high
 ---
 
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Deferred from test audit artifacts /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-020456.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022233.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022611.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-023903.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-024540.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-031521.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-031956.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-032434.md, and /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-033156.md.
+Deferred from test audit artifacts /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-020456.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022233.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022611.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-023903.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-024540.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-031521.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-031956.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-032434.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-033156.md, and /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-033718.md.
 
 Remaining high-priority browser acceptance gaps:
 - P1-001: max file size limits for oversized PDF uploads
 - P1-002: network or server failure handling if scanning ever moves off the client path
+- P1-003: content bounds enforcement for pathological PDFs with extreme page or field counts
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 The suite covers oversized PDF rejection with an explicit user-facing error path.
 - [ ] #2 If the scanner path gains network dependencies, the suite covers backend failure recovery explicitly.
+- [ ] #3 The suite covers content-boundary protection for pathological PDFs, either by graceful rejection or truncation.
 <!-- AC:END -->
 
 ## Implementation Plan
