@@ -73,7 +73,24 @@ export function AppShell() {
   const isHomeRoute = currentPath === HOME_ROUTE
   const currentNavLabel =
     (isHomeRoute ? 'Overview' : NAV_ITEMS.find(({ to }) => isRouteActive(currentPath, to))?.label) ??
-    (isHelpRoute ? 'Help' : 'Facet')
+    (isHelpRoute ? 'Help' : isRouteActive(currentPath, '/account') ? 'Account' : 'Facet')
+
+  const entitlement = hostedApp.context?.entitlement ?? null
+  const accountLabel = useMemo(() => {
+    if (hostedApp.deploymentMode !== 'hosted') return 'Account'
+    if (!entitlement || entitlement.status === 'inactive') return 'Free'
+    if (entitlement.status === 'active' && entitlement.effectiveThrough) {
+      const daysLeft = Math.max(0, Math.ceil(
+        (new Date(entitlement.effectiveThrough).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+      ))
+      return daysLeft > 0 ? `Pro · ${daysLeft}d` : 'Expired'
+    }
+    if (entitlement.status === 'delinquent') return 'Billing issue'
+    if (entitlement.status === 'grace') return 'Grace'
+    if (entitlement.status === 'trial') return 'Trial'
+    return 'Pro'
+  }, [hostedApp.deploymentMode, entitlement])
+
   const [backupOpen, setBackupOpen] = useState(false)
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false)
   const [hostedRuntimePhase, setHostedRuntimePhase] = useState<
@@ -599,15 +616,15 @@ export function AppShell() {
               <HelpCircle size={16} strokeWidth={1.75} />
               <span>Docs</span>
             </Link>
-            <button
-              className="app-topbar-link"
-              type="button"
-              aria-label="Account placeholder"
-              title="Account controls coming soon"
+            <Link
+              to="/account"
+              className={`app-topbar-link ${isRouteActive(currentPath, '/account') ? 'active' : ''}`}
+              aria-label="Account"
+              title="Account and AI access"
             >
               <CircleUserRound size={16} strokeWidth={1.75} />
-              <span>Account</span>
-            </button>
+              <span>{accountLabel}</span>
+            </Link>
             <button
               className="app-topbar-theme-toggle"
               type="button"
