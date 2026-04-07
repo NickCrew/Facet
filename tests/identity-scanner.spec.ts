@@ -93,6 +93,13 @@ const multiBulletResumePdf = () =>
     '- Stabilized the third service.',
   ])
 
+const unstructuredPdf = () =>
+  buildPdf([
+    'Meeting notes from Tuesday',
+    'Follow up with the vendor about pricing',
+    'Risk review next week',
+  ])
+
 test('uploads, parses, clears, and rescans a resume PDF with projects and education', async ({
   page,
 }) => {
@@ -368,4 +375,22 @@ test('parses multiple bullets for a single role in source order', async ({ page 
   await expect(bulletSources.nth(0)).toHaveValue('Built the first platform.')
   await expect(bulletSources.nth(1)).toHaveValue('Automated the second workflow.')
   await expect(bulletSources.nth(2)).toHaveValue('Stabilized the third service.')
+})
+
+test('falls back to paste mode for a valid pdf with no recognizable resume structure', async ({
+  page,
+}) => {
+  await page.goto('/identity')
+
+  await page.locator('input[type="file"][accept="application/pdf,.pdf"]').setInputFiles({
+    name: 'meeting-notes.pdf',
+    mimeType: 'application/pdf',
+    buffer: unstructuredPdf(),
+  })
+
+  await expect(page.locator('section.identity-scan-section')).toHaveCount(0)
+  await expect(page.getByText(/role parsing did not|structural role parsing failed/i)).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Source Material' })).toHaveValue(
+    /Meeting notes from Tuesday[\s\S]*Follow up with the vendor about pricing[\s\S]*Risk review next week/,
+  )
 })
