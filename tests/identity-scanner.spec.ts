@@ -40,6 +40,52 @@ const buildPdf = (lines: string[]): Buffer => {
   return Buffer.from(pdf, 'utf8')
 }
 
+const buildMultiPagePdf = (pages: string[][]): Buffer => {
+  const fontObjectNumber = 3 + pages.length
+  const pageObjectNumbers = pages.map((_, index) => 3 + index)
+  const contentObjectNumbers = pages.map((_, index) => fontObjectNumber + 1 + index)
+  const objects = [
+    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
+    `2 0 obj\n<< /Type /Pages /Kids [${pageObjectNumbers.map((number) => `${number} 0 R`).join(' ')}] /Count ${pages.length} >>\nendobj\n`,
+    ...pageObjectNumbers.map(
+      (pageObjectNumber, index) =>
+        `${pageObjectNumber} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${fontObjectNumber} 0 R >> >> /Contents ${contentObjectNumbers[index]} 0 R >>\nendobj\n`,
+    ),
+    `${fontObjectNumber} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`,
+    ...pages.map((lines, index) => {
+      const content = [
+        'BT',
+        '/F1 12 Tf',
+        '14 TL',
+        '72 760 Td',
+        ...lines.flatMap((line, lineIndex) =>
+          lineIndex === 0 ? [`(${escapePdfText(line)}) Tj`] : ['T*', `(${escapePdfText(line)}) Tj`],
+        ),
+        'ET',
+      ].join('\n')
+
+      return `${contentObjectNumbers[index]} 0 obj\n<< /Length ${Buffer.byteLength(content, 'utf8')} >>\nstream\n${content}\nendstream\nendobj\n`
+    }),
+  ]
+
+  let pdf = '%PDF-1.4\n'
+  const offsets: number[] = []
+  for (const object of objects) {
+    offsets.push(Buffer.byteLength(pdf, 'utf8'))
+    pdf += object
+  }
+
+  const xrefOffset = Buffer.byteLength(pdf, 'utf8')
+  pdf += `xref\n0 ${objects.length + 1}\n`
+  pdf += '0000000000 65535 f \n'
+  for (const offset of offsets) {
+    pdf += `${offset.toString().padStart(10, '0')} 00000 n \n`
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`
+
+  return Buffer.from(pdf, 'utf8')
+}
+
 const sampleResumePdf = () =>
   buildPdf([
     'NICK FERGUSON',
@@ -91,6 +137,23 @@ const multiBulletResumePdf = () =>
     '- Built the first platform.',
     '- Automated the second workflow.',
     '- Stabilized the third service.',
+  ])
+
+const multiPageResumePdf = () =>
+  buildMultiPagePdf([
+    [
+      'NICK FERGUSON',
+      'nick@atlascrew.dev',
+      'PROFESSIONAL EXPERIENCE',
+      'Senior Platform Engineer | A10 Networks | Feb 2025 - Mar 2026',
+      '- Built the first platform.',
+    ],
+    [
+      'Projects',
+      'Facet: Vector-based job search platform.',
+      'Education',
+      'St. Petersburg College, Clearwater, FL. AAS, Computer Information Systems',
+    ],
   ])
 
 const unstructuredPdf = () =>
@@ -458,6 +521,30 @@ test('parses multiple bullets for a single role in source order', async ({ page 
   await expect(bulletSources.nth(0)).toHaveValue('Built the first platform.')
   await expect(bulletSources.nth(1)).toHaveValue('Automated the second workflow.')
   await expect(bulletSources.nth(2)).toHaveValue('Stabilized the third service.')
+})
+
+test('parses project and education content from the second page of a pdf', async ({ page }) => {
+  await page.goto('/identity')
+
+  const projectsSection = page
+    .locator('section.identity-scan-section')
+    .filter({ has: page.getByRole('heading', { name: 'Projects' }) })
+  const educationSection = page
+    .locator('section.identity-scan-section')
+    .filter({ has: page.getByRole('heading', { name: 'Education' }) })
+
+  await page.locator('input[type="file"][accept="application/pdf,.pdf"]').setInputFiles({
+    name: 'multi-page.pdf',
+    mimeType: 'application/pdf',
+    buffer: multiPageResumePdf(),
+  })
+
+  await expect(page.getByLabel('Projects: 1')).toBeVisible()
+  await expect(page.getByLabel('Education: 1')).toBeVisible()
+  await expect(projectsSection.locator('input[value="Facet"]')).toBeVisible()
+  await expect(projectsSection.locator('textarea')).toHaveValue('Vector-based job search platform.')
+  await expect(educationSection.locator('input[value="St. Petersburg College"]')).toBeVisible()
+  await expect(educationSection.locator('input[value="Clearwater, FL"]')).toBeVisible()
 })
 
 test('falls back to paste mode for a valid pdf with no recognizable resume structure', async ({
