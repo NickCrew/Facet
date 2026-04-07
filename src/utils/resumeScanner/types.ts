@@ -46,6 +46,12 @@ export interface ParsedResumeSkillGroup {
   items: string[]
 }
 
+export interface ParsedResumeProject {
+  name: string
+  description: string
+  url?: string
+}
+
 export interface ParsedResumeContact {
   name: string
   title?: string

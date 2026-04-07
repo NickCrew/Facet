@@ -904,6 +904,46 @@ describe('resumeScanner parser', () => {
     ])
   })
 
+  it('extracts project entries from a projects section into identity projects', () => {
+    const items: ResumeTextItem[] = [
+      ...buildLine('P R O J E C T S', 700),
+      ...buildLine('atlascrew.dev', 684),
+      ...buildLine('Open source projects I created and actively maintain.', 668),
+      ...buildLine('Inferno Lab: Security testing, simulation, and education platform.', 636),
+      ...buildLine('Apparatus (58+ feature simulation lab), Chimera (450+ endpoint training platform across 22 verticals), and Crucible (enterprise attack validation with MITRE ATT&CK mapping and compliance reporting).', 620),
+      ...buildLine('Cortex: AI development framework.', 588),
+      ...buildLine('Context orchestration for Claude Code, Codex, and Gemini. 90+ skills, intelligent recommendation engine, memory vault, and a Python CLI/TUI.', 572),
+      ...buildLine('Facet: Vector-based job search platform.', 540),
+      ...buildLine('Targeted resume generation with Typst WASM rendering, pipeline tracking, AI-powered interview prep and cover letters. React 19, TypeScript, Zustand, TanStack Router.', 524),
+    ]
+
+    const parsed = parseResumeTextItems(items)
+
+    expect(parsed.identity.projects).toEqual([
+      {
+        id: 'inferno-lab',
+        name: 'Inferno Lab',
+        description:
+          'Security testing, simulation, and education platform. Apparatus (58+ feature simulation lab), Chimera (450+ endpoint training platform across 22 verticals), and Crucible (enterprise attack validation with MITRE ATT&CK mapping and compliance reporting).',
+        tags: [],
+      },
+      {
+        id: 'cortex',
+        name: 'Cortex',
+        description:
+          'AI development framework. Context orchestration for Claude Code, Codex, and Gemini. 90+ skills, intelligent recommendation engine, memory vault, and a Python CLI/TUI.',
+        tags: [],
+      },
+      {
+        id: 'facet',
+        name: 'Facet',
+        description:
+          'Vector-based job search platform. Targeted resume generation with Typst WASM rendering, pipeline tracking, AI-powered interview prep and cover letters. React 19, TypeScript, Zustand, TanStack Router.',
+        tags: [],
+      },
+    ])
+  })
+
   it('throws a clear error for image-only or unreadable PDFs', () => {
     expect(() => parseResumeTextItems([])).toThrow(/image-only or unreadable/i)
   })

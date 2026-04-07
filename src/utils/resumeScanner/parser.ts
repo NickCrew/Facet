@@ -3,6 +3,7 @@ import type { ResumeScanResult, ResumeScanWarning } from '../../types/identity'
 import type {
   ParsedResumeContact,
   ParsedResumeEducation,
+  ParsedResumeProject,
   ParsedResumeRole,
   ParsedResumeSkillGroup,
   ResumeLine,
@@ -742,6 +743,66 @@ export const extractEducation = (sections: ResumeSection[]): ParsedResumeEducati
     .filter((entry) => entry.school || entry.degree)
 }
 
+const parseProjectHeadingLine = (
+  text: string,
+): { name: string; description: string; url?: string } | null => {
+  const normalized = normalizeWhitespace(text)
+  if (!normalized) {
+    return null
+  }
+
+  const colonIndex = normalized.indexOf(':')
+  if (colonIndex <= 0 || colonIndex > 80) {
+    return null
+  }
+
+  const name = normalizeWhitespace(normalized.slice(0, colonIndex))
+  const description = normalizeWhitespace(normalized.slice(colonIndex + 1))
+  if (!name || !description) {
+    return null
+  }
+
+  const links = parseLinks(normalized)
+  return {
+    name,
+    description,
+    ...(links[0] ? { url: links[0].url } : {}),
+  }
+}
+
+export const extractProjects = (sections: ResumeSection[]): ParsedResumeProject[] => {
+  const lines = sections.find((section) => section.key === 'projects')?.lines ?? []
+  const projects: ParsedResumeProject[] = []
+  let currentProject: ParsedResumeProject | null = null
+
+  for (const line of lines) {
+    const text = normalizeWhitespace(line.text)
+    if (!text) {
+      continue
+    }
+
+    const projectHeading = parseProjectHeadingLine(text)
+    if (projectHeading) {
+      currentProject = {
+        name: projectHeading.name,
+        description: projectHeading.description,
+        ...(projectHeading.url ? { url: projectHeading.url } : {}),
+      }
+      projects.push(currentProject)
+      continue
+    }
+
+    if (!currentProject) {
+      continue
+    }
+
+    const continuation = isBulletLine(text) ? cleanBulletText(text) : text
+    currentProject.description = normalizeWhitespace(`${currentProject.description} ${continuation}`)
+  }
+
+  return projects.filter((project) => project.name && project.description)
+}
+
 const createEmptyIdentity = (): ProfessionalIdentityV3 => ({
   version: 3,
   identity: {
@@ -800,11 +861,13 @@ const createWarning = (
 const toIdentity = ({
   contact,
   roles,
+  projects,
   skills,
   education,
 }: {
   contact: ParsedResumeContact
   roles: ParsedResumeRole[]
+  projects: ParsedResumeProject[]
   skills: ParsedResumeSkillGroup[]
   education: ParsedResumeEducation[]
 }): ProfessionalIdentityV3 => {
@@ -849,6 +912,14 @@ const toIdentity = ({
     })),
   }))
 
+  identity.projects = projects.map((project, projectIndex) => ({
+    id: slugify(project.name) || `project-${projectIndex + 1}`,
+    name: project.name,
+    ...(project.url ? { url: project.url } : {}),
+    description: project.description,
+    tags: [],
+  }))
+
   identity.education = education
 
   return identity
@@ -880,6 +951,7 @@ export const parseResumeTextItems = (items: ResumeTextItem[]): {
 
   const contact = extractContact(sections)
   const roles = extractRoles(sections)
+  const projects = extractProjects(sections)
   const skills = extractSkillGroups(sections)
   const education = extractEducation(sections)
 
@@ -923,7 +995,7 @@ export const parseResumeTextItems = (items: ResumeTextItem[]): {
   }
 
   return {
-    identity: toIdentity({ contact, roles, skills, education }),
+    identity: toIdentity({ contact, roles, projects, skills, education }),
     rawText,
     warnings,
     layout,
