@@ -609,14 +609,18 @@ export function AppShell() {
             </div>
           </div>
           <div className="app-topbar-actions">
+            {displayedHostedWorkspace ? (
+              <span className="app-topbar-workspace" title={displayedHostedWorkspace.workspaceId}>
+                {displayedHostedWorkspace.name}
+              </span>
+            ) : null}
             <div
               className={`app-topbar-sync app-topbar-sync-${syncTone}`}
               role="status"
               aria-live="polite"
-              title={persistenceState.status.lastSavedAt ?? undefined}
+              title={`Sync: ${syncLabel}${persistenceState.status.lastSavedAt ? ` — ${persistenceState.status.lastSavedAt}` : ''}`}
             >
               <span className="app-topbar-sync-dot" aria-hidden="true" />
-              <span>{syncLabel}</span>
             </div>
             <Link
               to={HELP_ROUTE}
@@ -659,25 +663,7 @@ export function AppShell() {
         <WorkspaceBackupReminder onOpenBackup={() => setBackupOpen(true)} />
         <footer className="app-footer">
           <span>&copy; {CURRENT_YEAR} Nicholas Crew Ferguson</span>
-          {displayedHostedWorkspace ? (
-            <span title={displayedHostedWorkspace.workspaceId}>
-              Workspace: {displayedHostedWorkspace.name}
-            </span>
-          ) : null}
           <nav className="app-footer-links" aria-label="Footer links">
-            {hostedApp.deploymentMode === 'hosted' ? (
-              <button
-                type="button"
-                className="app-footer-link-button"
-                onClick={() => setWorkspaceDialogOpen(true)}
-              >
-                Workspaces
-              </button>
-            ) : null}
-            <button type="button" className="app-footer-link-button" onClick={() => setBackupOpen(true)}>
-              Backup
-            </button>
-            <Link to="/help">Docs</Link>
             <a href="https://github.com/NickCrew/Facet" target="_blank" rel="noopener noreferrer">
               GitHub
             </a>

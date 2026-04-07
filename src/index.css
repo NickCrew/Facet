@@ -3142,6 +3142,12 @@ select.component-input {
   font-weight: 600;
 }
 
+.app-topbar-workspace {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
 .app-topbar-sync {
   color: var(--text-secondary);
 }
