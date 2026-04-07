@@ -71,6 +71,17 @@ const alternateResumePdf = () =>
     'Orbit: Internal developer portal.',
   ])
 
+const multiRoleResumePdf = () =>
+  buildPdf([
+    'NICK FERGUSON',
+    'nick@atlascrew.dev',
+    'PROFESSIONAL EXPERIENCE',
+    'Senior Platform Engineer | A10 Networks | Feb 2025 - Mar 2026',
+    '- Built the first platform.',
+    'Platform Engineer | ThreatX | Jan 2022 - Feb 2025',
+    '- Scaled the second platform.',
+  ])
+
 test('uploads, parses, clears, and rescans a resume PDF with projects and education', async ({
   page,
 }) => {
@@ -303,4 +314,26 @@ test('preserves encoded payloads as inert scanned values', async ({ page }) => {
     '＜script＞alert(1)＜/script＞ café 東京',
   )
   expect(dialogSeen).toBe(false)
+})
+
+test('parses multiple roles from a single resume pdf', async ({ page }) => {
+  await page.goto('/identity')
+
+  const rolesSection = page
+    .locator('section.identity-scan-section')
+    .filter({ has: page.getByRole('heading', { name: 'Roles' }) })
+
+  await page.locator('input[type="file"][accept="application/pdf,.pdf"]').setInputFiles({
+    name: 'multi-role.pdf',
+    mimeType: 'application/pdf',
+    buffer: multiRoleResumePdf(),
+  })
+
+  await expect(page.getByLabel('Roles: 2')).toBeVisible()
+  await expect(rolesSection.locator('input[value="A10 Networks"]')).toBeVisible()
+  await expect(rolesSection.locator('input[value="Senior Platform Engineer"]')).toBeVisible()
+  await expect(rolesSection.locator('input[value="Feb 2025 - Mar 2026"]')).toBeVisible()
+  await expect(rolesSection.locator('input[value="ThreatX"]')).toBeVisible()
+  await expect(rolesSection.locator('input[value="Platform Engineer"]')).toBeVisible()
+  await expect(rolesSection.locator('input[value="Jan 2022 - Feb 2025"]')).toBeVisible()
 })
