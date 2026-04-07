@@ -1,4 +1,6 @@
 {
-  "buildCommand": "echo VITE_FACET_DEPLOYMENT_MODE=$VITE_FACET_DEPLOYMENT_MODE && pnpm run build",
-  "outputDirectory": "dist"
+  "framework": "vite",
+  "buildCommand": "rm -rf node_modules/.vite && pnpm run build",
+  "outputDirectory": "dist",
+  "installCommand": "pnpm install --frozen-lockfile"
 }
