@@ -53,12 +53,12 @@ const LOCATION_LINE_PATTERN = new RegExp(
   `^(?:${WORK_MODEL_SOURCE}|${LOCATION_CORE_SOURCE}|${LOCATION_CORE_SOURCE}\\s*(?:\\(\\s*${WORK_MODEL_SOURCE}\\s*\\)|[-–—]\\s*${WORK_MODEL_SOURCE})|${WORK_MODEL_SOURCE}\\s*[-–—]\\s*${LOCATION_CORE_SOURCE})$`,
   'i',
 )
-const SECTION_HEADINGS: Array<[ResumeSection['key'], RegExp]> = [
-  ['experience', /^(experience|professional experience|work experience|employment|career history)$/i],
-  ['skills', /^(skills|technical skills|core competencies|technologies|tooling)$/i],
-  ['education', /^(education|academic background|academic history)$/i],
-  ['summary', /^(summary|profile|professional summary|about)$/i],
-  ['projects', /^(projects|selected projects)$/i],
+const SECTION_HEADINGS: Array<[ResumeSection['key'], string[]]> = [
+  ['experience', ['experience', 'professional experience', 'work experience', 'employment', 'career history']],
+  ['skills', ['skills', 'technical skills', 'core competencies', 'technologies', 'tooling']],
+  ['education', ['education', 'academic background', 'academic history']],
+  ['summary', ['summary', 'profile', 'professional summary', 'about']],
+  ['projects', ['projects', 'selected projects']],
 ]
 
 const slugify = (value: string): string =>
@@ -189,9 +189,15 @@ const identifySection = (text: string): ResumeSection['key'] | null => {
     .replace(/[^a-z0-9 ]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+  const compact = normalized.replace(/\s+/g, '')
 
-  for (const [key, pattern] of SECTION_HEADINGS) {
-    if (pattern.test(normalized)) {
+  for (const [key, aliases] of SECTION_HEADINGS) {
+    if (
+      aliases.some((alias) => {
+        const normalizedAlias = alias.toLowerCase().trim()
+        return normalized === normalizedAlias || compact === normalizedAlias.replace(/\s+/g, '')
+      })
+    ) {
       return key
     }
   }

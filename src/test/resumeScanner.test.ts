@@ -847,6 +847,37 @@ describe('resumeScanner parser', () => {
     ])
   })
 
+  it('detects spaced multi-word section headings for professional experience and core competencies', () => {
+    const items: ResumeTextItem[] = [
+      ...buildLine('C O R E C O M P E T E N C I E S', 720),
+      ...buildLine('Languages: TypeScript, Rust, Python', 704),
+      ...buildLine('P R O F E S S I O N A L E X P E R I E N C E', 672),
+      ...buildLine('Senior Platform Engineer | A10 Networks | Feb 2025 - Mar 2026', 656),
+      ...buildLine('• Ported the platform to Kubernetes-based installs.', 640),
+    ]
+
+    const sections = splitLinesIntoSections(groupTextItemsIntoLines(items))
+    const roles = extractRoles(sections)
+    const skillGroups = extractSkillGroups(sections)
+
+    expect(sections.map((section) => section.key)).toEqual([
+      'header',
+      'skills',
+      'experience',
+    ])
+    expect(skillGroups).toEqual([
+      { label: 'Languages', items: ['TypeScript', 'Rust', 'Python'] },
+    ])
+    expect(roles).toEqual([
+      {
+        company: 'A10 Networks',
+        title: 'Senior Platform Engineer',
+        dates: 'Feb 2025 - Mar 2026',
+        bullets: ['Ported the platform to Kubernetes-based installs.'],
+      },
+    ])
+  })
+
   it('throws a clear error for image-only or unreadable PDFs', () => {
     expect(() => parseResumeTextItems([])).toThrow(/image-only or unreadable/i)
   })
