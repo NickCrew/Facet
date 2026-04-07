@@ -15,6 +15,8 @@ const LazyLettersPage = lazy(() => import('./routes/letters/LettersPage').then((
 const LazyLinkedInPage = lazy(() => import('./routes/linkedin/LinkedInPage').then((m) => ({ default: m.LinkedInPage })))
 const LazyDebriefPage = lazy(() => import('./routes/debrief/DebriefPage').then((m) => ({ default: m.DebriefPage })))
 const LazyAccountPage = lazy(() => import('./routes/account/AccountPage').then((m) => ({ default: m.AccountPage })))
+const LazyTermsPage = lazy(() => import('./routes/legal/TermsPage').then((m) => ({ default: m.TermsPage })))
+const LazyPrivacyPage = lazy(() => import('./routes/legal/PrivacyPage').then((m) => ({ default: m.PrivacyPage })))
 const LazyHelpPage = lazy(() => import('./routes/help/HelpPage').then((m) => ({ default: m.HelpPage })))
 
 const rootRoute = createRootRoute({
@@ -98,6 +100,18 @@ const accountRoute = createRoute({
   component: LazyAccountPage,
 })
 
+const termsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/terms',
+  component: LazyTermsPage,
+})
+
+const privacyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/privacy',
+  component: LazyPrivacyPage,
+})
+
 const helpRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/help',
@@ -117,6 +131,8 @@ const routeTree = rootRoute.addChildren([
   recruiterRoute,
   debriefRoute,
   accountRoute,
+  termsRoute,
+  privacyRoute,
   helpRoute,
 ])
 

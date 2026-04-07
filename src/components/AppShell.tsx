@@ -673,6 +673,8 @@ export function AppShell() {
             <a href="https://github.com/NickCrew/Facet/issues" target="_blank" rel="noopener noreferrer">
               Report an Issue
             </a>
+            <Link to="/terms">Terms</Link>
+            <Link to="/privacy">Privacy</Link>
           </nav>
         </footer>
       </div>
