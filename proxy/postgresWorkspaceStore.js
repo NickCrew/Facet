@@ -11,7 +11,7 @@
 import { randomUUID } from 'node:crypto'
 
 const FACET_WORKSPACE_SNAPSHOT_VERSION = 1
-const FACET_ARTIFACT_TYPES = ['resume', 'pipeline', 'prep', 'coverLetters', 'research']
+const FACET_ARTIFACT_TYPES = ['resume', 'pipeline', 'prep', 'coverLetters', 'research', 'linkedin', 'recruiter', 'debrief']
 
 // ── Validation (mirrors hostedWorkspaceStore.js) ──────────────
 
@@ -78,6 +78,15 @@ function createEmptySnapshot(actor, workspaceId, workspaceName, timestamp) {
           break
         case 'research':
           payload = { profile: null, requests: [], runs: [] }
+          break
+        case 'linkedin':
+          payload = { drafts: [] }
+          break
+        case 'recruiter':
+          payload = { cards: [] }
+          break
+        case 'debrief':
+          payload = { sessions: [] }
           break
         default:
           payload = {}

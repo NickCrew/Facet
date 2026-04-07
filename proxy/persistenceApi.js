@@ -6,6 +6,9 @@ const FACET_ARTIFACT_TYPES = [
   'prep',
   'coverLetters',
   'research',
+  'linkedin',
+  'recruiter',
+  'debrief',
 ]
 
 export const DEFAULT_PERSISTENCE_AUTH_TOKENS = [
@@ -188,6 +191,21 @@ function assertValidArtifactPayload(artifactType, payload) {
         !Array.isArray(payload.runs)
       ) {
         throw new Error('Workspace snapshot has invalid artifacts.research.payload shape.')
+      }
+      break
+    case 'linkedin':
+      if (!Array.isArray(payload.drafts)) {
+        throw new Error('Workspace snapshot has invalid artifacts.linkedin.payload.drafts.')
+      }
+      break
+    case 'recruiter':
+      if (!Array.isArray(payload.cards)) {
+        throw new Error('Workspace snapshot has invalid artifacts.recruiter.payload.cards.')
+      }
+      break
+    case 'debrief':
+      if (!Array.isArray(payload.sessions)) {
+        throw new Error('Workspace snapshot has invalid artifacts.debrief.payload.sessions.')
       }
       break
     default: {
