@@ -28,16 +28,12 @@ priority: medium
 Deferred from test audit artifacts /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-020456.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022233.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022611.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-023903.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-031521.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-031956.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-032434.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-033156.md, and /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-033718.md.
 
 Remaining medium-severity browser acceptance gaps:
-- P2-001: loading-state and disabled-input assertions during scan
-- P2-002: concurrent or rapid upload race handling
-- P2-003: extremely long parsed values do not destabilize the UI
+- P2-001: concurrent or rapid upload race handling
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The suite asserts visible loading-state behavior while a scan is in progress.
-- [ ] #2 The suite covers rapid re-uploads while an earlier scan is still in flight.
-- [ ] #3 The suite covers very long parsed values without crashing or breaking core form rendering.
+- [ ] #1 The suite covers rapid re-uploads while an earlier scan is still in flight.
 <!-- AC:END -->
 
 ## Implementation Plan
