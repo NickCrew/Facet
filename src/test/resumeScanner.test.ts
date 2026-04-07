@@ -714,6 +714,55 @@ describe('resumeScanner parser', () => {
     expect(parsed.identity.education).toEqual([])
   })
 
+  it('extracts roles from unlabeled experience blocks after a summary section', () => {
+    const items: ResumeTextItem[] = [
+      ...buildLine('Nick Ferguson', 760),
+      ...buildLine('Platform Engineer', 744),
+      ...buildLine('Summary', 712),
+      ...buildLine('I build delivery systems for product teams.', 696),
+      ...buildLine('Senior Platform Engineer | A10 Networks | Feb 2025 - Mar 2026', 664),
+      ...buildLine('• Ported the platform to Kubernetes-based installs.', 648),
+    ]
+
+    const parsed = parseResumeTextItems(items)
+
+    expect(parsed.warnings.map((warning) => warning.code)).not.toContain('role-parse-fallback')
+    expect(parsed.identity.roles).toEqual([
+      expect.objectContaining({
+        company: 'A10 Networks',
+        title: 'Senior Platform Engineer',
+        dates: 'Feb 2025 - Mar 2026',
+        bullets: [
+          expect.objectContaining({
+            source_text: 'Ported the platform to Kubernetes-based installs.',
+          }),
+        ],
+      }),
+    ])
+  })
+
+  it('extracts stacked role headers that split title, company, and dates across lines', () => {
+    const items: ResumeTextItem[] = [
+      ...buildLine('Experience', 700),
+      ...buildLine('Senior Platform Engineer', 684),
+      ...buildLine('A10 Networks', 668),
+      ...buildLine('Feb 2025 - Mar 2026', 652),
+      ...buildLine('• Ported the platform to Kubernetes-based installs.', 636),
+    ]
+
+    const sections = splitLinesIntoSections(groupTextItemsIntoLines(items))
+    const roles = extractRoles(sections)
+
+    expect(roles).toEqual([
+      {
+        company: 'A10 Networks',
+        title: 'Senior Platform Engineer',
+        dates: 'Feb 2025 - Mar 2026',
+        bullets: ['Ported the platform to Kubernetes-based installs.'],
+      },
+    ])
+  })
+
   it('throws a clear error for image-only or unreadable PDFs', () => {
     expect(() => parseResumeTextItems([])).toThrow(/image-only or unreadable/i)
   })

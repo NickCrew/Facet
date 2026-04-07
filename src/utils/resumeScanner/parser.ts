@@ -277,6 +277,9 @@ const isLikelyRoleKeyword = (value: string): boolean => ROLE_KEYWORD_PATTERN.tes
 
 const endsWithRoleKeyword = (value: string): boolean => ROLE_KEYWORD_END_PATTERN.test(value.trim())
 
+const looksLikeContactDetail = (value: string): boolean =>
+  EMAIL_PATTERN.test(value) || PHONE_PATTERN.test(value) || URL_TEST_PATTERN.test(value)
+
 const trimRoleSeparators = (value: string): string =>
   normalizeWhitespace(value.replace(/^[|•–—-]+\s*|\s*[|•–—-]+$/g, ''))
 
@@ -434,18 +437,60 @@ const parseRoleHeader = (
   }
 }
 
-export const extractRoles = (sections: ResumeSection[]): ParsedResumeRole[] => {
-  const lines =
-    sections.find((section) => section.key === 'experience')?.lines ??
-    sections.find((section) => section.key === 'projects')?.lines ??
-    []
+const parseStackedRoleHeader = (
+  line: string,
+  nextLine?: string,
+  followingLine?: string,
+): { company: string; title: string; dates: string; consumedLines: number } | null => {
+  const title = normalizeWhitespace(line)
+  const companyCandidate = normalizeWhitespace(nextLine ?? '')
+  const followingCandidate = normalizeWhitespace(followingLine ?? '')
 
+  if (!title || !endsWithRoleKeyword(title)) {
+    return null
+  }
+
+  if (!companyCandidate || isBulletLine(companyCandidate) || looksLikeContactDetail(companyCandidate)) {
+    return null
+  }
+
+  if (identifySection(companyCandidate)) {
+    return null
+  }
+
+  if (looksLikeRoleHeader(companyCandidate) && !FULL_DATE_SEGMENT_PATTERN.test(companyCandidate)) {
+    return null
+  }
+
+  if (FULL_DATE_SEGMENT_PATTERN.test(companyCandidate)) {
+    return {
+      title,
+      company: '',
+      dates: companyCandidate,
+      consumedLines: 1,
+    }
+  }
+
+  if (followingCandidate && FULL_DATE_SEGMENT_PATTERN.test(followingCandidate)) {
+    return {
+      title,
+      company: companyCandidate,
+      dates: followingCandidate,
+      consumedLines: 2,
+    }
+  }
+
+  return null
+}
+
+const extractRolesFromLines = (lines: ResumeLine[]): ParsedResumeRole[] => {
   const roles: ParsedResumeRole[] = []
   let currentRole: ParsedResumeRole | null = null
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index]
     const nextLine = lines[index + 1]?.text
+    const followingLine = lines[index + 2]?.text
     const text = line.text
     if (!text) {
       continue
@@ -468,6 +513,19 @@ export const extractRoles = (sections: ResumeSection[]): ParsedResumeRole[] => {
       continue
     }
 
+    const stackedHeader = parseStackedRoleHeader(text, nextLine, followingLine)
+    if (stackedHeader) {
+      currentRole = {
+        company: stackedHeader.company,
+        title: stackedHeader.title,
+        dates: stackedHeader.dates,
+        bullets: [],
+      }
+      roles.push(currentRole)
+      index += stackedHeader.consumedLines
+      continue
+    }
+
     if (isBulletLine(text) && currentRole) {
       currentRole.bullets.push(cleanBulletText(text))
       continue
@@ -482,6 +540,24 @@ export const extractRoles = (sections: ResumeSection[]): ParsedResumeRole[] => {
   }
 
   return roles.filter((role) => role.company || role.title || role.bullets.length > 0)
+}
+
+export const extractRoles = (sections: ResumeSection[]): ParsedResumeRole[] => {
+  const primaryLines =
+    sections.find((section) => section.key === 'experience')?.lines ??
+    sections.find((section) => section.key === 'projects')?.lines ??
+    []
+
+  const primaryRoles = extractRolesFromLines(primaryLines)
+  if (primaryRoles.length > 0) {
+    return primaryRoles
+  }
+
+  const fallbackLines = sections
+    .filter((section) => section.key !== 'skills' && section.key !== 'education')
+    .flatMap((section) => section.lines)
+
+  return extractRolesFromLines(fallbackLines)
 }
 
 const splitSkillItems = (value: string): string[] =>
