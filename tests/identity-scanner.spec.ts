@@ -1,5 +1,10 @@
-import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
+
+const QPDF_BIN = process.env.QPDF_BIN ?? 'qpdf'
 
 const escapePdfText = (value: string): string =>
   value.replaceAll('\\', '\\\\').replaceAll('(', '\\(').replaceAll(')', '\\)')
@@ -155,6 +160,29 @@ const multiPageResumePdf = () =>
       'St. Petersburg College, Clearwater, FL. AAS, Computer Information Systems',
     ],
   ])
+
+const encryptedResumePdf = () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'facet-scanner-encrypted-'))
+  const inputPath = join(tempDir, 'resume.pdf')
+  const outputPath = join(tempDir, 'resume.locked.pdf')
+
+  try {
+    writeFileSync(
+      inputPath,
+      buildPdf([
+        'NICK FERGUSON',
+        'nick@atlascrew.dev',
+        'PROFESSIONAL EXPERIENCE',
+        'Senior Platform Engineer | A10 Networks | Feb 2025 - Mar 2026',
+        '- Built the first platform.',
+      ]),
+    )
+    execFileSync(QPDF_BIN, ['--encrypt', 'userpass', 'ownerpass', '256', '--', inputPath, outputPath])
+    return readFileSync(outputPath)
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true })
+  }
+}
 
 const unstructuredPdf = () =>
   buildPdf([
@@ -334,6 +362,23 @@ test('shows an error for circular-reference pdf uploads without rendering scanne
 
   await expect(page.getByRole('alert')).toContainText(
     /resume scan failed|circular reference|pages tree contains circular reference|invalid pdf/i,
+  )
+  await expect(page.locator('section.identity-scan-section')).toHaveCount(0)
+})
+
+test('shows an error for password-protected pdf uploads without rendering scanned sections', async ({
+  page,
+}) => {
+  await page.goto('/identity')
+
+  await page.locator('input[type="file"][accept="application/pdf,.pdf"]').setInputFiles({
+    name: 'locked.pdf',
+    mimeType: 'application/pdf',
+    buffer: encryptedResumePdf(),
+  })
+
+  await expect(page.getByRole('alert')).toContainText(
+    /resume scan failed|password|encrypted|no password given|incorrect password/i,
   )
   await expect(page.locator('section.identity-scan-section')).toHaveCount(0)
 })
