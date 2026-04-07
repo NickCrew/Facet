@@ -15,13 +15,14 @@ references:
   - /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022611.md
   - /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-023903.md
   - /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-031521.md
+  - /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-031956.md
 priority: medium
 ---
 
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Deferred from test audit artifacts /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-020456.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022233.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022611.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-023903.md, and /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-031521.md.
+Deferred from test audit artifacts /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-020456.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022233.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022611.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-023903.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-031521.md, and /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-031956.md.
 
 Remaining medium-severity browser acceptance gaps:
 - P2-001: image-only PDFs without text layers fall back cleanly

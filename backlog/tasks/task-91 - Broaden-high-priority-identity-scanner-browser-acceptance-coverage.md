@@ -16,25 +16,26 @@ references:
   - /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-023903.md
   - /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-024540.md
   - /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-031521.md
+  - /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-031956.md
 priority: high
 ---
 
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Deferred from test audit artifacts /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-020456.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022233.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022611.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-023903.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-024540.md, and /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-031521.md.
+Deferred from test audit artifacts /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-020456.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022233.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-022611.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-023903.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-024540.md, /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-031521.md, and /Users/nick/Developer/Facet/.agents/reviews/test-audit-20260407-031956.md.
 
 Remaining high-priority browser acceptance gaps:
-- P1-001: multi-page PDF parsing across page boundaries
-- P1-002: max file size limits for oversized PDF uploads
-- P1-003: password-protected PDF handling with a descriptive error path
+- P1-001: max file size limits for oversized PDF uploads
+- P1-002: password-protected PDF handling with a descriptive error path
+- P1-003: network or server failure handling if scanning ever moves off the client path
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The suite covers a multi-page PDF and proves page-two content is parsed and rendered.
-- [ ] #2 The suite covers oversized PDF rejection with an explicit user-facing error path.
-- [ ] #3 The suite covers password-protected PDF rejection with a descriptive failure state.
+- [ ] #1 The suite covers oversized PDF rejection with an explicit user-facing error path.
+- [ ] #2 The suite covers password-protected PDF rejection with a descriptive failure state.
+- [ ] #3 If the scanner path gains network dependencies, the suite covers backend failure recovery explicitly.
 <!-- AC:END -->
 
 ## Implementation Plan
