@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 
 const escapePdfText = (value: string): string =>
@@ -55,6 +56,19 @@ const sampleResumePdf = () =>
     'Facet: Vector-based job search platform.',
     'Education',
     'St. Petersburg College, Clearwater, FL. AAS, Computer Information Systems',
+  ])
+
+const alternateResumePdf = () =>
+  buildPdf([
+    'JANE PLATFORM',
+    'jane@example.com',
+    '555.0100',
+    'Seattle, WA',
+    'PROFESSIONAL EXPERIENCE',
+    'Staff Platform Engineer | Example Corp | Jan 2020 - Present',
+    '- Replaced the scanner payload cleanly.',
+    'Projects',
+    'Orbit: Internal developer portal.',
   ])
 
 test('uploads, parses, clears, and rescans a resume PDF with projects and education', async ({
@@ -174,4 +188,119 @@ test('preserves escaped parentheses and backslashes from pdf text', async ({ pag
   await expect(projectsSection.locator('textarea')).toHaveValue(
     'Windows path C:\\tools\\facet (preview build)',
   )
+})
+
+test('replacing the uploaded pdf without clearing swaps the scanned structure', async ({ page }) => {
+  await page.goto('/identity')
+
+  const contactSection = page
+    .locator('section.identity-scan-section')
+    .filter({ has: page.getByRole('heading', { name: 'Contact' }) })
+  const rolesSection = page
+    .locator('section.identity-scan-section')
+    .filter({ has: page.getByRole('heading', { name: 'Roles' }) })
+  const skillsSection = page
+    .locator('section.identity-scan-section')
+    .filter({ has: page.getByRole('heading', { name: 'Skills' }) })
+  const projectsSection = page
+    .locator('section.identity-scan-section')
+    .filter({ has: page.getByRole('heading', { name: 'Projects' }) })
+  const educationSection = page
+    .locator('section.identity-scan-section')
+    .filter({ has: page.getByRole('heading', { name: 'Education' }) })
+  const uploadInput = page.locator('input[type="file"][accept="application/pdf,.pdf"]')
+
+  await uploadInput.setInputFiles({
+    name: 'scanner-acceptance.pdf',
+    mimeType: 'application/pdf',
+    buffer: sampleResumePdf(),
+  })
+
+  await expect(contactSection.locator('input[value="NICK FERGUSON"]')).toBeVisible()
+  await expect(projectsSection.locator('input[value="Facet"]')).toBeVisible()
+
+  await uploadInput.setInputFiles({
+    name: 'alternate-resume.pdf',
+    mimeType: 'application/pdf',
+    buffer: alternateResumePdf(),
+  })
+
+  await expect(contactSection.locator('input[value="JANE PLATFORM"]')).toBeVisible()
+  await expect(contactSection.locator('input[value="jane@example.com"]')).toBeVisible()
+  await expect(contactSection.locator('input[value="Seattle, WA"]')).toBeVisible()
+  await expect(rolesSection.locator('input[value="Example Corp"]')).toBeVisible()
+  await expect(rolesSection.locator('input[value="Staff Platform Engineer"]')).toBeVisible()
+  await expect(rolesSection.locator('input[value="Jan 2020 - Present"]')).toBeVisible()
+  await expect(projectsSection.locator('input[value="Orbit"]')).toBeVisible()
+  await expect(projectsSection.locator('textarea')).toHaveValue('Internal developer portal.')
+  await expect(skillsSection).toContainText('No skill groups were parsed from this PDF.')
+  await expect(educationSection).toContainText('No education entries were parsed from this PDF.')
+  await expect(skillsSection.locator('input[value="Languages"]')).toHaveCount(0)
+  await expect(educationSection.locator('input[value="St. Petersburg College"]')).toHaveCount(0)
+
+  await expect(contactSection.locator('input[value="NICK FERGUSON"]')).toHaveCount(0)
+  await expect(projectsSection.locator('input[value="Facet"]')).toHaveCount(0)
+})
+
+test('renders html-like pdf text as inert scanned content', async ({ page }) => {
+  let dialogSeen = false
+  page.on('dialog', async (dialog) => {
+    dialogSeen = true
+    await dialog.dismiss()
+  })
+
+  await page.goto('/identity')
+
+  const projectsSection = page
+    .locator('section.identity-scan-section')
+    .filter({ has: page.getByRole('heading', { name: 'Projects' }) })
+
+  await page.locator('input[type="file"][accept="application/pdf,.pdf"]').setInputFiles({
+    name: 'html-like-text.pdf',
+    mimeType: 'application/pdf',
+    buffer: buildPdf([
+      'NICK FERGUSON',
+      'nick@atlascrew.dev',
+      'PROFESSIONAL EXPERIENCE',
+      'Senior Platform Engineer | A10 Networks | Feb 2025 - Mar 2026',
+      '- Kept untrusted pdf text inert.',
+      'Projects',
+      'Facet: <script>alert(1)</script> <img src=x onerror=alert(1)>',
+    ]),
+  })
+
+  await expect(projectsSection.locator('input[value="Facet"]')).toBeVisible()
+  await expect(projectsSection.locator('textarea')).toHaveValue(
+    '<script>alert(1)</script> <img src=x onerror=alert(1)>',
+  )
+  expect(dialogSeen).toBe(false)
+})
+
+test('preserves encoded payloads as inert scanned values', async ({ page }) => {
+  let dialogSeen = false
+  page.on('dialog', async (dialog) => {
+    dialogSeen = true
+    await dialog.dismiss()
+  })
+
+  await page.goto('/identity')
+
+  const contactSection = page
+    .locator('section.identity-scan-section')
+    .filter({ has: page.getByRole('heading', { name: 'Contact' }) })
+  const projectsSection = page
+    .locator('section.identity-scan-section')
+    .filter({ has: page.getByRole('heading', { name: 'Projects' }) })
+
+  await page.locator('input[type="file"][accept="application/pdf,.pdf"]').setInputFiles({
+    name: 'encoded-payload.pdf',
+    mimeType: 'application/pdf',
+    buffer: readFileSync(new URL('./fixtures/identity-scanner-unicode.pdf', import.meta.url)),
+  })
+
+  await expect(contactSection.locator('input[value="JOSÉ GARCÍA"]')).toBeVisible()
+  await expect(projectsSection.locator('textarea')).toHaveValue(
+    '＜script＞alert(1)＜/script＞ café 東京',
+  )
+  expect(dialogSeen).toBe(false)
 })
