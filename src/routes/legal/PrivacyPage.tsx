@@ -203,7 +203,7 @@ export function PrivacyPage() {
         </ul>
         <p>
           To exercise any of these rights, contact{' '}
-          <a href="mailto:nick@atlascrew.dev">nick@atlascrew.dev</a>.
+          <a href="mailto:support@myfacets.cv">support@myfacets.cv</a>.
         </p>
       </section>
 
@@ -239,7 +239,7 @@ export function PrivacyPage() {
           California residents have the right to know what personal information we collect, request
           deletion, and opt out of the sale of personal information. We do not sell personal
           information. To exercise your rights, contact{' '}
-          <a href="mailto:nick@atlascrew.dev">nick@atlascrew.dev</a>.
+          <a href="mailto:support@myfacets.cv">support@myfacets.cv</a>.
         </p>
       </section>
 
@@ -277,7 +277,7 @@ export function PrivacyPage() {
           <br />
           Nicholas Crew Ferguson
           <br />
-          <a href="mailto:nick@atlascrew.dev">nick@atlascrew.dev</a>
+          <a href="mailto:support@myfacets.cv">support@myfacets.cv</a>
         </p>
       </section>
     </article>

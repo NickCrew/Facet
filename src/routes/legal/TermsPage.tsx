@@ -34,7 +34,7 @@ export function TermsPage() {
           You authenticate through a third-party identity provider (currently GitHub via Supabase
           Auth). You are responsible for maintaining the security of your authentication credentials
           and for all activity that occurs under your account. Notify us immediately at{' '}
-          <a href="mailto:nick@atlascrew.dev">nick@atlascrew.dev</a> if you suspect unauthorized
+          <a href="mailto:support@myfacets.cv">support@myfacets.cv</a> if you suspect unauthorized
           access.
         </p>
       </section>
@@ -93,7 +93,7 @@ export function TermsPage() {
         <p>
           Payments are processed by Stripe. We do not store your payment card details. All sales are
           final. Refund requests may be considered on a case-by-case basis within 7 days of purchase
-          by contacting <a href="mailto:nick@atlascrew.dev">nick@atlascrew.dev</a>.
+          by contacting <a href="mailto:support@myfacets.cv">support@myfacets.cv</a>.
         </p>
         <p>
           We reserve the right to change pricing for future purchases with 30 days' notice. Price
@@ -177,7 +177,7 @@ export function TermsPage() {
         <p>
           Nicholas Crew Ferguson
           <br />
-          <a href="mailto:nick@atlascrew.dev">nick@atlascrew.dev</a>
+          <a href="mailto:support@myfacets.cv">support@myfacets.cv</a>
           <br />
           <a href="https://github.com/atlas-crew/Facet" target="_blank" rel="noopener noreferrer">
             github.com/atlas-crew/Facet

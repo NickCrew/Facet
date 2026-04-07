@@ -131,6 +131,9 @@ export function AccountPage() {
             >
               {checkoutLoading ? 'Starting checkout…' : 'Extend Access — $49'}
             </button>
+            <p className="account-note">
+              7-day refund policy. Contact <a href="mailto:support@myfacets.cv">support@myfacets.cv</a> for assistance.
+            </p>
           </>
         ) : isFree || isExpired ? (
           <>
@@ -150,6 +153,9 @@ export function AccountPage() {
             >
               {checkoutLoading ? 'Starting checkout…' : 'Get AI Pro — $49 for 90 days'}
             </button>
+            <p className="account-note">
+              7-day refund policy. <a href="/terms#6-ai-pro-access-and-payment">See terms</a> for details.
+            </p>
           </>
         ) : (
           <>
