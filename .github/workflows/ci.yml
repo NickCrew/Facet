@@ -12,6 +12,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   typecheck:
@@ -78,6 +79,64 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
+      - name: Report bundle size
+        id: bundle
+        run: |
+          TOTAL=$(du -sb dist/assets/ | cut -f1)
+          TOTAL_MB=$(echo "scale=2; $TOTAL / 1048576" | bc)
+          JS=$(find dist/assets -name '*.js' -exec du -cb {} + | tail -1 | cut -f1)
+          JS_MB=$(echo "scale=2; $JS / 1048576" | bc)
+          CSS=$(find dist/assets -name '*.css' -exec du -cb {} + | tail -1 | cut -f1)
+          CSS_KB=$(echo "scale=2; $CSS / 1024" | bc)
+          WASM=$(find dist/assets -name '*.wasm' -exec du -cb {} + | tail -1 | cut -f1)
+          WASM_MB=$(echo "scale=2; $WASM / 1048576" | bc)
+          CHUNKS=$(find dist/assets -name '*.js' | wc -l | tr -d ' ')
+          echo "total=${TOTAL_MB}MB" >> "$GITHUB_OUTPUT"
+          echo "js=${JS_MB}MB" >> "$GITHUB_OUTPUT"
+          echo "css=${CSS_KB}KB" >> "$GITHUB_OUTPUT"
+          echo "wasm=${WASM_MB}MB" >> "$GITHUB_OUTPUT"
+          echo "chunks=${CHUNKS}" >> "$GITHUB_OUTPUT"
+          echo "### Bundle Size Report" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Category | Size |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Total assets | ${TOTAL_MB} MB |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| JavaScript (${CHUNKS} chunks) | ${JS_MB} MB |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| CSS | ${CSS_KB} KB |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| WASM | ${WASM_MB} MB |" >> "$GITHUB_STEP_SUMMARY"
+      - name: Comment bundle size on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `### Bundle Size Report
+            | Category | Size |
+            |---|---|
+            | Total assets | ${{ steps.bundle.outputs.total }} |
+            | JavaScript (${{ steps.bundle.outputs.chunks }} chunks) | ${{ steps.bundle.outputs.js }} |
+            | CSS | ${{ steps.bundle.outputs.css }} |
+            | WASM | ${{ steps.bundle.outputs.wasm }} |`
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            })
+            const existing = comments.find(c => c.body?.includes('### Bundle Size Report'))
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              })
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              })
+            }
       - uses: actions/upload-artifact@v4
         with:
           name: dist
