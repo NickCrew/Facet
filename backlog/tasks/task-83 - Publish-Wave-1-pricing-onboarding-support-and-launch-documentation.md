@@ -1,9 +1,10 @@
 ---
 id: TASK-83
 title: 'Publish Wave 1 pricing, onboarding, support, and launch documentation'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-03-12 16:07'
+updated_date: '2026-04-08 06:47'
 labels:
   - documentation
   - billing
@@ -14,6 +15,16 @@ dependencies:
   - TASK-77
   - TASK-80
   - TASK-82
+references:
+  - >-
+    /Users/nick/Developer/Facet/docs/development/platform/wave-1-pricing-and-entitlements.md
+  - >-
+    /Users/nick/Developer/Facet/docs/development/platform/wave-1-beta-support-playbook.md
+  - >-
+    /Users/nick/Developer/Facet/docs/development/platform/wave-1-operations-runbook.md
+  - >-
+    /Users/nick/Developer/Facet/docs/development/platform/wave-1-beta-readiness-gate.md
+  - /Users/nick/Developer/Facet/docs/user-guides/hosted-accounts.md
 documentation:
   - doc-6
   - doc-7
@@ -29,10 +40,16 @@ Create the documentation package that makes the hosted beta operable: pricing an
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Internal documentation exists for pricing, entitlement behavior, and the authoritative list of AI-gated versus free features.
-- [ ] #2 User-facing onboarding and migration docs exist for hosted account setup, workspace migration, and AI upgrade messaging.
-- [ ] #3 Launch and support runbooks exist for beta rollout, rollback, known limits, and common user-support scenarios.
+- [x] #1 Internal documentation exists for pricing, entitlement behavior, and the authoritative list of AI-gated versus free features.
+- [x] #2 User-facing onboarding and migration docs exist for hosted account setup, workspace migration, and AI upgrade messaging.
+- [x] #3 Launch and support runbooks exist for beta rollout, rollback, known limits, and common user-support scenarios.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-04-08: The Wave 1 docs package is present in-repo: pricing and entitlements, hosted accounts guide, beta support playbook, operations runbook, and readiness gate all exist and are linked from docs/NAVIGATOR.md. Fresh local verification for this closeout pass: npm run typecheck -> pass, npm run build -> pass. Remaining closeout work is task hygiene and final approval flow, not missing documentation content.
+<!-- SECTION:NOTES:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->

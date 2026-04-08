@@ -1,9 +1,10 @@
 ---
 id: TASK-84
 title: Execute Wave 1 hosted beta QA and staged rollout readiness
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-03-12 16:07'
+updated_date: '2026-04-08 06:47'
 labels:
   - feature
   - billing
@@ -14,6 +15,9 @@ dependencies:
   - TASK-81
   - TASK-82
   - TASK-83
+references:
+  - >-
+    /Users/nick/Developer/Facet/docs/development/platform/wave-1-beta-readiness-gate.md
 documentation:
   - doc-6
   - doc-7
@@ -33,6 +37,12 @@ Create the final release gate for Wave 1 hosted accounts. This task should bundl
 - [ ] #2 Go or no-go launch criteria are written down and include rollback conditions for persistence or billing failures.
 - [ ] #3 The first hosted beta rollout plan is staged, reversible, and explicitly bounded to Wave 1 scope.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-04-08: Refreshed docs/development/platform/wave-1-beta-readiness-gate.md with a current local validation snapshot. Current gate remains no-go. Fresh local receipts: npm run typecheck -> pass, npm run build -> pass. The older focused Wave 1 Vitest pack is no longer a clean release receipt because src/test/AppShell.test.tsx now fails after later shell/header changes. Launch is still blocked primarily on missing hosted staging env, Supabase JWT validation config, billing credentials, and a real staged browser validation pass.
+<!-- SECTION:NOTES:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
