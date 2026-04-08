@@ -142,7 +142,7 @@ For the actual launch decision, record:
 
 ## Current Validation Snapshot
 
-Date: 2026-04-05
+Date: 2026-04-08
 
 Scope executed from this checkout:
 - local repository validation only
@@ -157,18 +157,23 @@ Environment blockers found before attempting a staging pass:
 Local evidence captured:
 - `npm run typecheck` -> pass
 - `npm run build` -> pass
-- `npx vitest run src/test/facetServer.test.ts src/test/billingApi.test.ts src/test/hostedAppStore.test.ts src/test/AppShell.test.tsx src/test/windowLocation.test.ts` -> pass (`5` files, `74` tests)
+- `npx vitest run src/test/facetServer.test.ts src/test/billingApi.test.ts src/test/hostedAppStore.test.ts src/test/AppShell.test.tsx src/test/windowLocation.test.ts` -> fail
+  - test count increased from the prior `74` to `77` because later shell and AppShell coverage landed after the previous snapshot
+  - current result: `72` passed and `5` failed across `5` test files; all `5` failures are in `src/test/AppShell.test.tsx`
+  - current failure shape: `src/test/AppShell.test.tsx` no longer matches the current shell/header output and reports `5` failing tests
+  - implication: this older focused Wave 1 test pack is no longer a clean release receipt without refreshing the AppShell expectations
 
 Implication:
-- the hosted implementation is locally consistent and the targeted Wave 1 contracts are covered in tests
+- the hosted implementation still passes current local type-check and build validation
+- the older targeted Wave 1 Vitest pack needs maintenance before it can be reused as a release receipt
 - the staging validation pass defined above is still incomplete, because the required hosted staging environment and credentials were not available from this checkout
 
 ## Decision Log
 
 | Field | Value |
 |---|---|
-| Candidate build | `c5b3f14` |
-| Validation date | `2026-04-05` |
+| Candidate build | `d33edb2` |
+| Validation date | `2026-04-08` |
 | Validator or owner | Codex local validation pass |
 | Validation environment | local repository evidence only; staging not exercised |
 | Auth validation | fail |
@@ -178,16 +183,17 @@ Implication:
 | Restore rehearsal | fail |
 | Rollback rehearsal | fail |
 | Launch decision | no-go |
-| Blocking issue | staging-hosted validation was not executed because hosted frontend env, Supabase JWT validation config, and billing credentials were unavailable from this checkout |
-| Blocking owner | hosted platform or release owner |
+| Blocking issues | 1. staging-hosted validation was not executed because hosted frontend env, Supabase JWT validation config, and billing credentials were unavailable from this checkout<br>2. the older focused Wave 1 Vitest pack needs refresh before it can serve as a clean local release receipt |
+| Blocking owners | 1. hosted platform or release owner<br>2. application UI or test owner responsible for refreshing AppShell expectations |
 
 ## Decision Log Template
 
 | Field | Value |
 |---|---|
 | Candidate build |  |
-| Staging validation date |  |
+| Validation date |  |
 | Validator or owner |  |
+| Validation environment |  |
 | Auth validation | pass / fail |
 | Persistence validation | pass / fail |
 | Migration validation | pass / fail |
@@ -195,4 +201,5 @@ Implication:
 | Restore rehearsal | pass / fail |
 | Rollback rehearsal | pass / fail |
 | Launch decision | go / no-go |
-| Blocking issue and owner |  |
+| Blocking issues |  |
+| Blocking owners |  |
