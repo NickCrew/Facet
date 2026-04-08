@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ProfessionalIdentityV3 } from '../identity/schema'
+import { importProfessionalIdentity, type ProfessionalIdentityV3 } from '../identity/schema'
 import { mergeProfessionalIdentity, replaceProfessionalIdentity } from '../utils/identityMerge'
 
 const createIdentity = (): ProfessionalIdentityV3 => ({
@@ -202,5 +202,313 @@ describe('identityMerge', () => {
     expect(replaced.summary).toContain('Replaced identity model')
     expect(replaced.data.roles).toHaveLength(1)
   })
-})
 
+  it('preserves existing vectors and awareness when the incoming merge draft omits them', () => {
+    const current = createIdentity()
+    current.search_vectors = [
+      {
+        id: 'v1-platform',
+        title: 'Platform Engineer',
+        priority: 'high',
+        thesis: 'Platform systems builder.',
+        target_roles: ['Platform Engineer'],
+        keywords: {
+          primary: ['platform'],
+          secondary: ['developer experience'],
+        },
+      },
+    ]
+    current.awareness = {
+      open_questions: [
+        {
+          id: 'degree-filter-risk',
+          topic: 'Degree filter risk',
+          description: 'Some companies filter.',
+          action: 'Check requirements.',
+        },
+      ],
+    }
+
+    const incoming = createIdentity()
+
+    const merged = mergeProfessionalIdentity(current, incoming)
+
+    expect(merged.data.search_vectors).toEqual(current.search_vectors)
+    expect(merged.data.awareness).toEqual(current.awareness)
+  })
+
+  it('preserves optional v3.1 fields when an older normalized draft omitted them', () => {
+    const current = createIdentity()
+    current.search_vectors = [
+      {
+        id: 'v1-platform',
+        title: 'Platform Engineer',
+        priority: 'high',
+        thesis: 'Platform systems builder.',
+        target_roles: ['Platform Engineer'],
+        keywords: {
+          primary: ['platform'],
+          secondary: ['developer experience'],
+        },
+      },
+    ]
+    current.preferences.constraints = {
+      education: {
+        highest: 'B.S.',
+        show_on_resume: true,
+      },
+    }
+    current.preferences.matching = {
+      prioritize: [
+        {
+          id: 'builder-friendly',
+          label: 'Builder-friendly process',
+          description: 'Practical screening.',
+          weight: 'high',
+        },
+      ],
+      avoid: [],
+    }
+    current.awareness = {
+      open_questions: [
+        {
+          id: 'degree-filter-risk',
+          topic: 'Degree filter risk',
+          description: 'Some companies filter.',
+          action: 'Check requirements.',
+        },
+      ],
+    }
+
+    const incoming = importProfessionalIdentity(createIdentity()).data
+
+    const merged = mergeProfessionalIdentity(current, incoming, {
+      awareness: false,
+      search_vectors: false,
+      preferences: {
+        constraints: false,
+        matching: false,
+      },
+    })
+
+    expect(merged.data.search_vectors).toEqual(current.search_vectors)
+    expect(merged.data.preferences.constraints).toEqual(current.preferences.constraints)
+    expect(merged.data.preferences.matching).toEqual(current.preferences.matching)
+    expect(merged.data.awareness).toEqual(current.awareness)
+  })
+
+  it('preserves enriched skill metadata when a legacy draft omits it', () => {
+    const current = createIdentity()
+    current.skills.groups[0] = {
+      ...current.skills.groups[0],
+      positioning: 'Primary differentiator.',
+      is_differentiator: true,
+      items: [
+        {
+          ...current.skills.groups[0].items[0],
+          depth: 'expert',
+          context: 'Primary language across platform roles.',
+          search_signal: 'Lead with this skill.',
+          enriched_at: '2026-04-08T14:23:17Z',
+          enriched_by: 'user-edited-llm',
+        },
+      ],
+    }
+
+    const incoming = createIdentity()
+
+    const merged = mergeProfessionalIdentity(current, incoming)
+
+    expect(merged.data.skills.groups[0]?.positioning).toBe('Primary differentiator.')
+    expect(merged.data.skills.groups[0]?.is_differentiator).toBe(true)
+    expect(merged.data.skills.groups[0]?.items[0]?.depth).toBe('expert')
+    expect(merged.data.skills.groups[0]?.items[0]?.context).toContain('Primary language')
+    expect(merged.data.skills.groups[0]?.items[0]?.search_signal).toContain('Lead with this skill')
+    expect(merged.data.skills.groups[0]?.items[0]?.enriched_by).toBe('user-edited-llm')
+  })
+
+  it('refreshes derived matching when a legacy draft changes role_fit', () => {
+    const current = createIdentity()
+    current.preferences.matching = {
+      prioritize: [
+        {
+          id: 'builder-friendly',
+          label: 'Builder-friendly process',
+          description: 'Practical screening.',
+          weight: 'high',
+        },
+      ],
+      avoid: [],
+    }
+
+    const legacyDraft = createIdentity()
+    legacyDraft.preferences.role_fit = {
+      ideal: ['security tooling'],
+      red_flags: ['bureaucratic approvals'],
+      evaluation_criteria: ['ownership'],
+    }
+    const incoming = importProfessionalIdentity(legacyDraft).data
+
+    const merged = mergeProfessionalIdentity(current, incoming, {
+      preferences: {
+        matching: false,
+      },
+    })
+
+    expect(merged.data.preferences.role_fit).toEqual(legacyDraft.preferences.role_fit)
+    expect(merged.data.preferences.matching).toEqual(incoming.preferences.matching)
+  })
+
+  it('merges vectors and awareness items by id instead of replacing them wholesale', () => {
+    const current = createIdentity()
+    current.search_vectors = [
+      {
+        id: 'v1-platform',
+        title: 'Platform Engineer',
+        priority: 'high',
+        thesis: 'Platform systems builder.',
+        target_roles: ['Platform Engineer'],
+        keywords: {
+          primary: ['platform'],
+          secondary: ['developer experience'],
+        },
+      },
+    ]
+    current.awareness = {
+      open_questions: [
+        {
+          id: 'degree-filter-risk',
+          topic: 'Degree filter risk',
+          description: 'Some companies filter.',
+          action: 'Check requirements.',
+        },
+      ],
+    }
+
+    const incoming = createIdentity()
+    incoming.search_vectors = [
+      {
+        id: 'v1-platform',
+        title: 'Staff Platform Engineer',
+        priority: 'high',
+        thesis: 'Updated thesis.',
+        target_roles: ['Staff Platform Engineer'],
+        keywords: {
+          primary: ['platform'],
+          secondary: ['systems'],
+        },
+      },
+      {
+        id: 'v2-security',
+        title: 'Security Tooling Engineer',
+        priority: 'medium',
+        thesis: 'Security tooling angle.',
+        target_roles: ['Security Tooling Engineer'],
+        keywords: {
+          primary: ['security tooling'],
+          secondary: ['platform'],
+        },
+      },
+    ]
+    incoming.awareness = {
+      open_questions: [
+        {
+          id: 'degree-filter-risk',
+          topic: 'Degree filter risk',
+          description: 'Updated concern.',
+          action: 'Check stricter requirements.',
+        },
+        {
+          id: 'salary-anchor-risk',
+          topic: 'Salary anchoring',
+          description: 'Comp is below market.',
+          action: 'Practice better framing.',
+        },
+      ],
+    }
+
+    const merged = mergeProfessionalIdentity(current, incoming)
+
+    expect(merged.data.search_vectors).toEqual([
+      incoming.search_vectors[0],
+      incoming.search_vectors[1],
+    ])
+    expect(merged.data.awareness).toEqual({
+      open_questions: [
+        incoming.awareness.open_questions[0],
+        incoming.awareness.open_questions[1],
+      ],
+    })
+    expect(merged.details).toEqual(
+      expect.arrayContaining([
+        'Updated search vectors: v1-platform.',
+        'Added search vectors: v2-security.',
+        'Updated awareness items: degree-filter-risk.',
+        'Added awareness items: salary-anchor-risk.',
+      ]),
+    )
+  })
+
+  it('removes vectors and awareness items when the incoming draft explicitly omits them', () => {
+    const current = createIdentity()
+    current.search_vectors = [
+      {
+        id: 'v1-platform',
+        title: 'Platform Engineer',
+        priority: 'high',
+        thesis: 'Platform systems builder.',
+        target_roles: ['Platform Engineer'],
+        keywords: {
+          primary: ['platform'],
+          secondary: ['developer experience'],
+        },
+      },
+      {
+        id: 'v2-security',
+        title: 'Security Tooling Engineer',
+        priority: 'medium',
+        thesis: 'Security tooling angle.',
+        target_roles: ['Security Tooling Engineer'],
+        keywords: {
+          primary: ['security tooling'],
+          secondary: ['platform'],
+        },
+      },
+    ]
+    current.awareness = {
+      open_questions: [
+        {
+          id: 'degree-filter-risk',
+          topic: 'Degree filter risk',
+          description: 'Some companies filter.',
+          action: 'Check requirements.',
+        },
+        {
+          id: 'salary-anchor-risk',
+          topic: 'Salary anchoring',
+          description: 'Comp is below market.',
+          action: 'Practice better framing.',
+        },
+      ],
+    }
+
+    const incoming = createIdentity()
+    incoming.search_vectors = [current.search_vectors[0]]
+    incoming.awareness = {
+      open_questions: [current.awareness.open_questions[0]],
+    }
+
+    const merged = mergeProfessionalIdentity(current, incoming)
+
+    expect(merged.data.search_vectors).toEqual([current.search_vectors[0]])
+    expect(merged.data.awareness).toEqual({
+      open_questions: [current.awareness.open_questions[0]],
+    })
+    expect(merged.details).toEqual(
+      expect.arrayContaining([
+        'Removed search vectors: v2-security.',
+        'Removed awareness items: salary-anchor-risk.',
+      ]),
+    )
+  })
+})

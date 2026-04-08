@@ -6,6 +6,7 @@ import {
   type ProfessionalProject,
   type ProfessionalRole,
   type ProfessionalSkillGroup,
+  type ProfessionalSkillItem,
 } from '../identity/schema'
 import type { IdentityApplyResult } from '../types/identity'
 
@@ -13,6 +14,21 @@ interface MergeByIdResult<T extends { id: string }> {
   items: T[]
   addedIds: string[]
   updatedIds: string[]
+}
+
+interface DiffByIdResult {
+  addedIds: string[]
+  updatedIds: string[]
+  removedIds: string[]
+}
+
+export interface IdentityMergeFieldPresence {
+  awareness?: boolean
+  search_vectors?: boolean
+  preferences?: {
+    constraints?: boolean
+    matching?: boolean
+  }
 }
 
 const stableSerialize = (value: unknown): string => {
@@ -66,6 +82,38 @@ const mergeById = <T extends { id: string }>(current: T[], incoming: T[]): Merge
   }
 }
 
+const diffById = <T extends { id: string }>(current: T[], next: T[]): DiffByIdResult => {
+  const currentById = new Map(current.map((item) => [item.id, item]))
+  const nextById = new Map(next.map((item) => [item.id, item]))
+  const addedIds: string[] = []
+  const updatedIds: string[] = []
+  const removedIds: string[] = []
+
+  for (const item of next) {
+    const existing = currentById.get(item.id)
+    if (!existing) {
+      addedIds.push(item.id)
+      continue
+    }
+
+    if (hasMeaningfulChange(existing, item)) {
+      updatedIds.push(item.id)
+    }
+  }
+
+  for (const item of current) {
+    if (!nextById.has(item.id)) {
+      removedIds.push(item.id)
+    }
+  }
+
+  return {
+    addedIds,
+    updatedIds,
+    removedIds,
+  }
+}
+
 const educationFingerprint = (entry: ProfessionalEducationEntry): string =>
   [entry.school, entry.location, entry.degree, entry.year ?? '']
     .map((value) => value.trim().toLowerCase())
@@ -116,11 +164,88 @@ const describeIdChanges = (label: string, addedIds: string[], updatedIds: string
   return details
 }
 
+const describeRemovedIds = (label: string, removedIds: string[]): string[] =>
+  removedIds.length > 0 ? [`Removed ${label}: ${removedIds.join(', ')}.`] : []
+
 const describeScalarReplacement = <T>(
   label: string,
   current: T,
   incoming: T,
 ): string[] => (hasMeaningfulChange(current, incoming) ? [`Replaced ${label} from draft.`] : [])
+
+const skillItemKey = (item: ProfessionalSkillItem): string => item.name.trim().toLowerCase()
+
+const mergeSkillItems = (
+  current: ProfessionalSkillItem[],
+  incoming: ProfessionalSkillItem[],
+): ProfessionalSkillItem[] => {
+  const merged = [...current]
+  const indexByKey = new Map(merged.map((item, index) => [skillItemKey(item), index]))
+
+  for (const item of incoming) {
+    const existingIndex = indexByKey.get(skillItemKey(item))
+    if (existingIndex === undefined) {
+      indexByKey.set(skillItemKey(item), merged.length)
+      merged.push(item)
+      continue
+    }
+
+    const existing = merged[existingIndex]
+    merged[existingIndex] = {
+      ...existing,
+      ...item,
+      depth: item.depth ?? existing.depth,
+      proficiency: item.proficiency ?? existing.proficiency,
+      context: item.context ?? existing.context,
+      search_signal: item.search_signal ?? existing.search_signal,
+      enriched_at: item.enriched_at ?? existing.enriched_at,
+      enriched_by: item.enriched_by ?? existing.enriched_by,
+      skipped_at: item.skipped_at ?? existing.skipped_at,
+    }
+  }
+
+  return merged
+}
+
+const mergeSkillGroups = (
+  current: ProfessionalSkillGroup[],
+  incoming: ProfessionalSkillGroup[],
+): MergeByIdResult<ProfessionalSkillGroup> => {
+  const merged = [...current]
+  const indexById = new Map(merged.map((item, index) => [item.id, index]))
+  const addedIds: string[] = []
+  const updatedIds: string[] = []
+
+  for (const group of incoming) {
+    const existingIndex = indexById.get(group.id)
+    if (existingIndex === undefined) {
+      indexById.set(group.id, merged.length)
+      merged.push(group)
+      addedIds.push(group.id)
+      continue
+    }
+
+    const existing = merged[existingIndex]
+    const nextGroup: ProfessionalSkillGroup = {
+      ...existing,
+      ...group,
+      positioning: group.positioning ?? existing.positioning,
+      is_differentiator: group.is_differentiator ?? existing.is_differentiator,
+      items: mergeSkillItems(existing.items, group.items),
+    }
+
+    if (hasMeaningfulChange(existing, nextGroup)) {
+      merged[existingIndex] = nextGroup
+      updatedIds.push(group.id)
+    }
+  }
+
+  return {
+    items: merged,
+    addedIds,
+    updatedIds,
+  }
+}
 
 const buildSummary = (
   data: ProfessionalIdentityV3,
@@ -143,25 +268,76 @@ export const replaceProfessionalIdentity = (
 export const mergeProfessionalIdentity = (
   current: ProfessionalIdentityV3,
   incoming: ProfessionalIdentityV3,
+  fieldPresence: IdentityMergeFieldPresence = {},
 ): IdentityApplyResult => {
   // Merge semantics are intentionally asymmetric:
   // array sections merge by id or education fingerprint, while scalar sections
   // are replaced wholesale from the incoming draft.
-  const skillGroups = mergeById<ProfessionalSkillGroup>(current.skills.groups, incoming.skills.groups)
+  const skillGroups = mergeSkillGroups(current.skills.groups, incoming.skills.groups)
   const profiles = mergeById<ProfessionalProfile>(current.profiles, incoming.profiles)
   const roles = mergeById<ProfessionalRole>(current.roles, incoming.roles)
   const projects = mergeById<ProfessionalProject>(current.projects, incoming.projects)
   const education = mergeEducation(current.education, incoming.education)
+  const currentSearchVectors = current.search_vectors ?? []
+  const incomingSearchVectors = incoming.search_vectors ?? []
+  const currentOpenQuestions = current.awareness?.open_questions ?? []
+  const incomingOpenQuestions = incoming.awareness?.open_questions ?? []
+  const searchVectorChanges = diffById(currentSearchVectors, incomingSearchVectors)
+  const awarenessChanges = diffById(currentOpenQuestions, incomingOpenQuestions)
+  const preserveCurrentMatching =
+    fieldPresence.preferences?.matching === false &&
+    !hasMeaningfulChange(current.preferences.role_fit, incoming.preferences.role_fit)
+  const mergedPreferences: ProfessionalIdentityV3['preferences'] = {
+    ...current.preferences,
+    ...incoming.preferences,
+    ...(fieldPresence.preferences?.constraints === false
+      ? (current.preferences.constraints !== undefined
+          ? { constraints: current.preferences.constraints }
+          : {})
+      : (incoming.preferences.constraints !== undefined
+          ? { constraints: incoming.preferences.constraints }
+          : (current.preferences.constraints !== undefined
+              ? { constraints: current.preferences.constraints }
+              : {}))),
+    ...(preserveCurrentMatching
+      ? (current.preferences.matching !== undefined
+          ? { matching: current.preferences.matching }
+          : (incoming.preferences.matching !== undefined
+              ? { matching: incoming.preferences.matching }
+              : {}))
+      : (incoming.preferences.matching !== undefined
+          ? { matching: incoming.preferences.matching }
+          : {})
+      ),
+  }
+  const mergedAwareness =
+    fieldPresence.awareness === false
+      ? current.awareness
+      : ((fieldPresence.awareness ?? incoming.awareness !== undefined)
+          ? {
+              open_questions: incomingOpenQuestions,
+            }
+          : current.awareness)
+  const mergedSearchVectors =
+    fieldPresence.search_vectors === false
+      ? current.search_vectors
+      : ((fieldPresence.search_vectors ?? incoming.search_vectors !== undefined)
+          ? incomingSearchVectors
+          : current.search_vectors)
 
   const merged: ProfessionalIdentityV3 = {
     ...current,
-    schema_revision: incoming.schema_revision,
+    schema_revision: incoming.schema_revision ?? current.schema_revision,
     identity: incoming.identity,
     self_model: incoming.self_model,
-    preferences: incoming.preferences,
+    preferences: mergedPreferences,
     generator_rules: incoming.generator_rules,
-    search_vectors: incoming.search_vectors,
-    awareness: incoming.awareness,
+    ...(mergedSearchVectors !== undefined
+      ? { search_vectors: mergedSearchVectors }
+      : {}),
+    ...(mergedAwareness !== undefined
+      ? { awareness: mergedAwareness }
+      : {}),
     skills: {
       groups: skillGroups.items,
     },
@@ -176,14 +352,16 @@ export const mergeProfessionalIdentity = (
     ...describeScalarReplacement('schema revision', current.schema_revision, incoming.schema_revision),
     ...describeScalarReplacement('identity core', current.identity, incoming.identity),
     ...describeScalarReplacement('self model', current.self_model, incoming.self_model),
-    ...describeScalarReplacement('preferences', current.preferences, incoming.preferences),
+    ...describeScalarReplacement('preferences', current.preferences, mergedPreferences),
     ...describeScalarReplacement('generator rules', current.generator_rules, incoming.generator_rules),
-    ...describeScalarReplacement('search vectors', current.search_vectors, incoming.search_vectors),
-    ...describeScalarReplacement('awareness', current.awareness, incoming.awareness),
     ...describeIdChanges('skill groups', skillGroups.addedIds, skillGroups.updatedIds),
     ...describeIdChanges('profiles', profiles.addedIds, profiles.updatedIds),
     ...describeIdChanges('roles', roles.addedIds, roles.updatedIds),
     ...describeIdChanges('projects', projects.addedIds, projects.updatedIds),
+    ...describeIdChanges('search vectors', searchVectorChanges.addedIds, searchVectorChanges.updatedIds),
+    ...describeRemovedIds('search vectors', searchVectorChanges.removedIds),
+    ...describeIdChanges('awareness items', awarenessChanges.addedIds, awarenessChanges.updatedIds),
+    ...describeRemovedIds('awareness items', awarenessChanges.removedIds),
     ...(education.added > 0 ? [`Added ${education.added} education entr${education.added === 1 ? 'y' : 'ies'}.`] : []),
     ...(education.updated > 0 ? [`Updated ${education.updated} education entr${education.updated === 1 ? 'y' : 'ies'}.`] : []),
   ]

@@ -1,4 +1,4 @@
-export type ProfessionalSchemaRevision = '3.1'
+export type ProfessionalSchemaRevision = '3.0' | '3.1'
 
 export type ProfessionalSkillDepth = 'expert' | 'strong' | 'working' | 'basic' | 'avoid'
 
@@ -265,7 +265,7 @@ const MATCHING_WEIGHT_VALUES = new Set<ProfessionalMatchingWeight>(['high', 'med
 const MATCHING_SEVERITY_VALUES = new Set<ProfessionalMatchingSeverity>(['hard', 'soft'])
 const AWARENESS_SEVERITY_VALUES = new Set<ProfessionalAwarenessSeverity>(['high', 'medium', 'low'])
 const SEARCH_VECTOR_PRIORITY_VALUES = new Set<ProfessionalSearchVectorPriority>(['high', 'medium', 'low'])
-const SCHEMA_REVISION_VALUES = new Set<ProfessionalSchemaRevision>(['3.1'])
+const SCHEMA_REVISION_VALUES = new Set<ProfessionalSchemaRevision>(['3.0', '3.1'])
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' &&
@@ -408,6 +408,24 @@ const slugifyFragment = (value: string): string =>
 const createDerivedId = (prefix: string, value: string, index: number): string =>
   [prefix, slugifyFragment(value) || String(index + 1)].join('-')
 
+const createUniqueDerivedEntries = <T extends { id: string }>(
+  entries: Omit<T, 'id'>[],
+  makeBaseId: (entry: Omit<T, 'id'>, index: number) => string,
+): T[] => {
+  const counts = new Map<string, number>()
+
+  return entries.map((entry, index) => {
+    const baseId = makeBaseId(entry, index)
+    const nextCount = (counts.get(baseId) ?? 0) + 1
+    counts.set(baseId, nextCount)
+
+    return {
+      ...entry,
+      id: nextCount === 1 ? baseId : `${baseId}--${nextCount}`,
+    } as T
+  })
+}
+
 export const deriveDepth = (
   skill: Pick<ProfessionalSkillItem, 'depth' | 'proficiency'>,
 ): ProfessionalSkillDepth | undefined => {
@@ -415,6 +433,7 @@ export const deriveDepth = (
     return skill.depth
   }
 
+  // Unknown legacy proficiency values remain unset so imports stay backward-compatible.
   if (skill.proficiency === 'primary') {
     return 'strong'
   }
@@ -429,18 +448,22 @@ export const deriveDepth = (
 export const deriveMatching = (
   roleFit: ProfessionalRoleFitPreferences,
 ): ProfessionalMatchingPreferences => ({
-  prioritize: roleFit.ideal.map((entry, index) => ({
-    id: createDerivedId('prioritize', entry, index),
-    label: entry,
-    description: entry,
-    weight: 'medium',
-  })),
-  avoid: roleFit.red_flags.map((entry, index) => ({
-    id: createDerivedId('avoid', entry, index),
-    label: entry,
-    description: entry,
-    severity: 'soft',
-  })),
+  prioritize: createUniqueDerivedEntries<ProfessionalMatchingPriority>(
+    roleFit.ideal.map((entry) => ({
+      label: entry,
+      description: entry,
+      weight: 'medium',
+    })),
+    (entry, index) => createDerivedId('prioritize', entry.label, index),
+  ),
+  avoid: createUniqueDerivedEntries<ProfessionalMatchingAvoid>(
+    roleFit.red_flags.map((entry) => ({
+      label: entry,
+      description: entry,
+      severity: 'soft',
+    })),
+    (entry, index) => createDerivedId('avoid', entry.label, index),
+  ),
 })
 
 export const stubAwareness = (): ProfessionalAwareness => ({
@@ -471,12 +494,16 @@ const parseMatchingPreferences = (
   context: string,
 ): ProfessionalMatchingPreferences => {
   const record = assertRecord(value, context)
+  const prioritizeIds = new Set<string>()
+  const avoidIds = new Set<string>()
 
   return {
     prioritize: assertArray(record.prioritize, `${context}.prioritize`).map((entry, index) => {
       const item = assertRecord(entry, `${context}.prioritize[${index}]`)
+      const id = assertString(item.id, `${context}.prioritize[${index}].id`)
+      assertUniqueId(prioritizeIds, id, `${context}.prioritize`)
       return {
-        id: assertString(item.id, `${context}.prioritize[${index}].id`),
+        id,
         label: assertString(item.label, `${context}.prioritize[${index}].label`),
         description: assertString(item.description, `${context}.prioritize[${index}].description`),
         weight: assertEnumString(
@@ -488,8 +515,10 @@ const parseMatchingPreferences = (
     }),
     avoid: assertArray(record.avoid, `${context}.avoid`).map((entry, index) => {
       const item = assertRecord(entry, `${context}.avoid[${index}]`)
+      const id = assertString(item.id, `${context}.avoid[${index}].id`)
+      assertUniqueId(avoidIds, id, `${context}.avoid`)
       return {
-        id: assertString(item.id, `${context}.avoid[${index}].id`),
+        id,
         label: assertString(item.label, `${context}.avoid[${index}].label`),
         description: assertString(item.description, `${context}.avoid[${index}].description`),
         severity: assertEnumString(
@@ -641,12 +670,15 @@ const parseSearchVector = (value: unknown, context: string): ProfessionalSearchV
 
 const parseAwareness = (value: unknown, context: string): ProfessionalAwareness => {
   const record = assertRecord(value, context)
+  const openQuestionIds = new Set<string>()
 
   return {
     open_questions: assertArray(record.open_questions, `${context}.open_questions`).map((entry, index) => {
       const item = assertRecord(entry, `${context}.open_questions[${index}]`)
+      const id = assertString(item.id, `${context}.open_questions[${index}].id`)
+      assertUniqueId(openQuestionIds, id, `${context}.open_questions`)
       return {
-        id: assertString(item.id, `${context}.open_questions[${index}].id`),
+        id,
         topic: assertString(item.topic, `${context}.open_questions[${index}].topic`),
         description: assertString(item.description, `${context}.open_questions[${index}].description`),
         action: assertString(item.action, `${context}.open_questions[${index}].action`),
@@ -668,16 +700,13 @@ export const migrateProfessionalIdentityToV31 = (
   identity: ProfessionalIdentityV3,
 ): { data: ProfessionalIdentityV3; warnings: string[] } => {
   const warnings: string[] = []
-  let derivedDepth = false
+  let didDeriveDepth = false
 
   const data: ProfessionalIdentityV3 = {
     ...identity,
     schema_revision: '3.1',
     preferences: {
       ...identity.preferences,
-      ...(identity.preferences.constraints !== undefined
-        ? { constraints: identity.preferences.constraints }
-        : {}),
       matching: identity.preferences.matching ?? deriveMatching(identity.preferences.role_fit),
     },
     skills: {
@@ -693,7 +722,7 @@ export const migrateProfessionalIdentityToV31 = (
             return item
           }
 
-          derivedDepth = true
+          didDeriveDepth = true
           return {
             ...item,
             depth: nextDepth,
@@ -708,7 +737,7 @@ export const migrateProfessionalIdentityToV31 = (
     warnings.push('Upgraded Professional Identity document to schema_revision "3.1".')
   }
 
-  if (derivedDepth) {
+  if (didDeriveDepth) {
     warnings.push('Derived default skill depth values from legacy proficiency fields.')
   }
 
@@ -750,6 +779,7 @@ export const importProfessionalIdentity = (
   const roleIds = new Set<string>()
   const bulletIds = new Set<string>()
   const projectIds = new Set<string>()
+  const searchVectorIds = new Set<string>()
 
   const parsed: ProfessionalIdentityV3 = {
     ...(root.$schema ? { $schema: assertString(root.$schema, '$schema') } : {}),
@@ -1043,9 +1073,11 @@ export const importProfessionalIdentity = (
     },
     ...(root.search_vectors !== undefined
       ? {
-          search_vectors: assertArray(root.search_vectors, 'search_vectors').map((entry, index) =>
-            parseSearchVector(entry, `search_vectors[${index}]`),
-          ),
+          search_vectors: assertArray(root.search_vectors, 'search_vectors').map((entry, index) => {
+            const parsedVector = parseSearchVector(entry, `search_vectors[${index}]`)
+            assertUniqueId(searchVectorIds, parsedVector.id, 'search_vectors')
+            return parsedVector
+          }),
         }
       : {}),
     ...(root.awareness !== undefined ? { awareness: parseAwareness(root.awareness, 'awareness') } : {}),

@@ -203,14 +203,43 @@ const appendChangelog = (
   entry: IdentityChangeLogEntry,
 ): IdentityChangeLogEntry[] => [entry, ...current].slice(0, 25)
 
-const parseDraftDocument = (value: string): { data: ProfessionalIdentityV3; warnings: string[] } => {
+const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const hasOwn = (value: Record<string, unknown>, key: string): boolean =>
+  Object.prototype.hasOwnProperty.call(value, key)
+
+const parseDraftDocument = (
+  value: string,
+): {
+  data: ProfessionalIdentityV3
+  warnings: string[]
+  fieldPresence: {
+    awareness: boolean
+    search_vectors: boolean
+    preferences: {
+      constraints: boolean
+      matching: boolean
+    }
+  }
+} => {
   const parsed = parseJsonWithRepair<unknown>(value, 'Draft identity document')
   const imported = importProfessionalIdentity(parsed.data)
+  const root = isPlainRecord(parsed.data) ? parsed.data : {}
+  const preferences = isPlainRecord(root.preferences) ? root.preferences : {}
   return {
     data: imported.data,
     warnings: parsed.repaired
       ? ['Repaired minor JSON syntax issues in the draft document before validation.', ...imported.warnings]
       : imported.warnings,
+    fieldPresence: {
+      awareness: hasOwn(root, 'awareness'),
+      search_vectors: hasOwn(root, 'search_vectors'),
+      preferences: {
+        constraints: hasOwn(preferences, 'constraints'),
+        matching: hasOwn(preferences, 'matching'),
+      },
+    },
   }
 }
 
@@ -793,7 +822,7 @@ export const useIdentityStore = create<IdentityState>()(
         const parsedDraft = parseDraftDocument(draftDocument)
         const result =
           mode === 'merge' && currentIdentity
-            ? mergeProfessionalIdentity(currentIdentity, parsedDraft.data)
+            ? mergeProfessionalIdentity(currentIdentity, parsedDraft.data, parsedDraft.fieldPresence)
             : replaceProfessionalIdentity(parsedDraft.data)
 
         set((state) => ({

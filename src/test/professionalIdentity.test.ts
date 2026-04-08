@@ -194,6 +194,33 @@ describe('professional identity schema', () => {
     )
   })
 
+  it('upgrades an explicitly tagged 3.0 revision to 3.1', () => {
+    const legacyRevision = clone(baseIdentityFixture)
+    legacyRevision.schema_revision = '3.0'
+
+    const parsed = importProfessionalIdentity(legacyRevision)
+
+    expect(parsed.data.schema_revision).toBe('3.1')
+    expect(parsed.warnings).toContain('Upgraded Professional Identity document to schema_revision "3.1".')
+  })
+
+  it('creates stable unique derived ids when role_fit labels repeat', () => {
+    const duplicateRoleFit = clone(baseIdentityFixture)
+    duplicateRoleFit.preferences.role_fit.ideal = ['Platform roles', 'Platform roles']
+    duplicateRoleFit.preferences.role_fit.red_flags = ['Pure ticket queue work', 'Pure ticket queue work']
+
+    const parsed = importProfessionalIdentity(duplicateRoleFit)
+
+    expect(parsed.data.preferences.matching?.prioritize.map((entry) => entry.id)).toEqual([
+      'prioritize-platform-roles',
+      'prioritize-platform-roles--2',
+    ])
+    expect(parsed.data.preferences.matching?.avoid.map((entry) => entry.id)).toEqual([
+      'avoid-pure-ticket-queue-work',
+      'avoid-pure-ticket-queue-work--2',
+    ])
+  })
+
   it('preserves explicit v3.1 fields when they are already present', () => {
     const enriched = clone(baseIdentityFixture)
     enriched.schema_revision = '3.1'
@@ -328,6 +355,78 @@ describe('professional identity schema', () => {
     invalid.roles.push(clone(baseIdentityFixture.roles[0]))
 
     expect(() => importProfessionalIdentity(invalid)).toThrow(/duplicate id/i)
+  })
+
+  it('rejects duplicate matching ids', () => {
+    const invalid = clone(baseIdentityFixture)
+    invalid.schema_revision = '3.1'
+    invalid.preferences.matching = {
+      prioritize: [
+        {
+          id: 'builder-friendly',
+          label: 'Builder-friendly',
+          description: 'Builder-friendly',
+          weight: 'high',
+        },
+        {
+          id: 'builder-friendly',
+          label: 'Builder-friendly duplicate',
+          description: 'Builder-friendly duplicate',
+          weight: 'medium',
+        },
+      ],
+      avoid: [],
+    }
+
+    expect(() => importProfessionalIdentity(invalid)).toThrow(/preferences\.matching\.prioritize has duplicate id/i)
+  })
+
+  it('rejects duplicate search vector ids', () => {
+    const invalid = clone(baseIdentityFixture)
+    invalid.schema_revision = '3.1'
+    invalid.search_vectors = [
+      {
+        id: 'v1-security-platform',
+        title: 'Security Platform Engineer',
+        priority: 'high',
+        thesis: 'Vector one.',
+        target_roles: ['Platform Engineer'],
+        keywords: { primary: ['security'], secondary: [] },
+      },
+      {
+        id: 'v1-security-platform',
+        title: 'Security Platform Engineer duplicate',
+        priority: 'medium',
+        thesis: 'Vector two.',
+        target_roles: ['Security Engineer'],
+        keywords: { primary: ['security'], secondary: [] },
+      },
+    ]
+
+    expect(() => importProfessionalIdentity(invalid)).toThrow(/search_vectors has duplicate id/i)
+  })
+
+  it('rejects duplicate awareness ids', () => {
+    const invalid = clone(baseIdentityFixture)
+    invalid.schema_revision = '3.1'
+    invalid.awareness = {
+      open_questions: [
+        {
+          id: 'degree-filter-risk',
+          topic: 'Degree filter risk',
+          description: 'One.',
+          action: 'Check requirements.',
+        },
+        {
+          id: 'degree-filter-risk',
+          topic: 'Duplicate degree filter risk',
+          description: 'Two.',
+          action: 'Check requirements again.',
+        },
+      ],
+    }
+
+    expect(() => importProfessionalIdentity(invalid)).toThrow(/awareness\.open_questions has duplicate id/i)
   })
 
   it('rejects duplicate bullet ids across different roles', () => {
