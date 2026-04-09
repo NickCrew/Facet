@@ -5,6 +5,7 @@ import { useIdentityStore } from '../../store/identityStore'
 import { facetClientEnv } from '../../utils/facetEnv'
 import { sanitizeEndpointUrl } from '../../utils/idUtils'
 import {
+  findAdjacentIdentityEnrichmentSkills,
   findNextPendingIdentitySkill,
   getIdentityEnrichmentProgress,
   getSkillEnrichmentStatus,
@@ -109,13 +110,7 @@ export function IdentityEnrichmentSkillPage() {
       return
     }
 
-    void navigate({
-      to: '/identity/enrich/$groupId/$skillName',
-      params: {
-        groupId: nextSkill.groupId,
-        skillName: nextSkill.skillName,
-      },
-    })
+    navigateToSkill(nextSkill)
   }
 
   if (!currentIdentity || !resolved || !progress) {
@@ -135,6 +130,33 @@ export function IdentityEnrichmentSkillPage() {
     searchSignal !== (resolved.skill.search_signal ?? '')
   const isContextInvalid = Boolean(error && !context.trim())
   const isSearchSignalInvalid = Boolean(error && !searchSignal.trim())
+  const adjacentSkills = useMemo(
+    () => findAdjacentIdentityEnrichmentSkills(currentIdentity, { groupId, skillName }),
+    [currentIdentity, groupId, skillName],
+  )
+  const previousSkill = adjacentSkills.previous
+  const nextSkill = adjacentSkills.next
+
+  const navigateToSkill = (
+    target: { groupId: string; skillName: string } | null,
+    options?: { confirmDirty?: boolean },
+  ) => {
+    if (!target) {
+      return
+    }
+
+    if (options?.confirmDirty && isDirty && !window.confirm('You have unsaved changes. Leave this skill anyway?')) {
+      return
+    }
+
+    void navigate({
+      to: '/identity/enrich/$groupId/$skillName',
+      params: {
+        groupId: target.groupId,
+        skillName: target.skillName,
+      },
+    })
+  }
 
   const buildSavedIdentity = () =>
     updateIdentityEnrichmentSkill(currentIdentity, groupId, skillName, (skill) => ({
@@ -260,11 +282,24 @@ export function IdentityEnrichmentSkillPage() {
         </div>
 
         <div className="identity-header-actions">
+          <button
+            className="identity-btn"
+            type="button"
+            onClick={() => navigateToSkill(previousSkill, { confirmDirty: true })}
+            disabled={!previousSkill}
+          >
+            Previous skill
+          </button>
+          <button
+            className="identity-btn"
+            type="button"
+            onClick={() => navigateToSkill(nextSkill, { confirmDirty: true })}
+            disabled={!nextSkill}
+          >
+            Next skill
+          </button>
           <button className="identity-btn" type="button" onClick={handleBackToOverview}>
             Back to Overview
-          </button>
-          <button className="identity-btn identity-btn-primary" type="button" onClick={() => handleSave('continue')}>
-            Save and continue
           </button>
         </div>
       </header>
@@ -315,8 +350,19 @@ export function IdentityEnrichmentSkillPage() {
         <div className="identity-card-header">
           <div>
             <h2>Skill Details</h2>
-            <p>Capture depth, grounded context, and a recruiter-readable search signal.</p>
+            <p>Start with an AI draft, then correct the depth and context before saving.</p>
           </div>
+        </div>
+
+        <div className="identity-scan-guidance">
+          <p className="identity-scan-guidance-text">
+            The AI should draft all three fields first.
+          </p>
+          <p className="identity-scan-guess-text">
+            <strong>Depth</strong> and <strong>Context</strong> are first-pass guesses you can
+            correct. <strong>Search Signal</strong> is an AI-derived positioning line that you can
+            refine before saving.
+          </p>
         </div>
 
         <label className="identity-field" htmlFor={depthFieldId}>
@@ -340,6 +386,7 @@ export function IdentityEnrichmentSkillPage() {
           <textarea
             id={contextFieldId}
             className="identity-textarea"
+            placeholder="AI should draft the operating context for this skill, then you can correct scope or nuance."
             aria-invalid={isContextInvalid || undefined}
             aria-describedby={isContextInvalid ? errorId : undefined}
             value={context}
@@ -352,6 +399,7 @@ export function IdentityEnrichmentSkillPage() {
           <textarea
             id={searchSignalFieldId}
             className="identity-textarea"
+            placeholder="AI should draft the recruiter-readable signal this skill should send in search and matching."
             aria-invalid={isSearchSignalInvalid || undefined}
             aria-describedby={isSearchSignalInvalid ? errorId : undefined}
             value={searchSignal}
@@ -364,8 +412,8 @@ export function IdentityEnrichmentSkillPage() {
             {isGenerating
               ? 'Generating...'
               : lastSuggestion
-                ? 'Regenerate suggestions'
-                : 'Suggest with AI'}
+                ? 'Regenerate AI draft'
+                : 'Draft with AI'}
           </button>
           <button className="identity-btn identity-btn-primary" type="button" onClick={() => handleSave('continue')}>
             Save and continue

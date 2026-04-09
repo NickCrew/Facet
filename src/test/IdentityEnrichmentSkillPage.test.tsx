@@ -90,9 +90,27 @@ describe('IdentityEnrichmentSkillPage', () => {
 
     expect(screen.getByRole('heading', { name: 'Kubernetes' })).toBeTruthy()
     expect(screen.getByText(/Core platform systems and delivery infrastructure/i)).toBeTruthy()
+    expect(screen.getByText(/The AI should draft all three fields first/i)).toBeTruthy()
     expect(screen.getByLabelText('Depth')).toBeTruthy()
     expect(screen.getByLabelText('Context')).toBeTruthy()
     expect(screen.getByLabelText('Search Signal')).toBeTruthy()
+  })
+
+  it('lets users navigate to the previous and next skills in sequence', async () => {
+    routeParams.skillName = 'Terraform'
+    const { IdentityEnrichmentSkillPage } = await import('../routes/identity/IdentityEnrichmentSkillPage')
+    render(<IdentityEnrichmentSkillPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous skill' }))
+
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: '/identity/enrich/$groupId/$skillName',
+      params: {
+        groupId: 'platform',
+        skillName: 'Kubernetes',
+      },
+    })
+    expect(screen.getByRole('button', { name: 'Next skill' }).hasAttribute('disabled')).toBe(true)
   })
 
   it('disables skipping for already complete skills', async () => {
@@ -179,7 +197,7 @@ describe('IdentityEnrichmentSkillPage', () => {
     const { IdentityEnrichmentSkillPage } = await import('../routes/identity/IdentityEnrichmentSkillPage')
     render(<IdentityEnrichmentSkillPage />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Suggest with AI' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Draft with AI' }))
 
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toContain('AI suggestions are disabled')
@@ -205,7 +223,7 @@ describe('IdentityEnrichmentSkillPage', () => {
     const { IdentityEnrichmentSkillPage } = await import('../routes/identity/IdentityEnrichmentSkillPage')
     render(<IdentityEnrichmentSkillPage />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Suggest with AI' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Draft with AI' }))
 
     await waitFor(() => {
       expect(skillEnrichmentMocks.generateSkillEnrichmentSuggestionMock).toHaveBeenCalledTimes(1)

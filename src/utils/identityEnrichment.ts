@@ -132,3 +132,28 @@ export const findNextPendingIdentitySkill = (
 
   return pending[0] ?? null
 }
+
+export const findAdjacentIdentityEnrichmentSkills = (
+  identity: ProfessionalIdentityV3,
+  current: Pick<IdentityEnrichmentSkillRef, 'groupId' | 'skillName'>,
+): {
+  previous: IdentityEnrichmentSkillRef | null
+  next: IdentityEnrichmentSkillRef | null
+} => {
+  const skills = listIdentityEnrichmentSkills(identity)
+  const currentIndex = skills.findIndex(
+    (skill) => skill.groupId === current.groupId && skill.skillName === current.skillName,
+  )
+
+  if (currentIndex === -1) {
+    return {
+      previous: null,
+      next: null,
+    }
+  }
+
+  return {
+    previous: skills[currentIndex - 1] ?? null,
+    next: skills[currentIndex + 1] ?? null,
+  }
+}
