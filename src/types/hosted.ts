@@ -146,6 +146,7 @@ export type FacetAiAccessSource = 'none' | 'hosted-entitlement' | 'self-hosted-o
 
 export type FacetAiAccessDenialReason =
   | 'upgrade_required'
+  | 'access_expired'
   | 'billing_issue'
   | 'self_hosted_proxy_unavailable'
 

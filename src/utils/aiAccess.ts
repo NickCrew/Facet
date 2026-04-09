@@ -34,6 +34,14 @@ export function resolveAiAccess(
     }
   }
 
+  if (entitlement.effectiveThrough && new Date(entitlement.effectiveThrough) < new Date()) {
+    return {
+      allowed: false,
+      source: 'none',
+      reason: 'access_expired',
+    }
+  }
+
   if (HOSTED_ALLOWED_STATUSES.has(entitlement.status)) {
     return {
       allowed: true,

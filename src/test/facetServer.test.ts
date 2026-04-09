@@ -798,6 +798,42 @@ describe('facetServer persistence API', () => {
     )
   })
 
+  it('allows hosted identity bullet deepening requests when the entitlement includes identity.deepen', async () => {
+    const { server, baseUrl, accessToken } = await startHostedServer({
+      entitlement: {
+        planId: 'ai-pro',
+        status: 'active',
+        source: 'stripe',
+        features: ['identity.deepen'],
+        effectiveThrough: '2026-04-14T00:00:00.000Z',
+      },
+    })
+    servers.add(server)
+
+    const allowed = await fetch(baseUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        Origin: 'http://localhost:5173',
+        'X-Proxy-API-Key': 'proxy-key',
+      },
+      body: JSON.stringify({
+        feature: 'identity.deepen',
+        model: 'haiku',
+        system: 'Return JSON only.',
+        messages: [{ role: 'user', content: 'Deepen this bullet.' }],
+      }),
+    })
+
+    expect(allowed.status).toBe(200)
+    await expect(allowed.json()).resolves.toEqual(
+      expect.objectContaining({
+        content: [{ type: 'text', text: '{"ok":true}' }],
+      }),
+    )
+  })
+
   it('rate limits hosted AI requests and returns retry metadata', async () => {
     const { server, baseUrl, accessToken, operationsMonitor } = await startHostedServer({
       entitlement: {

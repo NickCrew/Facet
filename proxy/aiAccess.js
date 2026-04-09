@@ -1,14 +1,6 @@
-export const FACET_AI_FEATURE_KEYS = [
-  'build.jd-analysis',
-  'build.bullet-reframe',
-  'match.jd-analysis',
-  'research.profile-inference',
-  'research.search',
-  'prep.generate',
-  'letters.generate',
-  'linkedin.generate',
-  'debrief.generate',
-]
+import { FACET_AI_FEATURE_KEYS } from './aiFeatures.js'
+
+export { FACET_AI_FEATURE_KEYS }
 
 const HOSTED_ALLOWED_STATUSES = new Set(['trial', 'active', 'grace'])
 

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SignJWT, exportJWK, generateKeyPair } from 'jose'
+import { FACET_PAID_AI_FEATURES } from '../types/hosted'
 
 async function loadProxyModules() {
   const [
@@ -7,6 +8,7 @@ async function loadProxyModules() {
     { createInMemoryWorkspaceStore },
     { createInMemoryHostedMembershipStore },
     { createInMemoryHostedBillingStore },
+    { AI_PRO_FEATURES },
   ] = await Promise.all([
     // @ts-expect-error runtime-tested local proxy module
     import('../../proxy/facetServer.js'),
@@ -16,6 +18,8 @@ async function loadProxyModules() {
     import('../../proxy/hostedAuth.js'),
     // @ts-expect-error runtime-tested local proxy module
     import('../../proxy/billingState.js'),
+    // @ts-expect-error runtime-tested local proxy module
+    import('../../proxy/aiFeatures.js'),
   ])
 
   return {
@@ -23,6 +27,7 @@ async function loadProxyModules() {
     createInMemoryWorkspaceStore,
     createInMemoryHostedMembershipStore,
     createInMemoryHostedBillingStore,
+    AI_PRO_FEATURES,
   }
 }
 
@@ -220,6 +225,12 @@ async function startBillingServer(options?: {
 }
 
 describe('facetServer billing API', () => {
+  it('keeps checkout entitlements in sync with the shared hosted AI feature list', async () => {
+    const { AI_PRO_FEATURES } = await loadProxyModules()
+
+    expect(AI_PRO_FEATURES).toEqual(FACET_PAID_AI_FEATURES)
+  })
+
   const servers = new Set<import('node:http').Server>()
 
   afterEach(async () => {

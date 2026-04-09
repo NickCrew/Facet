@@ -4,9 +4,11 @@ import { useHostedAppStore } from '../../store/hostedAppStore'
 import { getFacetDeploymentMode } from '../../utils/hostedSession'
 import './account.css'
 
+// Human-readable labels for the hosted AI Pro bundle. Some labels group multiple
+// backend entitlement keys from the proxy feature configuration.
 const AI_PRO_FEATURES = [
   'JD analysis and match scoring',
-  'Bullet reframing and deepening',
+  'Bullet reframing, identity extraction, and deepening',
   'Cover letter generation',
   'LinkedIn profile generation',
   'Interview prep generation',

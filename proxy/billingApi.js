@@ -1,4 +1,5 @@
 import Stripe from 'stripe'
+import { AI_PRO_FEATURES } from './aiFeatures.js'
 
 function isRecord(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -50,17 +51,6 @@ export function createStripeBillingClient(options) {
 }
 
 const AI_PRO_ACCESS_DAYS = 90
-const AI_PRO_FEATURES = [
-  'build.jd-analysis',
-  'build.bullet-reframe',
-  'match.jd-analysis',
-  'research.profile-inference',
-  'research.search',
-  'prep.generate',
-  'letters.generate',
-  'linkedin.generate',
-  'debrief.generate',
-]
 
 function computeEffectiveThrough(fromDate, days) {
   const date = new Date(fromDate)

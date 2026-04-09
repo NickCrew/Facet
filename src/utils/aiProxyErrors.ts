@@ -70,6 +70,7 @@ export async function readAiProxyError(response: Response): Promise<Error> {
       : null
   const reason =
     payload?.reason === 'upgrade_required' ||
+    payload?.reason === 'access_expired' ||
     payload?.reason === 'billing_issue' ||
     payload?.reason === 'self_hosted_proxy_unavailable' ||
     payload?.reason === 'auth_required'

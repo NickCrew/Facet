@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { resolveAiAccess } from '../utils/aiAccess'
 import type { FacetHostedAccessContext } from '../types/hosted'
-import { FACET_PAID_AI_FEATURES } from '../types/hosted'
+import { FACET_AI_FEATURE_KEYS, FACET_PAID_AI_FEATURES } from '../types/hosted'
 
 const hostedContext = (
   overrides: Partial<FacetHostedAccessContext> = {},
@@ -40,12 +40,20 @@ const hostedContext = (
     status: 'active',
     source: 'stripe',
     features: [...FACET_PAID_AI_FEATURES],
-    effectiveThrough: '2026-04-01T00:00:00.000Z',
+    effectiveThrough: '2099-04-01T00:00:00.000Z',
   },
   ...overrides,
 })
 
 describe('resolveAiAccess', () => {
+  it('keeps the hosted proxy feature allowlist in sync with the shared feature keys', async () => {
+    const { FACET_AI_FEATURE_KEYS: proxyFeatureKeys } =
+      // @ts-expect-error runtime-tested local proxy module
+      await import('../../proxy/aiFeatures.js')
+
+    expect(proxyFeatureKeys).toEqual(FACET_AI_FEATURE_KEYS)
+  })
+
   it('allows paid hosted AI features for active entitlements', () => {
     expect(resolveAiAccess(hostedContext(), 'research.search')).toEqual({
       allowed: true,
@@ -70,6 +78,12 @@ describe('resolveAiAccess', () => {
       source: 'hosted-entitlement',
       reason: null,
     })
+
+    expect(resolveAiAccess(hostedContext(), 'identity.deepen')).toEqual({
+      allowed: true,
+      source: 'hosted-entitlement',
+      reason: null,
+    })
   })
 
   it('allows hosted trial and grace access', () => {
@@ -81,7 +95,7 @@ describe('resolveAiAccess', () => {
             status: 'trial',
             source: 'stripe',
             features: [...FACET_PAID_AI_FEATURES],
-            effectiveThrough: '2026-04-01T00:00:00.000Z',
+            effectiveThrough: '2099-04-01T00:00:00.000Z',
           },
         }),
         'prep.generate',
@@ -100,7 +114,7 @@ describe('resolveAiAccess', () => {
             status: 'grace',
             source: 'stripe',
             features: [...FACET_PAID_AI_FEATURES],
-            effectiveThrough: '2026-04-01T00:00:00.000Z',
+            effectiveThrough: '2099-04-01T00:00:00.000Z',
           },
         }),
         'letters.generate',
@@ -136,10 +150,21 @@ describe('resolveAiAccess', () => {
             status: 'active',
             source: 'stripe',
             features: ['prep.generate'],
-            effectiveThrough: '2026-04-01T00:00:00.000Z',
+            effectiveThrough: '2099-04-01T00:00:00.000Z',
           },
         }),
         'research.search',
+      ),
+    ).toEqual({
+      allowed: false,
+      source: 'none',
+      reason: 'upgrade_required',
+    })
+
+    expect(
+      resolveAiAccess(
+        hostedContext(),
+        'unknown.feature' as unknown as import('../types/hosted').FacetAiFeatureKey,
       ),
     ).toEqual({
       allowed: false,
@@ -163,7 +188,7 @@ describe('resolveAiAccess', () => {
             status: 'delinquent',
             source: 'stripe',
             features: [...FACET_PAID_AI_FEATURES],
-            effectiveThrough: '2026-04-01T00:00:00.000Z',
+            effectiveThrough: '2099-04-01T00:00:00.000Z',
           },
         }),
         'build.bullet-reframe',
@@ -172,6 +197,27 @@ describe('resolveAiAccess', () => {
       allowed: false,
       source: 'none',
       reason: 'billing_issue',
+    })
+  })
+
+  it('denies hosted AI access when the entitlement date has expired', () => {
+    expect(
+      resolveAiAccess(
+        hostedContext({
+          entitlement: {
+            planId: 'ai-pro',
+            status: 'active',
+            source: 'stripe',
+            features: [...FACET_PAID_AI_FEATURES],
+            effectiveThrough: '2020-01-01T00:00:00.000Z',
+          },
+        }),
+        'identity.deepen',
+      ),
+    ).toEqual({
+      allowed: false,
+      source: 'none',
+      reason: 'access_expired',
     })
   })
 
