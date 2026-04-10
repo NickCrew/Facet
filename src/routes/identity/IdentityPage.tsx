@@ -265,9 +265,7 @@ export function IdentityPage() {
 
   const handleRequestUpload = () => {
     setIntakeMode('upload')
-    globalThis.setTimeout(() => {
-      uploadRef.current?.click()
-    }, 0)
+    uploadRef.current?.click()
   }
 
   const handleDrop = async (event: DragEvent<HTMLDivElement>) => {

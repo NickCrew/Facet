@@ -155,6 +155,14 @@ export function ExtractionAgentCard({
         </div>
       </div>
 
+      <input
+        ref={uploadRef}
+        hidden
+        type="file"
+        accept="application/pdf,.pdf"
+        onChange={(event) => void onUploadChange(event)}
+      />
+
       {intakeMode === 'upload' ? (
         <>
           <div
@@ -179,14 +187,6 @@ export function ExtractionAgentCard({
             Resume Scanner v1 is PDF-only and performs a local structural parse before any AI call. Use a
             text-based, single-column PDF. OCR and image-only resumes are out of scope for this pass.
           </p>
-          <input
-            ref={uploadRef}
-            hidden
-            type="file"
-            accept="application/pdf,.pdf"
-            onChange={(event) => void onUploadChange(event)}
-          />
-
           {scanResult ? (
             <>
               <div className="identity-scan-status">

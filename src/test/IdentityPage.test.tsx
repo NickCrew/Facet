@@ -297,7 +297,7 @@ describe('IdentityPage', () => {
     )
   })
 
-  it('opens the file chooser when Upload Resume is clicked from paste mode', async () => {
+  it('opens the file chooser immediately when Upload Resume is clicked from paste mode', () => {
     const inputClickMock = vi
       .spyOn(HTMLInputElement.prototype, 'click')
       .mockImplementation(() => undefined)
@@ -310,10 +310,8 @@ describe('IdentityPage', () => {
 
     fireEvent.click(screen.getByText('Upload Resume'))
 
-    await waitFor(() => {
-      expect(useIdentityStore.getState().intakeMode).toBe('upload')
-      expect(inputClickMock).toHaveBeenCalledTimes(1)
-    })
+    expect(useIdentityStore.getState().intakeMode).toBe('upload')
+    expect(inputClickMock).toHaveBeenCalledTimes(1)
   })
 
   it('scans a dropped PDF from the upload zone', async () => {
