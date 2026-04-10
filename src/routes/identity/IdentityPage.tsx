@@ -696,7 +696,7 @@ export function IdentityPage() {
         </section>
       ) : null}
 
-      <div className="identity-grid">
+      <div className="identity-grid identity-grid-workbench">
         <ExtractionAgentCard
           intakeMode={intakeMode}
           sourceMaterial={sourceMaterial}

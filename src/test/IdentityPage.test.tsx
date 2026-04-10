@@ -680,9 +680,9 @@ describe('IdentityPage', () => {
       expect(screen.getByDisplayValue('Nick Ferguson')).toBeTruthy()
     })
 
-    const deepenButtons = screen.getAllByText('Deepen')
-    fireEvent.click(deepenButtons[0] as HTMLButtonElement)
-    fireEvent.click(deepenButtons[1] as HTMLButtonElement)
+    fireEvent.click(screen.getByText('Deepen'))
+    fireEvent.click(screen.getByText('Migrated workloads to EKS with Helm charts.'))
+    fireEvent.click(screen.getByText('Deepen'))
 
     await waitFor(() => {
       expect(identityExtractionMocks.deepenIdentityBulletMock).toHaveBeenCalledTimes(1)
@@ -721,6 +721,22 @@ describe('IdentityPage', () => {
       'idle',
     )
     expect((screen.getByText('Deepen All') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('switches the detail pane when a different scanned bullet is selected', async () => {
+    resumeScannerMocks.scanResumePdfMock.mockResolvedValueOnce(scanFixtureWithTwoBullets())
+    const { container } = render(<IdentityPage />)
+    uploadPdf(container)
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Ported the platform to Kubernetes-based installs.')).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByText('Migrated workloads to EKS with Helm charts.'))
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Migrated workloads to EKS with Helm charts.')).toBeTruthy()
+    })
   })
 
   it('deepens all scanned bullets sequentially from the scanner card', async () => {
@@ -924,5 +940,15 @@ describe('IdentityPage', () => {
     expect(screen.getByText(/Complete 1/i)).toBeTruthy()
     expect(screen.getByText(/Skipped 1/i)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Continue Skill Enrichment' })).toBeTruthy()
+  })
+
+  it('uses a wider workbench layout and keeps the model builder compact before a draft exists', () => {
+    const { container } = render(<IdentityPage />)
+    const validateButton = screen.getByRole('button', { name: 'Validate Draft' }) as HTMLButtonElement
+
+    expect(container.querySelector('.identity-grid.identity-grid-workbench')).toBeTruthy()
+    expect(container.querySelector('.identity-textarea-code-empty')).toBeTruthy()
+    expect(screen.getByText(/Generate or import a draft first/i)).toBeTruthy()
+    expect(validateButton.disabled).toBe(true)
   })
 })

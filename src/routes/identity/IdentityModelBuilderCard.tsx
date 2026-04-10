@@ -26,6 +26,8 @@ export function IdentityModelBuilderCard({
   onApply,
   onPushToBuild,
 }: IdentityModelBuilderCardProps) {
+  const hasDraftDocument = draftDocument.trim().length > 0
+
   return (
     <section className="identity-card">
       <div className="identity-card-header">
@@ -34,11 +36,11 @@ export function IdentityModelBuilderCard({
           <p>Validate the current draft JSON, then apply it as a replace or merge operation.</p>
         </div>
         <div className="identity-card-actions">
-          <button className="identity-btn" type="button" onClick={onValidateDraft}>
+          <button className="identity-btn" type="button" onClick={onValidateDraft} disabled={!hasDraftDocument}>
             <ShieldCheck size={16} />
             Validate Draft
           </button>
-          <button className="identity-btn" type="button" onClick={() => onApply('merge')} disabled={!draftDocument.trim()}>
+          <button className="identity-btn" type="button" onClick={() => onApply('merge')} disabled={!hasDraftDocument}>
             <GitMerge size={16} />
             Merge Draft
           </button>
@@ -46,7 +48,7 @@ export function IdentityModelBuilderCard({
             className="identity-btn identity-btn-primary"
             type="button"
             onClick={() => onApply('replace')}
-            disabled={!draftDocument.trim()}
+            disabled={!hasDraftDocument}
           >
             <RefreshCcw size={16} />
             Replace Identity
@@ -80,11 +82,14 @@ export function IdentityModelBuilderCard({
       <label className="identity-field">
         <span className="identity-label">Draft JSON</span>
         <textarea
-          className="identity-textarea identity-textarea-code"
+          className={`identity-textarea identity-textarea-code${hasDraftDocument ? '' : ' identity-textarea-code-empty'}`}
           value={draftDocument}
           onChange={(event) => onSetDraftDocument(event.target.value)}
           placeholder='{"version": 3, "...": "..."}'
         />
+        {!hasDraftDocument ? (
+          <span className="identity-muted">Generate or import a draft first, then validate the JSON and apply it from this panel.</span>
+        ) : null}
       </label>
 
       <div className="identity-card-actions">
