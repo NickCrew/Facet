@@ -1,6 +1,6 @@
 ---
 id: m-4
-title: "m-4 - Job Search Suite"
+title: "m-4 - Job Search Suite Follow-Through"
 ---
 
 ## Description
