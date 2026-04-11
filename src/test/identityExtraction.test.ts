@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { importProfessionalIdentity } from '../identity/schema'
+import { deriveMatching, importProfessionalIdentity } from '../identity/schema'
 import {
+  BULLET_DEEPENING_SYSTEM_PROMPT,
+  EXTRACTION_SYSTEM_PROMPT,
   buildDeepenBulletPrompt,
   parseDeepenIdentityBulletResponse,
   parseIdentityExtractionResponse,
@@ -122,7 +124,31 @@ const responseBody = {
 const cloneIdentityAsRecord = (): Record<string, unknown> =>
   structuredClone(responseBody.identity) as unknown as Record<string, unknown>
 
+const cloneNativeV31ExtractionIdentity = (): Record<string, unknown> => {
+  const identity = cloneIdentityAsRecord()
+  identity.schema_revision = '3.1'
+  identity.search_vectors = []
+  identity.awareness = { open_questions: [] }
+  const preferences = identity.preferences as Record<string, unknown>
+  delete preferences.role_fit
+  preferences.matching = { prioritize: [], avoid: [] }
+  preferences.constraints = {}
+  return identity
+}
+
 describe('identityExtraction', () => {
+  it('exports v3.1 extraction prompts without legacy role_fit guidance', () => {
+    expect(EXTRACTION_SYSTEM_PROMPT).toContain('Professional Identity Schema v3.1')
+    expect(EXTRACTION_SYSTEM_PROMPT).not.toContain('"role_fit"')
+    expect(EXTRACTION_SYSTEM_PROMPT).toContain('"schema_revision": "3.1"')
+    expect(EXTRACTION_SYSTEM_PROMPT).toContain('"matching": {')
+    expect(EXTRACTION_SYSTEM_PROMPT).toContain('"prioritize": [{ "id": string, "label": string, "description": string, "weight": "high" | "medium" | "low" }]')
+    expect(EXTRACTION_SYSTEM_PROMPT).toContain('"avoid": [{ "id": string, "label": string, "description": string, "severity": "hard" | "soft" }]')
+    expect(EXTRACTION_SYSTEM_PROMPT).toContain('"search_vectors": []')
+    expect(EXTRACTION_SYSTEM_PROMPT).toContain('"awareness": { "open_questions": [] }')
+    expect(BULLET_DEEPENING_SYSTEM_PROMPT).toContain('Professional Identity Schema v3.1')
+  })
+
   it('parses extraction output and backfills bullets that were not annotated', () => {
     const parsed = parseIdentityExtractionResponse(
       JSON.stringify({
@@ -386,6 +412,522 @@ describe('identityExtraction', () => {
     })
     expect(parsed.warnings).toContain(
       'Normalized education from an object into a single-item array for AI extraction output.',
+    )
+  })
+
+  it('accepts native v3.1 extraction payloads without migration warnings', () => {
+    const identity = cloneNativeV31ExtractionIdentity()
+    ;(identity.preferences as Record<string, unknown>).matching = {
+      prioritize: [
+        {
+          id: 'prioritize-platform',
+          label: 'Platform leadership',
+          description: 'Platform leadership',
+          weight: 'high',
+        },
+      ],
+      avoid: [
+        {
+          id: 'avoid-onsite',
+          label: 'Onsite-only',
+          description: 'Onsite-only',
+          severity: 'hard',
+        },
+      ],
+    }
+
+    const parsed = parseIdentityExtractionResponse(
+      JSON.stringify({
+        ...responseBody,
+        identity,
+        bullets: [],
+      }),
+    )
+
+    expect(parsed.identity.schema_revision).toBe('3.1')
+    expect(parsed.identity.preferences.matching).toEqual({
+      prioritize: [
+        {
+          id: 'prioritize-platform',
+          label: 'Platform leadership',
+          description: 'Platform leadership',
+          weight: 'high',
+        },
+      ],
+      avoid: [
+        {
+          id: 'avoid-onsite',
+          label: 'Onsite-only',
+          description: 'Onsite-only',
+          severity: 'hard',
+        },
+      ],
+    })
+    expect(parsed.identity.preferences.constraints).toEqual({})
+    expect(parsed.identity.preferences.role_fit).toEqual({
+      ideal: ['Platform leadership'],
+      red_flags: ['Onsite-only'],
+      evaluation_criteria: [],
+    })
+    expect(parsed.identity.search_vectors).toEqual([])
+    expect(parsed.identity.awareness).toEqual({ open_questions: [] })
+    expect(
+      parsed.warnings.some((warning) => warning.includes('Upgraded Professional Identity document')),
+    ).toBe(false)
+    expect(
+      parsed.warnings.some((warning) =>
+        warning.includes('Derived preferences.matching from legacy preferences.role_fit values.'),
+      ),
+    ).toBe(false)
+    expect(
+      parsed.warnings.some((warning) =>
+        warning.includes('Added empty awareness.open_questions for schema v3.1 compatibility.'),
+      ),
+    ).toBe(false)
+  })
+
+  it('drops legacy role_fit and repairs malformed v3.1 extraction fields', () => {
+    const malformedIdentity = cloneNativeV31ExtractionIdentity()
+    delete malformedIdentity.schema_revision
+    delete malformedIdentity.search_vectors
+    malformedIdentity.awareness = 'unknown'
+    const preferences = malformedIdentity.preferences as Record<string, unknown>
+    preferences.role_fit = {
+      ideal: ['platform'],
+      red_flags: ['bait-and-switch'],
+      evaluation_criteria: ['scope'],
+    }
+    preferences.matching = { prioritize: 'platform-first', avoid: null }
+    preferences.constraints = 'unknown'
+
+    const parsed = parseIdentityExtractionResponse(
+      JSON.stringify({
+        ...responseBody,
+        identity: malformedIdentity,
+        bullets: [],
+      }),
+    )
+
+    expect(parsed.identity.schema_revision).toBe('3.1')
+    expect(parsed.identity.preferences.matching).toEqual(
+      deriveMatching({
+        ideal: ['platform'],
+        red_flags: ['bait-and-switch'],
+        evaluation_criteria: ['scope'],
+      }),
+    )
+    expect(parsed.identity.preferences.constraints).toEqual({})
+    expect(parsed.identity.preferences.role_fit).toEqual({
+      ideal: ['platform'],
+      red_flags: ['bait-and-switch'],
+      evaluation_criteria: [],
+    })
+    expect(parsed.identity.search_vectors).toEqual([])
+    expect(parsed.identity.awareness).toEqual({ open_questions: [] })
+    expect(parsed.warnings).toContain('Added missing schema_revision "3.1" for AI extraction output.')
+    expect(parsed.warnings).toContain(
+      'Dropped legacy preferences.role_fit from AI extraction output before schema import.',
+    )
+    expect(parsed.warnings).toContain(
+      'Normalized invalid preferences.matching.prioritize into an empty array for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Normalized invalid preferences.matching.avoid into an empty array for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Derived missing preferences.matching entries from legacy preferences.role_fit values while normalizing extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Normalized invalid preferences.constraints into an empty object for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Added missing search_vectors array for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Normalized invalid awareness into an object with empty open_questions for AI extraction output.',
+    )
+  })
+
+  it('derives matching from legacy role_fit before dropping the legacy field', () => {
+    const malformedIdentity = cloneNativeV31ExtractionIdentity()
+    const preferences = malformedIdentity.preferences as Record<string, unknown>
+    delete preferences.matching
+    preferences.role_fit = {
+      ideal: ['Platform leadership'],
+      red_flags: ['Pure ticket queue work'],
+      evaluation_criteria: ['Scope of ownership'],
+    }
+
+    const parsed = parseIdentityExtractionResponse(
+      JSON.stringify({
+        ...responseBody,
+        identity: malformedIdentity,
+        bullets: [],
+      }),
+    )
+
+    expect(parsed.identity.preferences.matching).toEqual(
+      deriveMatching({
+        ideal: ['Platform leadership'],
+        red_flags: ['Pure ticket queue work'],
+        evaluation_criteria: ['Scope of ownership'],
+      }),
+    )
+    expect(parsed.warnings).toContain(
+      'Derived missing preferences.matching entries from legacy preferences.role_fit values while normalizing extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Dropped legacy preferences.role_fit from AI extraction output before schema import.',
+    )
+  })
+
+  it('derives matching from legacy role_fit even when evaluation_criteria is omitted', () => {
+    const malformedIdentity = cloneNativeV31ExtractionIdentity()
+    const preferences = malformedIdentity.preferences as Record<string, unknown>
+    delete preferences.matching
+    preferences.role_fit = {
+      ideal: ['Platform leadership'],
+      red_flags: ['Pure ticket queue work'],
+    }
+
+    const parsed = parseIdentityExtractionResponse(
+      JSON.stringify({
+        ...responseBody,
+        identity: malformedIdentity,
+        bullets: [],
+      }),
+    )
+
+    expect(parsed.identity.preferences.matching).toEqual(
+      deriveMatching({
+        ideal: ['Platform leadership'],
+        red_flags: ['Pure ticket queue work'],
+        evaluation_criteria: [],
+      }),
+    )
+  })
+
+  it('fills missing matching branches from legacy role_fit without overriding valid v3.1 entries', () => {
+    const malformedIdentity = cloneNativeV31ExtractionIdentity()
+    const preferences = malformedIdentity.preferences as Record<string, unknown>
+    preferences.matching = {
+      prioritize: [
+        {
+          id: 'priority-custom',
+          label: 'Custom priority',
+          description: 'Keep the explicit priority from the model.',
+          weight: 'high',
+        },
+      ],
+    }
+    preferences.role_fit = {
+      ideal: ['Platform leadership'],
+      red_flags: ['Pure ticket queue work'],
+      evaluation_criteria: ['Scope of ownership'],
+    }
+
+    const parsed = parseIdentityExtractionResponse(
+      JSON.stringify({
+        ...responseBody,
+        identity: malformedIdentity,
+        bullets: [],
+      }),
+    )
+
+    expect(parsed.identity.preferences.matching?.prioritize).toEqual([
+      {
+        id: 'priority-custom',
+        label: 'Custom priority',
+        description: 'Keep the explicit priority from the model.',
+        weight: 'high',
+      },
+    ])
+    expect(parsed.identity.preferences.matching?.avoid).toEqual(
+      deriveMatching({
+        ideal: ['Platform leadership'],
+        red_flags: ['Pure ticket queue work'],
+        evaluation_criteria: ['Scope of ownership'],
+      }).avoid,
+    )
+    expect(parsed.warnings).toContain(
+      'Derived missing preferences.matching entries from legacy preferences.role_fit values while normalizing extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Dropped legacy preferences.role_fit from AI extraction output before schema import.',
+    )
+  })
+
+  it('falls back to legacy role_fit when matching arrays have invalid entry shapes', () => {
+    const malformedIdentity = cloneNativeV31ExtractionIdentity()
+    const preferences = malformedIdentity.preferences as Record<string, unknown>
+    preferences.matching = {
+      prioritize: ['Platform leadership'],
+      avoid: ['Pure ticket queue work'],
+    }
+    preferences.role_fit = {
+      ideal: ['Platform leadership'],
+      red_flags: ['Pure ticket queue work'],
+      evaluation_criteria: [],
+    }
+
+    const parsed = parseIdentityExtractionResponse(
+      JSON.stringify({
+        ...responseBody,
+        identity: malformedIdentity,
+        bullets: [],
+      }),
+    )
+
+    expect(parsed.identity.preferences.matching).toEqual(
+      deriveMatching({
+        ideal: ['Platform leadership'],
+        red_flags: ['Pure ticket queue work'],
+        evaluation_criteria: [],
+      }),
+    )
+    expect(parsed.warnings).toContain(
+      'Dropped invalid preferences.matching.prioritize[0] entry for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Dropped invalid preferences.matching.avoid[0] entry for AI extraction output.',
+    )
+  })
+
+  it('sanitizes partial matching rows instead of dropping the whole array', () => {
+    const malformedIdentity = cloneNativeV31ExtractionIdentity()
+    const preferences = malformedIdentity.preferences as Record<string, unknown>
+    preferences.matching = {
+      prioritize: [
+        {
+          label: 'Platform leadership',
+          description: 'Drive platform strategy.',
+        },
+        {
+          id: 'invalid-priority',
+          description: 'Missing label should be dropped.',
+          weight: 'high',
+        },
+      ],
+      avoid: [
+        {
+          label: 'Onsite-only',
+          description: 'Avoid strict onsite expectations.',
+        },
+      ],
+    }
+
+    const parsed = parseIdentityExtractionResponse(
+      JSON.stringify({
+        ...responseBody,
+        identity: malformedIdentity,
+        bullets: [],
+      }),
+    )
+
+    expect(parsed.identity.preferences.matching).toEqual({
+      prioritize: [
+        {
+          id: 'prioritize-platform-leadership',
+          label: 'Platform leadership',
+          description: 'Drive platform strategy.',
+          weight: 'medium',
+        },
+      ],
+      avoid: [
+        {
+          id: 'avoid-onsite-only',
+          label: 'Onsite-only',
+          description: 'Avoid strict onsite expectations.',
+          severity: 'soft',
+        },
+      ],
+    })
+    expect(parsed.warnings).toContain(
+      'Derived missing preferences.matching.prioritize[0].id for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Normalized invalid preferences.matching.prioritize[0].weight to "medium" for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Dropped invalid preferences.matching.prioritize[1] entry for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Derived missing preferences.matching.avoid[0].id for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Normalized invalid preferences.matching.avoid[0].severity to "soft" for AI extraction output.',
+    )
+  })
+
+  it('drops malformed legacy role_fit when valid matching data is already present', () => {
+    const malformedIdentity = cloneNativeV31ExtractionIdentity()
+    const preferences = malformedIdentity.preferences as Record<string, unknown>
+    preferences.matching = {
+      prioritize: [
+        {
+          id: 'priority-custom',
+          label: 'Custom priority',
+          description: 'Keep the explicit priority from the model.',
+          weight: 'high',
+        },
+      ],
+      avoid: [],
+    }
+    preferences.role_fit = {
+      ideal: 'platform',
+      red_flags: ['bait-and-switch'],
+      evaluation_criteria: [],
+    }
+
+    const parsed = parseIdentityExtractionResponse(
+      JSON.stringify({
+        ...responseBody,
+        identity: malformedIdentity,
+        bullets: [],
+      }),
+    )
+
+    expect(parsed.identity.preferences.matching).toEqual({
+      prioritize: [
+        {
+          id: 'priority-custom',
+          label: 'Custom priority',
+          description: 'Keep the explicit priority from the model.',
+          weight: 'high',
+        },
+      ],
+      avoid: [],
+    })
+    expect(parsed.identity.preferences.role_fit).toEqual({
+      ideal: ['Custom priority'],
+      red_flags: [],
+      evaluation_criteria: [],
+    })
+    expect(parsed.warnings).toContain(
+      'Dropped invalid legacy preferences.role_fit values that could not be migrated for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Dropped legacy preferences.role_fit from AI extraction output before schema import.',
+    )
+  })
+
+  it('adds a missing preferences object with empty v3.1 defaults', () => {
+    const malformedIdentity = cloneNativeV31ExtractionIdentity()
+    delete malformedIdentity.preferences
+
+    const parsed = parseIdentityExtractionResponse(
+      JSON.stringify({
+        ...responseBody,
+        identity: malformedIdentity,
+        bullets: [],
+      }),
+    )
+
+    expect(parsed.identity.preferences.compensation.priorities).toEqual([])
+    expect(parsed.identity.preferences.work_model.preference).toBe('')
+    expect(parsed.identity.preferences.matching).toEqual({ prioritize: [], avoid: [] })
+    expect(parsed.identity.preferences.constraints).toEqual({})
+    expect(parsed.identity.preferences.role_fit).toEqual({
+      ideal: [],
+      red_flags: [],
+      evaluation_criteria: [],
+    })
+    expect(parsed.warnings).toContain(
+      'Added missing preferences object with empty v3.1 defaults for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Added missing preferences.compensation object with empty priorities for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Added missing preferences.work_model object with an empty preference for AI extraction output.',
+    )
+  })
+
+  it('filters malformed search_vectors and awareness entries before import', () => {
+    const malformedIdentity = cloneNativeV31ExtractionIdentity()
+    malformedIdentity.search_vectors = [
+      {
+        title: 'Platform leadership',
+        thesis: 'Position for platform leadership roles.',
+        target_roles: ['Platform Director', 2026],
+        keywords: {
+          primary: ['platform', true],
+          secondary: ['leadership'],
+        },
+      },
+      {
+        id: 'bad-vector',
+        thesis: 'Missing title should be dropped.',
+      },
+    ]
+    malformedIdentity.awareness = {
+      open_questions: [
+        {
+          topic: 'Scope calibration',
+          description: 'Need a tighter scope example.',
+          action: 'Collect one quantified migration story.',
+          severity: 'medium',
+        },
+        {
+          id: 'bad-question',
+          description: 'Missing topic should be dropped.',
+          action: 'Ignore me.',
+        },
+      ],
+    }
+
+    const parsed = parseIdentityExtractionResponse(
+      JSON.stringify({
+        ...responseBody,
+        identity: malformedIdentity,
+        bullets: [],
+      }),
+    )
+
+    expect(parsed.identity.search_vectors).toEqual([
+      {
+        id: 'search-vector-platform-leadership',
+        title: 'Platform leadership',
+        priority: 'medium',
+        thesis: 'Position for platform leadership roles.',
+        target_roles: ['Platform Director', '2026'],
+        keywords: {
+          primary: ['platform', 'true'],
+          secondary: ['leadership'],
+        },
+      },
+    ])
+    expect(parsed.identity.awareness).toEqual({
+      open_questions: [
+        {
+          id: 'open-question-scope-calibration',
+          topic: 'Scope calibration',
+          description: 'Need a tighter scope example.',
+          action: 'Collect one quantified migration story.',
+          severity: 'medium',
+        },
+      ],
+    })
+    expect(parsed.warnings).toContain(
+      'Derived missing search_vectors[0].id for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Normalized invalid search_vectors[0].priority to "medium" for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Normalized search_vectors[0].target_roles[1] into a string for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Normalized search_vectors[0].keywords.primary[1] into a string for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Dropped invalid search_vectors[1] entry for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Derived missing awareness.open_questions[0].id for AI extraction output.',
+    )
+    expect(parsed.warnings).toContain(
+      'Dropped invalid awareness.open_questions[1] entry for AI extraction output.',
     )
   })
 })

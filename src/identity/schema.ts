@@ -474,6 +474,14 @@ export const deriveMatching = (
   ),
 })
 
+const deriveRoleFitFromMatching = (
+  matching?: ProfessionalMatchingPreferences,
+): ProfessionalRoleFitPreferences => ({
+  ideal: matching?.prioritize.map((entry) => entry.label) ?? [],
+  red_flags: matching?.avoid.map((entry) => entry.label) ?? [],
+  evaluation_criteria: [],
+})
+
 export const stubAwareness = (): ProfessionalAwareness => ({
   open_questions: [],
 })
@@ -770,13 +778,24 @@ export const importProfessionalIdentity = (
     throw new Error('version must be 3.')
   }
 
+  const schemaRevision =
+    root.schema_revision !== undefined
+      ? assertEnumString(
+          root.schema_revision,
+          SCHEMA_REVISION_VALUES,
+          'schema_revision',
+        )
+      : undefined
   const identity = assertRecord(root.identity, 'identity')
   const selfModel = assertRecord(root.self_model, 'self_model')
   const interviewStyle = assertRecord(selfModel.interview_style, 'self_model.interview_style')
   const preferences = assertRecord(root.preferences, 'preferences')
   const compensation = assertRecord(preferences.compensation, 'preferences.compensation')
   const workModel = assertRecord(preferences.work_model, 'preferences.work_model')
-  const roleFit = assertRecord(preferences.role_fit, 'preferences.role_fit')
+  const roleFit =
+    preferences.role_fit === undefined
+      ? (schemaRevision === '3.1' ? undefined : assertRecord(preferences.role_fit, 'preferences.role_fit'))
+      : assertRecord(preferences.role_fit, 'preferences.role_fit')
   const skills = assertRecord(root.skills, 'skills')
   const generatorRules = assertRecord(root.generator_rules, 'generator_rules')
 
@@ -788,18 +807,16 @@ export const importProfessionalIdentity = (
   const bulletIds = new Set<string>()
   const projectIds = new Set<string>()
   const searchVectorIds = new Set<string>()
+  const parsedMatching =
+    preferences.matching !== undefined
+      ? parseMatchingPreferences(preferences.matching, 'preferences.matching')
+      : undefined
 
   const parsed: ProfessionalIdentityV3 = {
     ...(root.$schema ? { $schema: assertString(root.$schema, '$schema') } : {}),
     version: 3,
     ...(root.schema_revision !== undefined
-      ? {
-          schema_revision: assertEnumString(
-            root.schema_revision,
-            SCHEMA_REVISION_VALUES,
-            'schema_revision',
-          ),
-        }
+      ? { schema_revision: schemaRevision }
       : {}),
     identity: {
       name: assertString(identity.name, 'identity.name'),
@@ -891,19 +908,22 @@ export const importProfessionalIdentity = (
           ? { hard_no: assertOptionalString(workModel.hard_no, 'preferences.work_model.hard_no') }
           : {}),
       },
-      role_fit: {
-        ideal: assertStringArray(roleFit.ideal, 'preferences.role_fit.ideal'),
-        red_flags: assertStringArray(roleFit.red_flags, 'preferences.role_fit.red_flags'),
-        evaluation_criteria: assertStringArray(
-          roleFit.evaluation_criteria,
-          'preferences.role_fit.evaluation_criteria',
-        ),
-      },
+      role_fit:
+        roleFit === undefined
+          ? deriveRoleFitFromMatching(parsedMatching)
+          : {
+              ideal: assertStringArray(roleFit.ideal, 'preferences.role_fit.ideal'),
+              red_flags: assertStringArray(roleFit.red_flags, 'preferences.role_fit.red_flags'),
+              evaluation_criteria: assertStringArray(
+                roleFit.evaluation_criteria,
+                'preferences.role_fit.evaluation_criteria',
+              ),
+            },
       ...(preferences.constraints !== undefined
         ? { constraints: parseConstraints(preferences.constraints, 'preferences.constraints') }
         : {}),
       ...(preferences.matching !== undefined
-        ? { matching: parseMatchingPreferences(preferences.matching, 'preferences.matching') }
+        ? { matching: parsedMatching }
         : {}),
     },
     skills: {

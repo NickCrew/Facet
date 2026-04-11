@@ -1,4 +1,4 @@
-import { importProfessionalIdentity, type ProfessionalIdentityV3 } from '../identity/schema'
+import { deriveMatching, importProfessionalIdentity, type ProfessionalIdentityV3 } from '../identity/schema'
 import type {
   IdentityDeepenedBullet,
   IdentityAssumptionTag,
@@ -12,14 +12,14 @@ import { callLlmProxy, extractJsonBlock, JsonExtractionError } from './llmProxy'
 const CONFIDENCE_VALUES: IdentityConfidence[] = ['stated', 'confirmed', 'guessing', 'corrected']
 const IDENTITY_EXTRACTION_TIMEOUT_MS = 120000
 
-const EXTRACTION_SYSTEM_PROMPT = `You are Facet's extraction agent.
-Build a Professional Identity Schema v3 draft from messy source material.
+export const EXTRACTION_SYSTEM_PROMPT = `You are Facet's extraction agent.
+Build a Professional Identity Schema v3.1 draft from messy source material.
 When a scanned structure is provided, treat it as the canonical role/skills/education skeleton and deepen it rather than reparsing the resume from scratch.
 Return JSON only with this exact top-level shape:
 {
   "summary": string,
   "follow_up_questions": string[],
-  "identity": <Professional Identity Schema v3 object>,
+  "identity": <Professional Identity Schema v3.1 object>,
   "bullets": [
     {
       "role_id": string,
@@ -38,6 +38,7 @@ Return JSON only with this exact top-level shape:
 Use this minimal valid shape for the identity object:
 {
   "version": 3,
+  "schema_revision": "3.1",
   "identity": {
     "name": string,
     "email": string,
@@ -58,11 +59,11 @@ Use this minimal valid shape for the identity object:
   "preferences": {
     "compensation": { "priorities": [{ "item": string, "weight": string }] },
     "work_model": { "preference": string },
-    "role_fit": {
-      "ideal": string[],
-      "red_flags": string[],
-      "evaluation_criteria": string[]
-    }
+    "matching": {
+      "prioritize": [{ "id": string, "label": string, "description": string, "weight": "high" | "medium" | "low" }],
+      "avoid": [{ "id": string, "label": string, "description": string, "severity": "hard" | "soft" }]
+    },
+    "constraints": {}
   },
   "skills": {
     "groups": [{ "id": string, "label": string, "items": [{ "name": string, "tags": string[] }] }]
@@ -87,20 +88,24 @@ Use this minimal valid shape for the identity object:
   }],
   "projects": [{ "id": string, "name": string, "description": string, "tags": string[] }],
   "education": [{ "school": string, "location": string, "degree": string, "year": string }],
-  "generator_rules": { "voice_skill": string, "resume_skill": string }
+  "generator_rules": { "voice_skill": string, "resume_skill": string },
+  "search_vectors": [],
+  "awareness": { "open_questions": [] }
 }
 Rules:
-- The identity object must be valid schema v3 with version 3.
+- The identity object must be valid schema v3.1 with version 3 and schema_revision "3.1".
 - The identity object must use this exact section layout:
   - identity: { name, email, phone, location, links, thesis, ...optional display_name/remote/title/elaboration/origin }
   - self_model: { arc, philosophy, interview_style }
-  - preferences: { compensation, work_model, role_fit }
+  - preferences: { compensation, work_model, matching, constraints }
   - skills: { groups }
   - profiles: []
   - roles: []
   - projects: []
   - education: []
   - generator_rules: { voice_skill, resume_skill, ...optional accuracy }
+  - search_vectors: []
+  - awareness: { open_questions: [] }
 - Use identity, not personal.
 - In identity.self_model use philosophy entries shaped as {id, text, tags}, not a string array.
 - In self_model, put strengths/weaknesses/prep_strategy inside interview_style. Do not invent self_model.strengths, self_model.interests, or self_model.goals.
@@ -112,6 +117,12 @@ Rules:
 - generator_rules must be an object. Do not emit generator_rules as a string, array, or markdown note.
 - projects must be an array. Do not emit a single project object at the top level.
 - education must be an array. Do not emit a single education object at the top level.
+- matching must always be present as { prioritize: [], avoid: [] } when the source is silent.
+- matching.prioritize entries must use { id, label, description, weight } with weight in "high" | "medium" | "low".
+- matching.avoid entries must use { id, label, description, severity } with severity in "hard" | "soft".
+- search_vectors must always be present as an array, using [] when the source is silent.
+- awareness must always be present as { open_questions: [] } when the source is silent.
+- For first-pass extraction, keep skill items limited to { name, tags }. Do not emit depth, proficiency, context, or search_signal.
 - Use empty arrays/objects/strings when the source is silent instead of inventing alternate keys.
 - Prefer a strong first draft over sparse placeholders.
 - Use "guessing" only when the source implies something but does not state it directly.
@@ -120,11 +131,11 @@ Rules:
 - Use "corrected" when the correction notes explicitly revise the prior draft.
 - Every bullet in identity.roles should have a matching bullets entry.
 - rewrite should read like the final bullet text and surface assumptions inline when useful.
-- follow_up_questions should be short and concrete.
+- follow_up_questions should be short and concrete, prioritizing missing matching, vector, or awareness inputs when helpful.
 - Do not wrap the JSON in markdown fences.`
 
-const BULLET_DEEPENING_SYSTEM_PROMPT = `You are Facet's bullet deepening agent.
-Decompose exactly one scanned resume bullet from Professional Identity Schema v3 source_text into structured fields.
+export const BULLET_DEEPENING_SYSTEM_PROMPT = `You are Facet's bullet deepening agent.
+Decompose exactly one scanned resume bullet from Professional Identity Schema v3.1 source_text into structured fields.
 Return JSON only with this exact top-level shape:
 {
   "summary": string,
@@ -448,6 +459,601 @@ const normalizeObjectArrayField = (
   }
 }
 
+const normalizeSchemaRevision = (
+  value: unknown,
+): { value: '3.1'; warnings: string[] } => {
+  if (value === '3.1') {
+    return { value: '3.1', warnings: [] }
+  }
+
+  return {
+    value: '3.1',
+    warnings:
+      value === undefined
+        ? ['Added missing schema_revision "3.1" for AI extraction output.']
+        : ['Normalized schema_revision to "3.1" for AI extraction output.'],
+  }
+}
+
+const MATCHING_WEIGHT_VALUES = new Set(['high', 'medium', 'low'])
+const MATCHING_SEVERITY_VALUES = new Set(['hard', 'soft'])
+const SEARCH_VECTOR_PRIORITY_VALUES = new Set(['high', 'medium', 'low'])
+const AWARENESS_SEVERITY_VALUES = new Set(['high', 'medium', 'low'])
+
+const slugifyFragment = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+const createDerivedId = (prefix: string, value: string, index: number): string =>
+  [prefix, slugifyFragment(value) || String(index + 1)].join('-')
+
+const createUniqueId = (seen: Map<string, number>, baseId: string): string => {
+  const nextCount = (seen.get(baseId) ?? 0) + 1
+  seen.set(baseId, nextCount)
+  return nextCount === 1 ? baseId : `${baseId}--${nextCount}`
+}
+
+const normalizeStringArrayField = (
+  value: unknown,
+  context: string,
+): { value: string[]; warnings: string[]; isValidArray: boolean } => {
+  if (!Array.isArray(value)) {
+    return {
+      value: [],
+      isValidArray: false,
+      warnings:
+        value === undefined
+          ? [`Added missing ${context} array for AI extraction output.`]
+          : [`Normalized invalid ${context} into an empty array for AI extraction output.`],
+    }
+  }
+
+  const warnings: string[] = []
+  const normalized = value.flatMap((entry, index) => {
+    if (typeof entry === 'string') {
+      return [entry]
+    }
+
+    if (typeof entry === 'number' || typeof entry === 'boolean') {
+      warnings.push(`Normalized ${context}[${index}] into a string for AI extraction output.`)
+      return [String(entry)]
+    }
+
+    warnings.push(`Dropped invalid ${context}[${index}] entry for AI extraction output.`)
+    return []
+  })
+
+  return {
+    value: normalized,
+    warnings,
+    isValidArray: value.length === 0 || normalized.length > 0,
+  }
+}
+
+const normalizeDerivedEntryId = (
+  value: unknown,
+  prefix: string,
+  fallbackSource: string,
+  index: number,
+  context: string,
+  seen: Map<string, number>,
+): { value: string; warnings: string[] } => {
+  const warnings: string[] = []
+  const baseId =
+    typeof value === 'string' && value.trim().length > 0
+      ? value.trim()
+      : (() => {
+          warnings.push(`Derived missing ${context}.id for AI extraction output.`)
+          return createDerivedId(prefix, fallbackSource, index)
+        })()
+
+  const id = createUniqueId(seen, baseId)
+  if (id !== baseId) {
+    warnings.push(`Normalized duplicate ${context}.id "${baseId}" to "${id}" for AI extraction output.`)
+  }
+
+  return { value: id, warnings }
+}
+
+const isMatchingPriorityEntry = (value: unknown): boolean =>
+  isRecord(value) &&
+  typeof value.id === 'string' &&
+  typeof value.label === 'string' &&
+  typeof value.description === 'string' &&
+  typeof value.weight === 'string' &&
+  MATCHING_WEIGHT_VALUES.has(value.weight)
+
+const isMatchingAvoidEntry = (value: unknown): boolean =>
+  isRecord(value) &&
+  typeof value.id === 'string' &&
+  typeof value.label === 'string' &&
+  typeof value.description === 'string' &&
+  typeof value.severity === 'string' &&
+  MATCHING_SEVERITY_VALUES.has(value.severity)
+
+const normalizeMatchingPreferences = (
+  value: unknown,
+): {
+  value: { prioritize: unknown[]; avoid: unknown[] }
+  warnings: string[]
+  hasPrioritize: boolean
+  hasAvoid: boolean
+} => {
+  if (!isRecord(value)) {
+    return {
+      value: { prioritize: [], avoid: [] },
+      hasPrioritize: false,
+      hasAvoid: false,
+      warnings:
+        value === undefined
+          ? ['Added missing preferences.matching object with empty defaults for AI extraction output.']
+          : ['Normalized invalid preferences.matching into empty defaults for AI extraction output.'],
+    }
+  }
+
+  const warnings: string[] = []
+  const prioritizeSeen = new Map<string, number>()
+  const avoidSeen = new Map<string, number>()
+  const prioritize =
+    Array.isArray(value.prioritize)
+      ? value.prioritize.flatMap((entry, index) => {
+          if (isMatchingPriorityEntry(entry)) {
+            const id = createUniqueId(prioritizeSeen, entry.id)
+            return [
+              {
+                ...entry,
+                id,
+              },
+            ]
+          }
+
+          if (!isRecord(entry) || typeof entry.label !== 'string' || entry.label.trim().length === 0) {
+            warnings.push(
+              `Dropped invalid preferences.matching.prioritize[${index}] entry for AI extraction output.`,
+            )
+            return []
+          }
+
+          const id = normalizeDerivedEntryId(
+            entry.id,
+            'prioritize',
+            entry.label,
+            index,
+            `preferences.matching.prioritize[${index}]`,
+            prioritizeSeen,
+          )
+          warnings.push(...id.warnings)
+          if (!(typeof entry.weight === 'string' && MATCHING_WEIGHT_VALUES.has(entry.weight))) {
+            warnings.push(
+              `Normalized invalid preferences.matching.prioritize[${index}].weight to "medium" for AI extraction output.`,
+            )
+          }
+
+          return [
+            {
+              id: id.value,
+              label: entry.label.trim(),
+              description:
+                typeof entry.description === 'string' && entry.description.trim().length > 0
+                  ? entry.description.trim()
+                  : entry.label.trim(),
+              weight:
+                typeof entry.weight === 'string' && MATCHING_WEIGHT_VALUES.has(entry.weight)
+                  ? entry.weight
+                  : 'medium',
+            },
+          ]
+        })
+      : []
+  const avoid =
+    Array.isArray(value.avoid)
+      ? value.avoid.flatMap((entry, index) => {
+          if (isMatchingAvoidEntry(entry)) {
+            const id = createUniqueId(avoidSeen, entry.id)
+            return [
+              {
+                ...entry,
+                id,
+              },
+            ]
+          }
+
+          if (!isRecord(entry) || typeof entry.label !== 'string' || entry.label.trim().length === 0) {
+            warnings.push(`Dropped invalid preferences.matching.avoid[${index}] entry for AI extraction output.`)
+            return []
+          }
+
+          const id = normalizeDerivedEntryId(
+            entry.id,
+            'avoid',
+            entry.label,
+            index,
+            `preferences.matching.avoid[${index}]`,
+            avoidSeen,
+          )
+          warnings.push(...id.warnings)
+          if (!(typeof entry.severity === 'string' && MATCHING_SEVERITY_VALUES.has(entry.severity))) {
+            warnings.push(
+              `Normalized invalid preferences.matching.avoid[${index}].severity to "soft" for AI extraction output.`,
+            )
+          }
+
+          return [
+            {
+              id: id.value,
+              label: entry.label.trim(),
+              description:
+                typeof entry.description === 'string' && entry.description.trim().length > 0
+                  ? entry.description.trim()
+                  : entry.label.trim(),
+              severity:
+                typeof entry.severity === 'string' && MATCHING_SEVERITY_VALUES.has(entry.severity)
+                  ? entry.severity
+                  : 'soft',
+            },
+          ]
+        })
+      : []
+
+  if (!Array.isArray(value.prioritize)) {
+    warnings.push(
+      value.prioritize === undefined
+        ? 'Added missing preferences.matching.prioritize array for AI extraction output.'
+        : 'Normalized invalid preferences.matching.prioritize into an empty array for AI extraction output.',
+    )
+  }
+
+  if (!Array.isArray(value.avoid)) {
+    warnings.push(
+      value.avoid === undefined
+        ? 'Added missing preferences.matching.avoid array for AI extraction output.'
+        : 'Normalized invalid preferences.matching.avoid into an empty array for AI extraction output.',
+    )
+  }
+
+  return {
+    value: {
+      prioritize,
+      avoid,
+    },
+    hasPrioritize: Array.isArray(value.prioritize) && (value.prioritize.length === 0 || prioritize.length > 0),
+    hasAvoid: Array.isArray(value.avoid) && (value.avoid.length === 0 || avoid.length > 0),
+    warnings,
+  }
+}
+
+const deriveMatchingFromLegacyRoleFit = (
+  value: unknown,
+): { value?: { prioritize: unknown[]; avoid: unknown[] }; invalid: boolean } => {
+  if (!isRecord(value)) {
+    return { invalid: false }
+  }
+
+  if (
+    !Array.isArray(value.ideal) ||
+    !value.ideal.every((entry) => typeof entry === 'string') ||
+    !Array.isArray(value.red_flags) ||
+    !value.red_flags.every((entry) => typeof entry === 'string')
+  ) {
+    return { invalid: true }
+  }
+
+  return {
+    value: deriveMatching({
+      ideal: value.ideal,
+      red_flags: value.red_flags,
+      evaluation_criteria:
+        Array.isArray(value.evaluation_criteria) &&
+        value.evaluation_criteria.every((entry) => typeof entry === 'string')
+          ? value.evaluation_criteria
+          : [],
+    }),
+    invalid: false,
+  }
+}
+
+const normalizePreferenceConstraints = (
+  value: unknown,
+): { value: Record<string, unknown>; warnings: string[] } => {
+  if (isRecord(value)) {
+    return { value, warnings: [] }
+  }
+
+  return {
+    value: {},
+    warnings:
+      value === undefined
+        ? ['Added missing preferences.constraints object for AI extraction output.']
+        : ['Normalized invalid preferences.constraints into an empty object for AI extraction output.'],
+  }
+}
+
+const normalizeCompensationPreferences = (
+  value: unknown,
+): { value: Record<string, unknown>; warnings: string[] } => {
+  if (!isRecord(value)) {
+    return {
+      value: { priorities: [] },
+      warnings:
+        value === undefined
+          ? ['Added missing preferences.compensation object with empty priorities for AI extraction output.']
+          : ['Normalized invalid preferences.compensation into an object with empty priorities for AI extraction output.'],
+    }
+  }
+
+  if (Array.isArray(value.priorities)) {
+    return { value, warnings: [] }
+  }
+
+  return {
+    value: {
+      ...value,
+      priorities: [],
+    },
+    warnings: [
+      value.priorities === undefined
+        ? 'Added missing preferences.compensation.priorities array for AI extraction output.'
+        : 'Normalized invalid preferences.compensation.priorities into an empty array for AI extraction output.',
+    ],
+  }
+}
+
+const normalizeWorkModelPreferences = (
+  value: unknown,
+): { value: Record<string, unknown>; warnings: string[] } => {
+  if (!isRecord(value)) {
+    return {
+      value: { preference: '' },
+      warnings:
+        value === undefined
+          ? ['Added missing preferences.work_model object with an empty preference for AI extraction output.']
+          : ['Normalized invalid preferences.work_model into an object with an empty preference for AI extraction output.'],
+    }
+  }
+
+  if (typeof value.preference === 'string') {
+    return { value, warnings: [] }
+  }
+
+  return {
+    value: {
+      ...value,
+      preference: '',
+    },
+    warnings: [
+      value.preference === undefined
+        ? 'Added missing preferences.work_model.preference string for AI extraction output.'
+        : 'Normalized invalid preferences.work_model.preference into an empty string for AI extraction output.',
+    ],
+  }
+}
+
+const normalizePreferences = (
+  value: unknown,
+): { value: Record<string, unknown>; warnings: string[] } => {
+  const source = isRecord(value) ? value : {}
+  const { role_fit: legacyRoleFit, ...preferencesWithoutRoleFit } = source
+  const warnings =
+    isRecord(value)
+      ? []
+      : [
+          value === undefined
+            ? 'Added missing preferences object with empty v3.1 defaults for AI extraction output.'
+            : 'Normalized invalid preferences into an object with empty v3.1 defaults for AI extraction output.',
+        ]
+
+  const compensation = normalizeCompensationPreferences(source.compensation)
+  const workModel = normalizeWorkModelPreferences(source.work_model)
+  const legacyMatching = deriveMatchingFromLegacyRoleFit(legacyRoleFit)
+  const matching = normalizeMatchingPreferences(source.matching)
+  const constraints = normalizePreferenceConstraints(source.constraints)
+
+  warnings.push(
+    ...compensation.warnings,
+    ...workModel.warnings,
+    ...matching.warnings,
+    ...constraints.warnings,
+  )
+
+  if (legacyMatching.invalid) {
+    warnings.push('Dropped invalid legacy preferences.role_fit values that could not be migrated for AI extraction output.')
+  }
+
+  const mergedMatching = {
+    prioritize:
+      matching.hasPrioritize
+        ? matching.value.prioritize
+        : (legacyMatching.value?.prioritize ?? []),
+    avoid:
+      matching.hasAvoid
+        ? matching.value.avoid
+        : (legacyMatching.value?.avoid ?? []),
+  }
+
+  if (
+    legacyMatching.value &&
+    (!matching.hasPrioritize || !matching.hasAvoid)
+  ) {
+    warnings.push(
+      'Derived missing preferences.matching entries from legacy preferences.role_fit values while normalizing extraction output.',
+    )
+  }
+
+  if (legacyRoleFit !== undefined) {
+    warnings.push('Dropped legacy preferences.role_fit from AI extraction output before schema import.')
+  }
+
+  return {
+    value: {
+      ...preferencesWithoutRoleFit,
+      compensation: compensation.value,
+      work_model: workModel.value,
+      matching: mergedMatching,
+      constraints: constraints.value,
+    },
+    warnings,
+  }
+}
+
+const normalizeSearchVectors = (
+  value: unknown,
+): { value: unknown[]; warnings: string[] } => {
+  if (!Array.isArray(value)) {
+    return {
+      value: [],
+      warnings:
+        value === undefined
+          ? ['Added missing search_vectors array for AI extraction output.']
+          : ['Normalized invalid search_vectors into an empty array for AI extraction output.'],
+    }
+  }
+
+  const seenIds = new Map<string, number>()
+  const warnings: string[] = []
+  const normalized = value.flatMap((entry, index) => {
+    if (!isRecord(entry) || typeof entry.title !== 'string' || typeof entry.thesis !== 'string') {
+      warnings.push(`Dropped invalid search_vectors[${index}] entry for AI extraction output.`)
+      return []
+    }
+
+    const id = normalizeDerivedEntryId(
+      entry.id,
+      'search-vector',
+      entry.title,
+      index,
+      `search_vectors[${index}]`,
+      seenIds,
+    )
+    const targetRoles = normalizeStringArrayField(entry.target_roles, `search_vectors[${index}].target_roles`)
+    const primaryKeywords = normalizeStringArrayField(
+      isRecord(entry.keywords) ? entry.keywords.primary : undefined,
+      `search_vectors[${index}].keywords.primary`,
+    )
+    const secondaryKeywords = normalizeStringArrayField(
+      isRecord(entry.keywords) ? entry.keywords.secondary : undefined,
+      `search_vectors[${index}].keywords.secondary`,
+    )
+    const supportingSkills =
+      entry.supporting_skills === undefined
+        ? { value: [], warnings: [], isValidArray: true }
+        : normalizeStringArrayField(entry.supporting_skills, `search_vectors[${index}].supporting_skills`)
+    const supportingBullets =
+      entry.supporting_bullets === undefined
+        ? { value: [], warnings: [], isValidArray: true }
+        : normalizeStringArrayField(entry.supporting_bullets, `search_vectors[${index}].supporting_bullets`)
+
+    warnings.push(...id.warnings, ...targetRoles.warnings, ...primaryKeywords.warnings, ...secondaryKeywords.warnings)
+    warnings.push(...supportingSkills.warnings, ...supportingBullets.warnings)
+    if (!isRecord(entry.keywords)) {
+      warnings.push(`Normalized invalid search_vectors[${index}].keywords into empty keyword arrays for AI extraction output.`)
+    }
+    if (!(typeof entry.priority === 'string' && SEARCH_VECTOR_PRIORITY_VALUES.has(entry.priority))) {
+      warnings.push(`Normalized invalid search_vectors[${index}].priority to "medium" for AI extraction output.`)
+    }
+
+    return [
+      {
+        id: id.value,
+        title: entry.title.trim(),
+        priority:
+          typeof entry.priority === 'string' && SEARCH_VECTOR_PRIORITY_VALUES.has(entry.priority)
+            ? entry.priority
+            : 'medium',
+        ...(typeof entry.subtitle === 'string' ? { subtitle: entry.subtitle.trim() } : {}),
+        thesis: entry.thesis.trim(),
+        target_roles: targetRoles.value,
+        keywords: {
+          primary: primaryKeywords.value,
+          secondary: secondaryKeywords.value,
+        },
+        ...(entry.supporting_skills !== undefined ? { supporting_skills: supportingSkills.value } : {}),
+        ...(entry.supporting_bullets !== undefined ? { supporting_bullets: supportingBullets.value } : {}),
+      },
+    ]
+  })
+
+  return { value: normalized, warnings }
+}
+
+const normalizeAwareness = (
+  value: unknown,
+): { value: { open_questions: unknown[] }; warnings: string[] } => {
+  if (!isRecord(value)) {
+    return {
+      value: { open_questions: [] },
+      warnings:
+        value === undefined
+          ? ['Added missing awareness object with empty open_questions for AI extraction output.']
+          : ['Normalized invalid awareness into an object with empty open_questions for AI extraction output.'],
+    }
+  }
+
+  if (Array.isArray(value.open_questions)) {
+    const seenIds = new Map<string, number>()
+    const warnings: string[] = []
+    const normalized = value.open_questions.flatMap((entry, index) => {
+      if (
+        !isRecord(entry) ||
+        typeof entry.topic !== 'string' ||
+        typeof entry.description !== 'string' ||
+        typeof entry.action !== 'string'
+      ) {
+        warnings.push(`Dropped invalid awareness.open_questions[${index}] entry for AI extraction output.`)
+        return []
+      }
+
+      const id = normalizeDerivedEntryId(
+        entry.id,
+        'open-question',
+        entry.topic,
+        index,
+        `awareness.open_questions[${index}]`,
+        seenIds,
+      )
+      warnings.push(...id.warnings)
+      if (
+        entry.severity !== undefined &&
+        !(typeof entry.severity === 'string' && AWARENESS_SEVERITY_VALUES.has(entry.severity))
+      ) {
+        warnings.push(
+          `Dropped invalid awareness.open_questions[${index}].severity value for AI extraction output.`,
+        )
+      }
+
+      return [
+        {
+          id: id.value,
+          topic: entry.topic.trim(),
+          description: entry.description.trim(),
+          action: entry.action.trim(),
+          ...(typeof entry.severity === 'string' && AWARENESS_SEVERITY_VALUES.has(entry.severity)
+            ? { severity: entry.severity }
+            : {}),
+        },
+      ]
+    })
+
+    return {
+      value: {
+        open_questions: normalized,
+      },
+      warnings,
+    }
+  }
+
+  return {
+    value: { open_questions: [] },
+    warnings: [
+      value.open_questions === undefined
+        ? 'Added missing awareness.open_questions array for AI extraction output.'
+        : 'Normalized invalid awareness.open_questions into an empty array for AI extraction output.',
+    ],
+  }
+}
+
 const normalizeExtractedIdentityCandidate = (
   value: unknown,
 ): { value: unknown; warnings: string[] } => {
@@ -456,15 +1062,26 @@ const normalizeExtractedIdentityCandidate = (
   }
 
   const normalized = { ...value }
+  const schemaRevision = normalizeSchemaRevision(value.schema_revision)
+  normalized.schema_revision = schemaRevision.value
   const generatorRules = normalizeGeneratorRules(value.generator_rules)
   normalized.generator_rules = generatorRules.value
-  const warnings = [...generatorRules.warnings]
+  const warnings = [...schemaRevision.warnings, ...generatorRules.warnings]
   const projects = normalizeObjectArrayField(value.projects, 'projects')
   normalized.projects = projects.value
   warnings.push(...projects.warnings)
   const education = normalizeObjectArrayField(value.education, 'education')
   normalized.education = education.value
   warnings.push(...education.warnings)
+  const searchVectors = normalizeSearchVectors(value.search_vectors)
+  normalized.search_vectors = searchVectors.value
+  warnings.push(...searchVectors.warnings)
+  const awareness = normalizeAwareness(value.awareness)
+  normalized.awareness = awareness.value
+  warnings.push(...awareness.warnings)
+  const preferences = normalizePreferences(value.preferences)
+  normalized.preferences = preferences.value
+  warnings.push(...preferences.warnings)
 
   if (Array.isArray(value.roles)) {
     normalized.roles = value.roles.map((role, roleIndex) => {
