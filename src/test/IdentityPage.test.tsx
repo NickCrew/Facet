@@ -277,6 +277,18 @@ describe("IdentityPage", () => {
     ).toBeTruthy();
     expect(screen.getByDisplayValue("Clearwater, FL")).toBeTruthy();
     expect(screen.getByLabelText("Projects: 1")).toBeTruthy();
+    const skillGroupToggle = screen.getByRole("button", {
+      name: /Platform.*1 skill.*Expand/i,
+    });
+    expect(skillGroupToggle.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(skillGroupToggle);
+
+    expect(skillGroupToggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("textbox", { name: "Group Label" })).toBeTruthy();
+    expect((screen.getByLabelText("Skill 1") as HTMLInputElement).value).toBe(
+      "Kubernetes",
+    );
 
     fireEvent.change(
       screen.getByDisplayValue(
