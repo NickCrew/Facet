@@ -19,17 +19,17 @@ export function DraftSummaryCard({ draft, changelog }: DraftSummaryCardProps) {
     <section className="identity-card identity-card-secondary">
       <div className="identity-card-header">
         <div>
-          <h2>What Changed</h2>
+          <h3>What Changed</h3>
           <p>
             Track what the draft generator produced and what the builder
             actually recorded while you refine the identity model.
           </p>
-          <p className="identity-section-status">{statusLabel}</p>
+          <span className="identity-section-status">{statusLabel}</span>
         </div>
       </div>
 
       <div className="identity-summary-block">
-        <h3>Draft Summary</h3>
+        <h4>Draft Summary</h4>
         <p>{draft?.summary ?? "No draft summary yet."}</p>
         {draft?.followUpQuestions.length ? (
           <ul className="identity-question-list">
@@ -41,7 +41,7 @@ export function DraftSummaryCard({ draft, changelog }: DraftSummaryCardProps) {
       </div>
 
       <div className="identity-summary-block">
-        <h3>Changelog</h3>
+        <h4>Changelog</h4>
         {changelog.length ? (
           <div className="identity-changelog">
             {changelog.map((entry) => (

@@ -260,7 +260,7 @@
 .identity-card-secondary {
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--bg-surface) 92%, var(--accent-primary) 8%) 0%,
+    color-mix(in srgb, var(--accent-primary) 8%, var(--bg-surface)) 0%,
     var(--bg-surface) 100%
   );
 }
@@ -291,15 +291,14 @@
   align-items: center;
   gap: var(--space-1);
   margin: var(--space-2) 0 0;
-  padding: 4px 10px;
+  padding: var(--space-1) var(--space-2);
   border-radius: 999px;
   border: 1px solid var(--border-subtle);
   background: color-mix(in srgb, var(--accent-primary) 8%, var(--bg-surface));
   color: var(--text-primary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .identity-field {

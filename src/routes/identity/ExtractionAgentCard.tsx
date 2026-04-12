@@ -135,7 +135,7 @@ export function ExtractionAgentCard({
             the scan needs clarification.
           </p>
           {statusLabel ? (
-            <p className="identity-section-status">{statusLabel}</p>
+            <span className="identity-section-status">{statusLabel}</span>
           ) : null}
         </div>
         <div className="identity-card-actions">

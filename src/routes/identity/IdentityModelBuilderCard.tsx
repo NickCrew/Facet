@@ -13,6 +13,7 @@ interface IdentityModelBuilderCardProps {
   draftDocument: string;
   hasCurrentIdentity: boolean;
   statusLabel?: string;
+  draftResetKey: string;
   onSetDraftDocument: (value: string) => void;
   onValidateDraft: () => void;
   onApply: (mode: IdentityApplyMode) => void;
@@ -23,6 +24,7 @@ export function IdentityModelBuilderCard({
   draftDocument,
   hasCurrentIdentity,
   statusLabel,
+  draftResetKey,
   onSetDraftDocument,
   onValidateDraft,
   onApply,
@@ -30,12 +32,25 @@ export function IdentityModelBuilderCard({
   const hasDraftDocument = draftDocument.trim().length > 0;
   const hasCounts = counts !== null;
   // Once a user explicitly opens or closes the advanced editor, keep that
-  // preference sticky until a newly generated draft remounts this card.
-  const [isEditorExpanded, setIsEditorExpanded] = useState<boolean | null>(
-    hasDraftDocument ? true : null,
-  );
+  // preference sticky for the current draft version while preserving any
+  // in-progress JSON edits held in parent state.
+  const [editorPreference, setEditorPreference] = useState<{
+    draftKey: string;
+    value: boolean | null;
+  }>({
+    draftKey: draftResetKey,
+    value: hasDraftDocument ? true : null,
+  });
   const editorRegionId = useId();
-  const editorExpanded = isEditorExpanded ?? hasDraftDocument;
+  // When the draft key changes, fall back to the default visibility for the
+  // new draft until the user explicitly toggles the editor again.
+  const editorPreferenceValue =
+    editorPreference.draftKey === draftResetKey
+      ? editorPreference.value
+      : hasDraftDocument
+        ? true
+        : null;
+  const editorExpanded = editorPreferenceValue ?? hasDraftDocument;
 
   const showCompactEmptyState =
     !hasDraftDocument && !editorExpanded && !hasCounts && !hasCurrentIdentity;
@@ -50,7 +65,7 @@ export function IdentityModelBuilderCard({
             identity or a merge.
           </p>
           {statusLabel ? (
-            <p className="identity-section-status">{statusLabel}</p>
+            <span className="identity-section-status">{statusLabel}</span>
           ) : null}
         </div>
         <div className="identity-card-actions">
@@ -61,7 +76,10 @@ export function IdentityModelBuilderCard({
             aria-controls={editorRegionId}
             aria-description="Controls the advanced JSON editor only."
             onClick={() =>
-              setIsEditorExpanded((current) => !(current ?? hasDraftDocument))
+              setEditorPreference({
+                draftKey: draftResetKey,
+                value: !(editorPreferenceValue ?? hasDraftDocument),
+              })
             }
           >
             <Braces size={16} />

@@ -879,6 +879,9 @@ export function IdentityPage() {
     status: headerStatus,
   } = primaryActionState;
   const isPrimaryActionDisabled = isGenerating || isScanning;
+  // The primary workbench cards share parent-owned status copy so the shell can
+  // recommend the next action consistently, while the inspection cards derive
+  // their own local status from the content they summarize.
   const sourceIntakeStatus = useMemo(() => {
     if (isScanning) {
       return "Scanning source material";
@@ -897,6 +900,10 @@ export function IdentityPage() {
     return "No source loaded yet";
   }, [intakeMode, isScanning, scanResult, sourceMaterial]);
   const draftReviewStatus = useMemo(() => {
+    if (isGenerating) {
+      return "Generating draft";
+    }
+
     if (draft) {
       return "Draft is ready for review and apply";
     }
@@ -906,8 +913,7 @@ export function IdentityPage() {
     }
 
     return "No draft generated yet";
-  }, [currentIdentity, draft]);
-
+  }, [currentIdentity, draft, isGenerating]);
   const handlePrimaryAction = () => {
     switch (primaryAction) {
       case "continueEnrichment":
@@ -1182,11 +1188,11 @@ export function IdentityPage() {
 
             <div ref={draftPanelRef}>
               <IdentityModelBuilderCard
-                key={draft?.generatedAt ?? "identity-model-builder"}
                 counts={counts}
                 draftDocument={draftDocument}
                 hasCurrentIdentity={Boolean(currentIdentity)}
                 statusLabel={draftReviewStatus}
+                draftResetKey={draft?.generatedAt ?? "identity-model-builder"}
                 onSetDraftDocument={setDraftDocument}
                 onValidateDraft={handleValidateDraft}
                 onApply={handleApply}
@@ -1194,26 +1200,26 @@ export function IdentityPage() {
             </div>
           </div>
 
-          <div className="identity-inspection-region">
+          <section
+            className="identity-inspection-region"
+            aria-labelledby="identity-inspection-heading"
+          >
             <div className="identity-inspection-header">
               <div>
-                <h2>Inspection Panels</h2>
+                <h2 id="identity-inspection-heading">Inspection Panels</h2>
                 <p>
                   Use these secondary surfaces when you want to audit generated
                   bullets or track recent builder changes without interrupting
                   the main model flow.
                 </p>
               </div>
-              <p className="identity-section-status">
-                Secondary review surfaces
-              </p>
             </div>
 
             <div className="identity-grid identity-inspection-grid">
               <BulletConfidenceCard draft={draft} />
               <DraftSummaryCard draft={draft} changelog={changelog} />
             </div>
-          </div>
+          </section>
         </div>
       </div>
 

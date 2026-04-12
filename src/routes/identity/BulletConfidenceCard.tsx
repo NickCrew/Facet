@@ -15,28 +15,29 @@ interface BulletConfidenceCardProps {
 }
 
 export function BulletConfidenceCard({ draft }: BulletConfidenceCardProps) {
-  const bulletCount = draft?.bullets.length ?? 0;
+  const bullets = draft?.bullets ?? [];
+  const bulletCount = bullets.length;
 
   return (
     <section className="identity-card identity-card-secondary">
       <div className="identity-card-header">
         <div>
-          <h2>Confidence Review</h2>
+          <h3>Confidence Review</h3>
           <p>
             Audit which bullet rewrites are stated, confirmed, corrected, or
             still inferred before you trust them elsewhere.
           </p>
-          <p className="identity-section-status">
+          <span className="identity-section-status">
             {bulletCount
               ? `${bulletCount} bullet rewrite(s) ready to inspect`
               : "Waiting for draft generation"}
-          </p>
+          </span>
         </div>
       </div>
 
-      {draft?.bullets.length ? (
+      {bulletCount > 0 ? (
         <div className="identity-bullet-list">
-          {draft.bullets.map((bullet) => (
+          {bullets.map((bullet) => (
             <article
               className="identity-bullet-card"
               key={bullet.roleId + "::" + bullet.bulletId}
@@ -72,7 +73,7 @@ export function BulletConfidenceCard({ draft }: BulletConfidenceCardProps) {
         </div>
       ) : (
         <div className="identity-empty">
-          <h3>No draft bullets yet</h3>
+          <h4>No draft bullets yet</h4>
           <p>
             Generate a draft to inspect the confidence-tagged rewrite output.
           </p>
