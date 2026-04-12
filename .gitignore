@@ -174,7 +174,10 @@ vite.config.ts.timestamp-*
 
 test-results/
 data/
-.agents/
+.agents/reviews/
+.agents/fixes/
+**/reviews/
+**/fixes/
 
 # Playwright
 /playwright-report/
@@ -183,3 +186,5 @@ data/
 /playwright/.auth/
 tests/hosted/.auth/
 .vercel
+.playwright-mcp/
+*.png
