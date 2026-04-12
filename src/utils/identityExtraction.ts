@@ -291,6 +291,334 @@ const buildBulletMap = (identity: ProfessionalIdentityV3) => {
   return byKey
 }
 
+const preferIncomingString = (
+  incoming: string | undefined | null,
+  fallback: string | undefined | null,
+): string => {
+  if (typeof incoming === 'string' && incoming.trim()) {
+    return incoming
+  }
+
+  if (typeof fallback === 'string') {
+    return fallback
+  }
+
+  return ''
+}
+
+const preferIncomingNullableString = (
+  incoming: string | undefined | null,
+  fallback: string | undefined | null,
+): string | null | undefined => {
+  if (typeof incoming === 'string' && incoming.trim()) {
+    return incoming
+  }
+
+  if (incoming === null) {
+    return null
+  }
+
+  return fallback
+}
+
+const preferIncomingStringArray = (
+  incoming: string[] | undefined,
+  fallback: string[] | undefined,
+): string[] => (incoming && incoming.length > 0 ? incoming : (fallback ?? []))
+
+const preferIncomingMetricObject = (
+  incoming: Record<string, string | number | boolean> | undefined,
+  fallback: Record<string, string | number | boolean> | undefined,
+): Record<string, string | number | boolean> =>
+  incoming && Object.keys(incoming).length > 0 ? incoming : (fallback ?? {})
+
+const mergeSeededLinks = (
+  seed: ProfessionalIdentityV3['identity']['links'],
+  incoming: ProfessionalIdentityV3['identity']['links'],
+): ProfessionalIdentityV3['identity']['links'] => {
+  const incomingById = new Map(incoming.map((link) => [link.id, link]))
+  const merged = seed.map((link) => {
+    const incomingLink = incomingById.get(link.id)
+    if (!incomingLink) {
+      return link
+    }
+
+    return {
+      ...link,
+      ...incomingLink,
+      url: preferIncomingString(incomingLink.url, link.url),
+    }
+  })
+
+  for (const link of incoming) {
+    if (!seed.some((entry) => entry.id === link.id)) {
+      merged.push(link)
+    }
+  }
+
+  return merged
+}
+
+const mergeSeededIdentityCore = (
+  seed: ProfessionalIdentityV3['identity'],
+  incoming: ProfessionalIdentityV3['identity'],
+): ProfessionalIdentityV3['identity'] => ({
+  ...seed,
+  ...incoming,
+  name: preferIncomingString(incoming.name, seed.name),
+  display_name: preferIncomingString(incoming.display_name, seed.display_name),
+  email: preferIncomingString(incoming.email, seed.email),
+  phone: preferIncomingString(incoming.phone, seed.phone),
+  location: preferIncomingString(incoming.location, seed.location),
+  remote: incoming.remote ?? seed.remote,
+  title: preferIncomingString(incoming.title, seed.title),
+  links: mergeSeededLinks(seed.links, incoming.links),
+  thesis: preferIncomingString(incoming.thesis, seed.thesis),
+  elaboration: preferIncomingString(incoming.elaboration, seed.elaboration),
+  origin: preferIncomingString(incoming.origin, seed.origin),
+})
+
+const mergeSeededBullet = (
+  seed: ProfessionalIdentityV3['roles'][number]['bullets'][number],
+  incoming?: ProfessionalIdentityV3['roles'][number]['bullets'][number],
+): ProfessionalIdentityV3['roles'][number]['bullets'][number] => {
+  if (!incoming) {
+    return seed
+  }
+
+  return {
+    ...seed,
+    ...incoming,
+    problem: preferIncomingString(incoming.problem, seed.problem),
+    action: preferIncomingString(incoming.action, seed.action),
+    outcome: preferIncomingString(incoming.outcome, seed.outcome),
+    impact: preferIncomingStringArray(incoming.impact, seed.impact),
+    metrics: preferIncomingMetricObject(incoming.metrics, seed.metrics),
+    technologies: preferIncomingStringArray(incoming.technologies, seed.technologies),
+    tags: preferIncomingStringArray(incoming.tags, seed.tags),
+    source_text: preferIncomingString(incoming.source_text, seed.source_text),
+    portfolio_dive: preferIncomingNullableString(incoming.portfolio_dive, seed.portfolio_dive),
+  }
+}
+
+const mergeSeededRole = (
+  seed: ProfessionalIdentityV3['roles'][number],
+  incoming?: ProfessionalIdentityV3['roles'][number],
+): ProfessionalIdentityV3['roles'][number] => {
+  if (!incoming) {
+    return seed
+  }
+
+  const incomingBulletsById = new Map(incoming.bullets.map((bullet) => [bullet.id, bullet]))
+  const mergedBullets = seed.bullets.map((bullet) =>
+    mergeSeededBullet(bullet, incomingBulletsById.get(bullet.id)),
+  )
+
+  for (const bullet of incoming.bullets) {
+    if (!seed.bullets.some((entry) => entry.id === bullet.id)) {
+      mergedBullets.push(bullet)
+    }
+  }
+
+  return {
+    ...seed,
+    ...incoming,
+    company: preferIncomingString(incoming.company, seed.company),
+    subtitle: preferIncomingNullableString(incoming.subtitle, seed.subtitle),
+    title: preferIncomingString(incoming.title, seed.title),
+    dates: preferIncomingString(incoming.dates, seed.dates),
+    portfolio_anchor: preferIncomingNullableString(
+      incoming.portfolio_anchor,
+      seed.portfolio_anchor,
+    ),
+    bullets: mergedBullets,
+  }
+}
+
+const educationFingerprint = (
+  entry: ProfessionalIdentityV3['education'][number],
+): string =>
+  [entry.school, entry.location, entry.degree, entry.year ?? '']
+    .map((value) => value.trim().toLowerCase())
+    .join('::')
+
+const mergeSeededIdentityStructure = (
+  seedIdentity: ProfessionalIdentityV3,
+  extractedIdentity: ProfessionalIdentityV3,
+): { identity: ProfessionalIdentityV3; warnings: string[] } => {
+  const warnings: string[] = []
+  const incomingSkillGroupsById = new Map(
+    extractedIdentity.skills.groups.map((group) => [group.id, group]),
+  )
+  const mergedSkillGroups = seedIdentity.skills.groups.map((group) => {
+    const incoming = incomingSkillGroupsById.get(group.id)
+    if (!incoming) {
+      return group
+    }
+
+    const incomingItemsByName = new Map(
+      incoming.items.map((item) => [item.name.trim().toLowerCase(), item]),
+    )
+    const mergedItems = group.items.map((item) => {
+      const incomingItem = incomingItemsByName.get(item.name.trim().toLowerCase())
+      if (!incomingItem) {
+        return item
+      }
+
+      return {
+        ...item,
+        ...incomingItem,
+        tags: preferIncomingStringArray(incomingItem.tags, item.tags),
+      }
+    })
+
+    for (const item of incoming.items) {
+      if (
+        !group.items.some(
+          (entry) => entry.name.trim().toLowerCase() === item.name.trim().toLowerCase(),
+        )
+      ) {
+        mergedItems.push(item)
+      }
+    }
+
+    return {
+      ...group,
+      ...incoming,
+      label: preferIncomingString(incoming.label, group.label),
+      items: mergedItems,
+    }
+  })
+
+  const preservedSkillGroups = seedIdentity.skills.groups.filter(
+    (group) => !incomingSkillGroupsById.has(group.id),
+  ).length
+  if (preservedSkillGroups > 0) {
+    warnings.push(
+      `Preserved ${preservedSkillGroups} scanned skill group${preservedSkillGroups === 1 ? '' : 's'} omitted from AI extraction output.`,
+    )
+  }
+  for (const group of extractedIdentity.skills.groups) {
+    if (!seedIdentity.skills.groups.some((entry) => entry.id === group.id)) {
+      mergedSkillGroups.push(group)
+    }
+  }
+
+  const incomingRolesById = new Map(extractedIdentity.roles.map((role) => [role.id, role]))
+  const mergedRoles = seedIdentity.roles.map((role) =>
+    mergeSeededRole(role, incomingRolesById.get(role.id)),
+  )
+  const preservedRoles = seedIdentity.roles.filter((role) => !incomingRolesById.has(role.id)).length
+  if (preservedRoles > 0) {
+    warnings.push(
+      `Preserved ${preservedRoles} scanned role${preservedRoles === 1 ? '' : 's'} omitted from AI extraction output.`,
+    )
+  }
+  let preservedBullets = 0
+  for (const role of seedIdentity.roles) {
+    const incomingRole = incomingRolesById.get(role.id)
+    if (!incomingRole) {
+      preservedBullets += role.bullets.length
+      continue
+    }
+
+    const incomingBulletIds = new Set(incomingRole.bullets.map((bullet) => bullet.id))
+    preservedBullets += role.bullets.filter((bullet) => !incomingBulletIds.has(bullet.id)).length
+  }
+  if (preservedBullets > 0) {
+    warnings.push(
+      `Preserved ${preservedBullets} scanned bullet${preservedBullets === 1 ? '' : 's'} omitted from AI extraction output.`,
+    )
+  }
+  for (const role of extractedIdentity.roles) {
+    if (!seedIdentity.roles.some((entry) => entry.id === role.id)) {
+      mergedRoles.push(role)
+    }
+  }
+
+  const incomingProjectsById = new Map(extractedIdentity.projects.map((project) => [project.id, project]))
+  const mergedProjects = seedIdentity.projects.map((project) => {
+    const incoming = incomingProjectsById.get(project.id)
+    if (!incoming) {
+      return project
+    }
+
+    return {
+      ...project,
+      ...incoming,
+      name: preferIncomingString(incoming.name, project.name),
+      description: preferIncomingString(incoming.description, project.description),
+      url: preferIncomingString(incoming.url, project.url),
+      portfolio_dive: preferIncomingNullableString(incoming.portfolio_dive, project.portfolio_dive),
+      tags: preferIncomingStringArray(incoming.tags, project.tags),
+    }
+  })
+  const preservedProjects = seedIdentity.projects.filter(
+    (project) => !incomingProjectsById.has(project.id),
+  ).length
+  if (preservedProjects > 0) {
+    warnings.push(
+      `Preserved ${preservedProjects} scanned project${preservedProjects === 1 ? '' : 's'} omitted from AI extraction output.`,
+    )
+  }
+  for (const project of extractedIdentity.projects) {
+    if (!seedIdentity.projects.some((entry) => entry.id === project.id)) {
+      mergedProjects.push(project)
+    }
+  }
+
+  const incomingEducationByFingerprint = new Map(
+    extractedIdentity.education.map((entry) => [educationFingerprint(entry), entry]),
+  )
+  const mergedEducation = seedIdentity.education.map((entry) => {
+    const incoming = incomingEducationByFingerprint.get(educationFingerprint(entry))
+    if (!incoming) {
+      return entry
+    }
+
+    return {
+      ...entry,
+      ...incoming,
+      school: preferIncomingString(incoming.school, entry.school),
+      location: preferIncomingString(incoming.location, entry.location),
+      degree: preferIncomingString(incoming.degree, entry.degree),
+      year: preferIncomingString(incoming.year, entry.year),
+    }
+  })
+  const preservedEducation = seedIdentity.education.filter(
+    (entry) => !incomingEducationByFingerprint.has(educationFingerprint(entry)),
+  ).length
+  if (preservedEducation > 0) {
+    warnings.push(
+      `Preserved ${preservedEducation} scanned education entr${preservedEducation === 1 ? 'y' : 'ies'} omitted from AI extraction output.`,
+    )
+  }
+  for (const entry of extractedIdentity.education) {
+    if (
+      !seedIdentity.education.some(
+        (existing) => educationFingerprint(existing) === educationFingerprint(entry),
+      )
+    ) {
+      mergedEducation.push(entry)
+    }
+  }
+
+  return {
+    identity: {
+      ...seedIdentity,
+      ...extractedIdentity,
+      identity: mergeSeededIdentityCore(seedIdentity.identity, extractedIdentity.identity),
+      skills: {
+        groups: mergedSkillGroups,
+      },
+      roles: mergedRoles,
+      projects: mergedProjects,
+      education: mergedEducation,
+    },
+    warnings,
+  }
+}
+
 const normalizeGeneratorRules = (
   value: unknown,
 ): { value: unknown; warnings: string[] } => {
@@ -1148,7 +1476,10 @@ const parseDeepenedBulletPayload = (
   }
 }
 
-export const parseIdentityExtractionResponse = (rawResponse: string): IdentityExtractionDraft => {
+export const parseIdentityExtractionResponse = (
+  rawResponse: string,
+  seedIdentity?: ProfessionalIdentityV3 | null,
+): IdentityExtractionDraft => {
   const { parsed, repaired } = parseLlmJsonResponse(rawResponse, 'Identity extraction response')
 
   const root = assertRecord(parsed, 'identity extraction response')
@@ -1157,14 +1488,26 @@ export const parseIdentityExtractionResponse = (rawResponse: string): IdentityEx
   if (!imported.data) {
     throw new Error('Identity extraction response produced an invalid identity after schema validation.')
   }
-  const warningSet = repaired
-    ? [
-        'Repaired minor JSON syntax issues in the AI response before validation.',
-        ...normalizedIdentity.warnings,
-        ...imported.warnings,
-      ]
-    : [...normalizedIdentity.warnings, ...imported.warnings]
-  const bulletMap = buildBulletMap(imported.data)
+  const mergedWithSeed = seedIdentity
+    ? mergeSeededIdentityStructure(
+        normalizeRuntimeProfessionalIdentity(seedIdentity),
+        imported.data,
+      )
+    : null
+  const finalImported = importProfessionalIdentity(mergedWithSeed?.identity ?? imported.data)
+  if (!finalImported.data) {
+    throw new Error('Identity extraction response produced an invalid identity after scan merge.')
+  }
+  const warningSet = Array.from(
+    new Set([
+      ...(repaired ? ['Repaired minor JSON syntax issues in the AI response before validation.'] : []),
+      ...normalizedIdentity.warnings,
+      ...imported.warnings,
+      ...(mergedWithSeed?.warnings ?? []),
+      ...finalImported.warnings,
+    ]),
+  )
+  const bulletMap = buildBulletMap(finalImported.data)
 
   if (root.bullets !== undefined) {
     if (!Array.isArray(root.bullets)) {
@@ -1184,7 +1527,7 @@ export const parseIdentityExtractionResponse = (rawResponse: string): IdentityEx
 
       const rewriteValue =
         record.rewrite === undefined
-          ? defaultRewrite(imported.data, roleId, bulletId)
+          ? defaultRewrite(finalImported.data, roleId, bulletId)
           : assertString(record.rewrite, `bullets[${index}].rewrite`)
       const tagsValue =
         record.tags === undefined
@@ -1209,7 +1552,7 @@ export const parseIdentityExtractionResponse = (rawResponse: string): IdentityEx
       root.follow_up_questions === undefined
         ? []
         : assertStringArray(root.follow_up_questions, 'follow_up_questions'),
-    identity: imported.data,
+    identity: finalImported.data,
     bullets: Array.from(bulletMap.values()),
     warnings: warningSet,
   }
@@ -1373,7 +1716,7 @@ export const generateIdentityDraft = async ({
     },
   )
 
-  return parseIdentityExtractionResponse(rawResponse)
+  return parseIdentityExtractionResponse(rawResponse, seedIdentity)
 }
 
 export const deepenIdentityBullet = async ({

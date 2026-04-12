@@ -16,6 +16,7 @@ import {
   EXTRACTION_SYSTEM_PROMPT,
   buildDeepenBulletPrompt,
   deepenIdentityBullet,
+  generateIdentityDraft,
   parseDeepenIdentityBulletResponse,
   parseIdentityExtractionResponse,
 } from '../utils/identityExtraction'
@@ -167,6 +168,63 @@ const cloneNativeV31ExtractionIdentity = (): Record<string, unknown> => {
   return identity
 }
 
+const buildExpandedSeedIdentity = () => {
+  const expanded = structuredClone(responseBody.identity)
+  expanded.skills.groups = [
+    {
+      id: 'languages',
+      label: 'Languages',
+      items: [{ name: 'TypeScript', tags: ['platform'] }],
+    },
+    {
+      id: 'cloud',
+      label: 'Cloud',
+      items: [{ name: 'AWS', tags: ['platform'] }],
+    },
+  ]
+  expanded.roles = [
+    ...expanded.roles,
+    {
+      id: 'beta',
+      company: 'Beta Labs',
+      title: 'Platform Engineer',
+      dates: '2020 - 2022',
+      bullets: [
+        {
+          id: 'beta-1',
+          problem: '',
+          action: '',
+          outcome: '',
+          impact: [],
+          metrics: {},
+          technologies: ['Kubernetes'],
+          source_text: 'Migrated legacy services onto Kubernetes clusters.',
+          tags: ['platform'],
+        },
+      ],
+    },
+  ]
+  expanded.projects = [
+    ...expanded.projects,
+    {
+      id: 'labs',
+      name: 'Labs',
+      description: 'Internal platform experiments.',
+      tags: ['platform'],
+    },
+  ]
+  expanded.education = [
+    ...expanded.education,
+    {
+      school: 'Tech Institute',
+      location: 'Remote',
+      degree: 'Certificate, Distributed Systems',
+      year: '2020',
+    },
+  ]
+  return expanded
+}
+
 describe('identityExtraction', () => {
   it('exports v3.1 extraction prompts without legacy role_fit guidance', () => {
     expect(EXTRACTION_SYSTEM_PROMPT).toContain('Professional Identity Schema v3.1')
@@ -214,6 +272,97 @@ describe('identityExtraction', () => {
     )
     expect(parsed.bullets[1]?.assumptions).toEqual([])
     expect(parsed.warnings.some((warning) => warning.includes('unknown bullet'))).toBe(true)
+  })
+
+  it('preserves the scanned seed structure when AI extraction returns a partial identity', async () => {
+    const seedIdentity = buildExpandedSeedIdentity()
+    const partialIdentity = structuredClone(seedIdentity) as unknown as Record<string, unknown>
+    partialIdentity.roles = [
+      {
+        ...(partialIdentity.roles as Array<Record<string, unknown>>)[0],
+        bullets: [
+          {
+            ...(
+              ((partialIdentity.roles as Array<Record<string, unknown>>)[0]?.bullets as Array<
+                Record<string, unknown>
+              >)[0]
+            ),
+            problem: 'Deployment workflow was fragmented.',
+            action: 'Led a platform migration to a unified pipeline.',
+            outcome: 'Teams shipped through one deployment workflow.',
+            impact: ['Standardized delivery'],
+            metrics: { pipelines: 12 },
+            technologies: ['TypeScript', 'Terraform'],
+            tags: ['platform', 'delivery'],
+          },
+        ],
+      },
+    ]
+    partialIdentity.identity = {
+      ...(partialIdentity.identity as Record<string, unknown>),
+      name: '',
+      email: '',
+      phone: '',
+      location: '',
+      thesis: '',
+      links: [],
+    }
+    delete partialIdentity.projects
+    delete partialIdentity.education
+    delete partialIdentity.generator_rules
+    delete partialIdentity.search_vectors
+    delete partialIdentity.awareness
+
+    vi.mocked(callLlmProxy).mockResolvedValueOnce(
+      JSON.stringify({
+        summary: 'Strong platform draft with one open metric question.',
+        follow_up_questions: ['What was the scope of the migration?'],
+        identity: partialIdentity,
+        bullets: [
+          {
+            role_id: 'acme',
+            bullet_id: 'acme-1',
+            rewrite:
+              'Led a platform migration to a unified deployment workflow, standardizing delivery across 12 pipelines.',
+            tags: ['platform', 'delivery'],
+            assumptions: [],
+          },
+        ],
+      }),
+    )
+
+    const parsed = await generateIdentityDraft({
+      endpoint: 'https://facet.test/api/ai',
+      sourceMaterial: 'Jordan Example resume text',
+      seedIdentity,
+    })
+
+    expect(parsed.identity.roles).toHaveLength(2)
+    expect(parsed.identity.roles[0]?.bullets).toHaveLength(2)
+    expect(parsed.identity.roles[1]?.bullets).toHaveLength(1)
+    expect(parsed.identity.projects).toHaveLength(2)
+    expect(parsed.identity.education).toHaveLength(2)
+    expect(parsed.identity.skills.groups).toHaveLength(2)
+    expect(parsed.identity.identity.name).toBe(seedIdentity.identity.name)
+    expect(parsed.identity.identity.email).toBe(seedIdentity.identity.email)
+    expect(parsed.identity.identity.phone).toBe(seedIdentity.identity.phone)
+    expect(parsed.identity.identity.location).toBe(seedIdentity.identity.location)
+    expect(parsed.identity.identity.thesis).toBe(seedIdentity.identity.thesis)
+    expect(parsed.identity.identity.links).toEqual(seedIdentity.identity.links)
+    expect(parsed.bullets).toHaveLength(3)
+    expect(parsed.bullets[2]?.rewrite).toBe(
+      'Migrated legacy services onto Kubernetes clusters.',
+    )
+    expect(
+      parsed.warnings.some((warning) =>
+        warning.includes('Preserved 1 scanned role omitted from AI extraction output.'),
+      ),
+    ).toBe(true)
+    expect(
+      parsed.warnings.some((warning) =>
+        warning.includes('Preserved 2 scanned bullets omitted from AI extraction output.'),
+      ),
+    ).toBe(true)
   })
 
   it('rejects invalid confidence labels', () => {
