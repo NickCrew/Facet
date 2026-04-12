@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ProfessionalIdentityV3 } from '../../identity/schema'
 import type { ResumeScanBulletProgress, ResumeScanResult } from '../../types/identity'
 
@@ -120,6 +120,94 @@ const CONFIDENCE_LABELS: Record<ResumeScanBulletProgress['confidence'], string> 
   confirmed: 'Confirmed',
   guessing: 'Guessing',
   corrected: 'Corrected',
+}
+
+type ScannedBulletFilter = 'all' | 'needs-review' | 'guessing' | 'failed' | 'edited'
+
+interface ScannedBulletRef {
+  key: string
+  role: ProfessionalIdentityV3['roles'][number]
+  roleIndex: number
+  bullet: ProfessionalIdentityV3['roles'][number]['bullets'][number]
+  bulletIndex: number
+  progress: ResumeScanBulletProgress
+  preview: string
+}
+
+const BULLET_FILTER_LABELS: Record<ScannedBulletFilter, string> = {
+  all: 'All bullets',
+  'needs-review': 'Needs review',
+  guessing: 'Guessing',
+  failed: 'Failed',
+  edited: 'Edited',
+}
+
+const getBulletPreview = (
+  bullet: ProfessionalIdentityV3['roles'][number]['bullets'][number],
+): string => {
+  const source = bullet.source_text?.trim()
+  if (source) {
+    return source
+  }
+
+  const structured = [bullet.problem, bullet.action, bullet.outcome]
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .join(' ')
+
+  return structured || 'No bullet text available yet.'
+}
+
+const getBulletProgressState = (progress: ResumeScanResult['progress'], key: string): ResumeScanBulletProgress => ({
+  status: progress.bullets[key]?.status ?? 'idle',
+  confidence: progress.bullets[key]?.confidence ?? 'stated',
+  lastError: progress.bullets[key]?.lastError ?? null,
+  explanation: progress.bullets[key]?.explanation,
+  updatedAt: progress.bullets[key]?.updatedAt ?? '',
+})
+
+const bulletNeedsReview = (bulletRef: ScannedBulletRef): boolean =>
+  bulletRef.progress.status === 'idle' ||
+  bulletRef.progress.status === 'failed' ||
+  bulletRef.progress.confidence === 'guessing'
+
+const bulletMatchesFilter = (
+  bulletRef: ScannedBulletRef,
+  filter: ScannedBulletFilter,
+  query: string,
+): boolean => {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (normalizedQuery) {
+    const haystack = [
+      bulletRef.role.company,
+      bulletRef.role.title,
+      bulletRef.preview,
+      bulletRef.bullet.problem,
+      bulletRef.bullet.action,
+      bulletRef.bullet.outcome,
+      ...bulletRef.bullet.impact,
+      ...bulletRef.bullet.technologies,
+      ...bulletRef.bullet.tags,
+    ]
+      .join(' ')
+      .toLowerCase()
+
+    if (!haystack.includes(normalizedQuery)) {
+      return false
+    }
+  }
+
+  if (filter === 'all') return true
+  if (filter === 'needs-review') return bulletNeedsReview(bulletRef)
+  if (filter === 'guessing') return bulletRef.progress.confidence === 'guessing'
+  if (filter === 'failed') return bulletRef.progress.status === 'failed'
+  if (filter === 'edited') return bulletRef.progress.status === 'edited'
+  return true
+}
+
+const findPreferredBulletKey = (bulletRefs: ScannedBulletRef[]): string | null => {
+  const nextReview = bulletRefs.find((bulletRef) => bulletNeedsReview(bulletRef))
+  return nextReview?.key ?? bulletRefs[0]?.key ?? null
 }
 
 const hasDecomposition = (bullet: ProfessionalIdentityV3['roles'][number]['bullets'][number]): boolean =>
@@ -253,6 +341,101 @@ export function ScannedIdentityEditor({
 }: ScannedIdentityEditorProps) {
   const { identity, progress } = scanResult
   const hasRunningBullet = Object.values(progress.bullets).some((entry) => entry.status === 'running')
+  const [bulletFilter, setBulletFilter] = useState<ScannedBulletFilter>('all')
+  const [bulletQuery, setBulletQuery] = useState('')
+  const bulletRefs = useMemo<ScannedBulletRef[]>(
+    () =>
+      identity.roles.flatMap((role, roleIndex) =>
+        role.bullets.map((bullet, bulletIndex) => {
+          const key = `${role.id}::${bullet.id}`
+          return {
+            key,
+            role,
+            roleIndex,
+            bullet,
+            bulletIndex,
+            progress: getBulletProgressState(progress, key),
+            preview: getBulletPreview(bullet),
+          }
+        }),
+      ),
+    [identity.roles, progress],
+  )
+  const visibleBulletRefs = useMemo(
+    () => bulletRefs.filter((bulletRef) => bulletMatchesFilter(bulletRef, bulletFilter, bulletQuery)),
+    [bulletFilter, bulletQuery, bulletRefs],
+  )
+  const preferredBulletKey = useMemo(() => findPreferredBulletKey(bulletRefs), [bulletRefs])
+  const [selectedBulletKey, setSelectedBulletKey] = useState<string | null>(preferredBulletKey)
+  const [expandedRoleIds, setExpandedRoleIds] = useState<string[]>(
+    () => (identity.roles[0] ? [identity.roles[0].id] : []),
+  )
+
+  useEffect(() => {
+    setSelectedBulletKey((current) =>
+      current && bulletRefs.some((bulletRef) => bulletRef.key === current) ? current : preferredBulletKey,
+    )
+  }, [bulletRefs, preferredBulletKey])
+
+  useEffect(() => {
+    if (visibleBulletRefs.length === 0) {
+      return
+    }
+
+    setSelectedBulletKey((current) =>
+      current && visibleBulletRefs.some((bulletRef) => bulletRef.key === current)
+        ? current
+        : visibleBulletRefs[0]?.key ?? current,
+    )
+  }, [visibleBulletRefs])
+
+  const selectedBulletRef =
+    bulletRefs.find((bulletRef) => bulletRef.key === selectedBulletKey) ?? bulletRefs[0] ?? null
+
+  useEffect(() => {
+    if (!selectedBulletRef) {
+      return
+    }
+
+    setExpandedRoleIds((current) =>
+      current.includes(selectedBulletRef.role.id) ? current : [...current, selectedBulletRef.role.id],
+    )
+  }, [selectedBulletRef])
+
+  const visibleBulletsByRole = useMemo(() => {
+    const grouped = new Map<string, ScannedBulletRef[]>()
+    for (const bulletRef of visibleBulletRefs) {
+      const entries = grouped.get(bulletRef.role.id)
+      if (entries) {
+        entries.push(bulletRef)
+      } else {
+        grouped.set(bulletRef.role.id, [bulletRef])
+      }
+    }
+    return grouped
+  }, [visibleBulletRefs])
+
+  const selectedVisibleIndex = selectedBulletRef
+    ? visibleBulletRefs.findIndex((bulletRef) => bulletRef.key === selectedBulletRef.key)
+    : -1
+  const previousVisibleBullet =
+    selectedVisibleIndex > 0 ? visibleBulletRefs[selectedVisibleIndex - 1] ?? null : null
+  const nextVisibleBullet =
+    selectedVisibleIndex >= 0 ? visibleBulletRefs[selectedVisibleIndex + 1] ?? null : null
+
+  const toggleRole = (roleId: string) => {
+    setExpandedRoleIds((current) =>
+      current.includes(roleId) ? current.filter((entry) => entry !== roleId) : [...current, roleId],
+    )
+  }
+
+  const handleDeepenSelectedBullet = async () => {
+    if (!selectedBulletRef) {
+      return
+    }
+
+    await onDeepenBullet(selectedBulletRef.role.id, selectedBulletRef.bullet.id)
+  }
 
   return (
     <div className="identity-scan-editor">
@@ -326,98 +509,239 @@ export function ScannedIdentityEditor({
       <section className="identity-scan-section">
         <div>
           <h3>Roles</h3>
-          <p>Deepen bullets inline, then correct the decomposition directly in the scanned model.</p>
+          <p>Browse the scan on the left, then review one bullet at a time in the detail pane.</p>
         </div>
         {identity.roles.length > 0 ? (
-          <div className="identity-scan-stack">
-            {identity.roles.map((role, roleIndex) => (
-              <article className="identity-scan-card" key={role.id}>
-                <div className="identity-scan-form-grid">
-                  <label className="identity-field">
-                    <span className="identity-label">Company</span>
-                    <input
-                      className="identity-input"
-                      value={role.company}
-                      onChange={(event) => onUpdateRole(roleIndex, 'company', event.target.value)}
-                    />
-                  </label>
-                  <label className="identity-field">
-                    <span className="identity-label">Title</span>
-                    <input
-                      className="identity-input"
-                      value={role.title}
-                      onChange={(event) => onUpdateRole(roleIndex, 'title', event.target.value)}
-                    />
-                  </label>
-                  <label className="identity-field">
-                    <span className="identity-label">Dates</span>
-                    <input
-                      className="identity-input"
-                      value={role.dates}
-                      onChange={(event) => onUpdateRole(roleIndex, 'dates', event.target.value)}
-                    />
-                  </label>
-                  <label className="identity-field identity-field-wide">
-                    <span className="identity-label">Subtitle</span>
-                    <input
-                      className="identity-input"
-                      value={role.subtitle ?? ''}
-                      onChange={(event) => onUpdateRole(roleIndex, 'subtitle', event.target.value)}
-                    />
-                  </label>
+          <div className="identity-scan-master-detail">
+            <aside className="identity-scan-browser">
+              <div className="identity-scan-browser-toolbar">
+                <label className="identity-field identity-field-wide">
+                  <span className="identity-label">Search bullets</span>
+                  <input
+                    className="identity-input"
+                    value={bulletQuery}
+                    onChange={(event) => setBulletQuery(event.target.value)}
+                    placeholder="Search by company, role, source text, tags, or technologies."
+                  />
+                </label>
+                <label className="identity-field">
+                  <span className="identity-label">Focus</span>
+                  <select
+                    className="identity-input"
+                    value={bulletFilter}
+                    onChange={(event) => setBulletFilter(event.target.value as ScannedBulletFilter)}
+                  >
+                    {Object.entries(BULLET_FILTER_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="identity-scan-browser-summary">
+                  <strong>{visibleBulletRefs.length}</strong>
+                  <span>visible bullets</span>
                 </div>
-                <div className="identity-scan-stack">
-                  {role.bullets.map((bullet, bulletIndex) => {
-                    const key = `${role.id}::${bullet.id}`
-                    const bulletProgress = progress.bullets[key]
-                    const bulletExplanation = bulletProgress?.explanation
+              </div>
+
+              {visibleBulletRefs.length === 0 ? (
+                <div className="identity-empty">
+                  <h3>No bullets match this view</h3>
+                  <p>Clear the search or switch focus to inspect the full scanned history.</p>
+                </div>
+              ) : (
+                <div className="identity-scan-role-list">
+                  {identity.roles.map((role) => {
+                    const roleBullets = visibleBulletsByRole.get(role.id) ?? []
+                    if (roleBullets.length === 0) {
+                      return null
+                    }
+
+                    const reviewCount = roleBullets.filter((bulletRef) => bulletNeedsReview(bulletRef)).length
+                    const isExpanded = expandedRoleIds.includes(role.id)
+                    return (
+                      <section className="identity-scan-role-group" key={role.id}>
+                        <button
+                          className="identity-scan-role-toggle"
+                          type="button"
+                          onClick={() => toggleRole(role.id)}
+                        >
+                          <span className="identity-scan-role-summary">
+                            <strong>{role.company || 'Untitled company'}</strong>
+                            <span>
+                              {role.title || 'Untitled role'} · {roleBullets.length} bullet{roleBullets.length === 1 ? '' : 's'}
+                              {reviewCount > 0 ? ` · ${reviewCount} need review` : ''}
+                            </span>
+                          </span>
+                          <span className="identity-chip identity-chip-empty">
+                            {isExpanded ? 'Collapse' : 'Expand'}
+                          </span>
+                        </button>
+
+                        {isExpanded ? (
+                          <div className="identity-scan-role-panel">
+                            {roleBullets.map((bulletRef) => (
+                              <button
+                                key={bulletRef.key}
+                                className={`identity-scan-bullet-row${selectedBulletRef?.key === bulletRef.key ? ' identity-scan-bullet-row-active' : ''}`}
+                                type="button"
+                                onClick={() => setSelectedBulletKey(bulletRef.key)}
+                              >
+                                <span className="identity-scan-bullet-copy">
+                                  <span className="identity-scan-bullet-heading">
+                                    Bullet {bulletRef.bulletIndex + 1}
+                                  </span>
+                                  <span className="identity-scan-bullet-preview">{bulletRef.preview}</span>
+                                  <span className="identity-scan-bullet-metrics">
+                                    {bulletRef.bullet.tags.length} tags · {bulletRef.bullet.technologies.length} tech
+                                  </span>
+                                </span>
+                                <span className="identity-chip-row">
+                                  <span className={`identity-chip ${STATUS_CLASSNAMES[bulletRef.progress.status]}`}>
+                                    {STATUS_LABELS[bulletRef.progress.status]}
+                                  </span>
+                                  <span className={`identity-chip identity-chip-${bulletRef.progress.confidence}`}>
+                                    {CONFIDENCE_LABELS[bulletRef.progress.confidence]}
+                                  </span>
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </section>
+                    )
+                  })}
+                </div>
+              )}
+            </aside>
+
+            <div className="identity-scan-detail">
+              {selectedBulletRef ? (
+                <>
+                  <section className="identity-scan-card">
+                    <div className="identity-card-header">
+                      <div>
+                        <h4>{selectedBulletRef.role.company || 'Untitled company'}</h4>
+                        <p>
+                          {selectedBulletRef.role.title || 'Untitled role'} · Bullet {selectedBulletRef.bulletIndex + 1}
+                        </p>
+                      </div>
+                      <div className="identity-card-actions">
+                        <button
+                          className="identity-btn"
+                          type="button"
+                          onClick={() => previousVisibleBullet && setSelectedBulletKey(previousVisibleBullet.key)}
+                          disabled={!previousVisibleBullet}
+                        >
+                          Previous bullet
+                        </button>
+                        <button
+                          className="identity-btn"
+                          type="button"
+                          onClick={() => nextVisibleBullet && setSelectedBulletKey(nextVisibleBullet.key)}
+                          disabled={!nextVisibleBullet}
+                        >
+                          Next bullet
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="identity-scan-form-grid">
+                      <label className="identity-field">
+                        <span className="identity-label">Company</span>
+                        <input
+                          className="identity-input"
+                          value={selectedBulletRef.role.company}
+                          onChange={(event) =>
+                            onUpdateRole(selectedBulletRef.roleIndex, 'company', event.target.value)
+                          }
+                        />
+                      </label>
+                      <label className="identity-field">
+                        <span className="identity-label">Title</span>
+                        <input
+                          className="identity-input"
+                          value={selectedBulletRef.role.title}
+                          onChange={(event) =>
+                            onUpdateRole(selectedBulletRef.roleIndex, 'title', event.target.value)
+                          }
+                        />
+                      </label>
+                      <label className="identity-field">
+                        <span className="identity-label">Dates</span>
+                        <input
+                          className="identity-input"
+                          value={selectedBulletRef.role.dates}
+                          onChange={(event) =>
+                            onUpdateRole(selectedBulletRef.roleIndex, 'dates', event.target.value)
+                          }
+                        />
+                      </label>
+                      <label className="identity-field identity-field-wide">
+                        <span className="identity-label">Subtitle</span>
+                        <input
+                          className="identity-input"
+                          value={selectedBulletRef.role.subtitle ?? ''}
+                          onChange={(event) =>
+                            onUpdateRole(selectedBulletRef.roleIndex, 'subtitle', event.target.value)
+                          }
+                        />
+                      </label>
+                    </div>
+                  </section>
+
+                  {(() => {
+                    const { bullet, bulletIndex, progress: bulletProgress, role, roleIndex } = selectedBulletRef
+                    const bulletExplanation = bulletProgress.explanation
                     const showGuessingFallback =
-                      bulletProgress?.confidence === 'guessing' &&
+                      bulletProgress.confidence === 'guessing' &&
                       !bulletExplanation?.summary &&
                       !bulletExplanation?.rewrite &&
                       !bulletExplanation?.assumptions?.length &&
                       !bulletExplanation?.warnings?.length
                     const showGuidance =
-                      bulletProgress?.confidence === 'guessing' ||
+                      bulletProgress.confidence === 'guessing' ||
                       Boolean(bulletExplanation?.summary) ||
                       Boolean(bulletExplanation?.rewrite) ||
                       Boolean(bulletExplanation?.assumptions?.length) ||
                       Boolean(bulletExplanation?.warnings?.length)
                     const showDecomposition =
                       hasDecomposition(bullet) ||
-                      bulletProgress?.status === 'completed' ||
-                      bulletProgress?.status === 'edited'
+                      bulletProgress.status === 'completed' ||
+                      bulletProgress.status === 'edited'
+
                     return (
-                      <article className="identity-scan-card identity-scan-bullet-card" key={bullet.id}>
+                      <article className="identity-scan-card identity-scan-detail-card">
                         <div className="identity-scan-bullet-toolbar">
                           <div className="identity-chip-row">
-                            <span className={`identity-chip ${STATUS_CLASSNAMES[bulletProgress?.status ?? 'idle']}`}>
-                              {STATUS_LABELS[bulletProgress?.status ?? 'idle']}
+                            <span className={`identity-chip ${STATUS_CLASSNAMES[bulletProgress.status]}`}>
+                              {STATUS_LABELS[bulletProgress.status]}
                             </span>
-                            <span className={`identity-chip identity-chip-${bulletProgress?.confidence ?? 'stated'}`}>
-                              {CONFIDENCE_LABELS[bulletProgress?.confidence ?? 'stated']}
+                            <span className={`identity-chip identity-chip-${bulletProgress.confidence}`}>
+                              {CONFIDENCE_LABELS[bulletProgress.confidence]}
                             </span>
                           </div>
                           <button
                             className="identity-btn"
                             type="button"
-                            onClick={() => void onDeepenBullet(role.id, bullet.id)}
+                            onClick={() => void handleDeepenSelectedBullet()}
                             aria-label={`Deepen bullet ${bulletIndex + 1} in ${role.company}`}
                             disabled={
                               hasRunningBullet ||
-                              bulletProgress?.status === 'running' ||
+                              bulletProgress.status === 'running' ||
                               !bullet.source_text?.trim() ||
                               bulkStatus === 'running' ||
                               bulkStatus === 'cancelling'
                             }
                           >
-                            {bulletProgress?.status === 'completed' || bulletProgress?.status === 'edited'
+                            {bulletProgress.status === 'completed' || bulletProgress.status === 'edited'
                               ? 'Re-deepen'
-                              : bulletProgress?.status === 'running'
+                              : bulletProgress.status === 'running'
                                 ? 'Deepening…'
                                 : 'Deepen'}
                           </button>
                         </div>
+
                         <label className="identity-field">
                           <span className="identity-label">Bullet {bulletIndex + 1} Source</span>
                           <textarea
@@ -428,9 +752,11 @@ export function ScannedIdentityEditor({
                             }
                           />
                         </label>
-                        {bulletProgress?.lastError ? (
+
+                        {bulletProgress.lastError ? (
                           <p className="identity-muted">{bulletProgress.lastError}</p>
                         ) : null}
+
                         {showDecomposition ? (
                           <>
                             {showGuidance ? (
@@ -443,7 +769,7 @@ export function ScannedIdentityEditor({
                                   </p>
                                 ) : bulletExplanation?.summary ? (
                                   <p className="identity-scan-guidance-text">{bulletExplanation.summary}</p>
-                                ) : bulletProgress?.confidence === 'guessing' ? (
+                                ) : bulletProgress.confidence === 'guessing' ? (
                                   <p className="identity-scan-guidance-text">
                                     This decomposition was inferred from the scanned source text.
                                   </p>
@@ -467,11 +793,9 @@ export function ScannedIdentityEditor({
                                   </div>
                                 ) : null}
                                 {bulletExplanation?.warnings?.length ? (
-                                  <p className="identity-muted">
-                                    {bulletExplanation.warnings.join(' ')}
-                                  </p>
+                                  <p className="identity-muted">{bulletExplanation.warnings.join(' ')}</p>
                                 ) : null}
-                                {bulletProgress?.confidence === 'guessing' && !showGuessingFallback ? (
+                                {bulletProgress.confidence === 'guessing' && !showGuessingFallback ? (
                                   <p className="identity-muted">
                                     Edit the fields below to correct any guessed details. Your first edit will
                                     switch this bullet from Guessing to Corrected.
@@ -479,6 +803,7 @@ export function ScannedIdentityEditor({
                                 ) : null}
                               </section>
                             ) : null}
+
                             <div className="identity-scan-form-grid">
                               <label className="identity-field identity-field-wide">
                                 <span className="identity-label">Problem</span>
@@ -486,12 +811,7 @@ export function ScannedIdentityEditor({
                                   className="identity-textarea"
                                   value={bullet.problem}
                                   onChange={(event) =>
-                                    onUpdateBulletTextField(
-                                      role.id,
-                                      bullet.id,
-                                      'problem',
-                                      event.target.value,
-                                    )
+                                    onUpdateBulletTextField(role.id, bullet.id, 'problem', event.target.value)
                                   }
                                 />
                               </label>
@@ -501,12 +821,7 @@ export function ScannedIdentityEditor({
                                   className="identity-textarea"
                                   value={bullet.action}
                                   onChange={(event) =>
-                                    onUpdateBulletTextField(
-                                      role.id,
-                                      bullet.id,
-                                      'action',
-                                      event.target.value,
-                                    )
+                                    onUpdateBulletTextField(role.id, bullet.id, 'action', event.target.value)
                                   }
                                 />
                               </label>
@@ -516,12 +831,7 @@ export function ScannedIdentityEditor({
                                   className="identity-textarea"
                                   value={bullet.outcome}
                                   onChange={(event) =>
-                                    onUpdateBulletTextField(
-                                      role.id,
-                                      bullet.id,
-                                      'outcome',
-                                      event.target.value,
-                                    )
+                                    onUpdateBulletTextField(role.id, bullet.id, 'outcome', event.target.value)
                                   }
                                 />
                               </label>
@@ -563,10 +873,15 @@ export function ScannedIdentityEditor({
                         ) : null}
                       </article>
                     )
-                  })}
+                  })()}
+                </>
+              ) : (
+                <div className="identity-empty">
+                  <h3>No Bullet Selected</h3>
+                  <p>Select a bullet from the browser to inspect and correct its decomposition.</p>
                 </div>
-              </article>
-            ))}
+              )}
+            </div>
           </div>
         ) : (
           <p className="identity-muted">No roles were parsed from this PDF.</p>
