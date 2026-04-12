@@ -181,3 +181,5 @@ data/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+tests/hosted/.auth/
+.vercel

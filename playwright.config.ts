@@ -3,14 +3,6 @@ import { defineConfig, devices } from '@playwright/test';
 const reusePreviewServer = !process.env.CI && process.env.PLAYWRIGHT_REUSE_SERVER === '1'
 
 /**
- * Read environment variables from file.
- * https://github.com/motdotla/dotenv
- */
-// import dotenv from 'dotenv';
-// import path from 'path';
-// dotenv.config({ path: path.resolve(__dirname, '.env') });
-
-/**
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
@@ -52,25 +44,21 @@ export default defineConfig({
       use: { ...devices['Desktop Safari'] },
     },
 
-    /* Test against mobile viewports. */
-    // {
-    //   name: 'Mobile Chrome',
-    //   use: { ...devices['Pixel 5'] },
-    // },
-    // {
-    //   name: 'Mobile Safari',
-    //   use: { ...devices['iPhone 12'] },
-    // },
-
-    /* Test against branded browsers. */
-    // {
-    //   name: 'Microsoft Edge',
-    //   use: { ...devices['Desktop Edge'], channel: 'msedge' },
-    // },
-    // {
-    //   name: 'Google Chrome',
-    //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
-    // },
+    // ── Hosted Wave 1 validation ──────────────────────────────
+    {
+      name: 'hosted-auth-setup',
+      testMatch: /hosted\/auth\.setup\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'hosted',
+      testMatch: /hosted\/.+\.spec\.ts/,
+      dependencies: ['hosted-auth-setup'],
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: 'tests/hosted/.auth/session.json',
+      },
+    },
   ],
 
   /* Run your local dev server before starting the tests */
