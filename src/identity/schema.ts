@@ -292,6 +292,17 @@ const assertRecord = (value: unknown, context: string): Record<string, unknown> 
   return value
 }
 
+export const normalizeRuntimeIdentitySchemaRevision = (value: unknown): unknown => {
+  if (!isRecord(value) || value.schema_revision !== 3.1) {
+    return value
+  }
+
+  return {
+    ...value,
+    schema_revision: '3.1',
+  }
+}
+
 const assertArray = (value: unknown, context: string): unknown[] => {
   if (!Array.isArray(value)) {
     throw new Error(`${context} must be an array.`)
@@ -683,7 +694,7 @@ export const importProfessionalIdentity = (
   value: unknown,
 ): { data: ProfessionalIdentityV3; warnings: string[] } => {
   const warnings: string[] = []
-  const root = assertRecord(value, 'identity')
+  const root = assertRecord(normalizeRuntimeIdentitySchemaRevision(value), 'identity')
   const version = assertNumber(root.version, 'version')
   if (version !== 3) {
     throw new Error('version must be 3.')

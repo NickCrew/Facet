@@ -836,6 +836,35 @@ describe('identity bullet deepening', () => {
     )
   })
 
+  it('accepts an existing identity whose schema_revision was persisted as a number', () => {
+    const identity = structuredClone(responseBody.identity) as unknown as Record<string, unknown>
+    identity.schema_revision = 3.1
+
+    const parsed = parseDeepenIdentityBulletResponse(
+      JSON.stringify({
+        summary: 'Deepened the deployment migration bullet.',
+        bullet: {
+          role_id: 'acme',
+          bullet_id: 'acme-1',
+          problem: 'Deployment workflow was fragmented across EKS clusters.',
+          action: 'Led a migration to EKS with Helm charts and Terraform modules.',
+          outcome: 'Teams shipped through one deployment workflow.',
+          impact: ['Standardized delivery across 12 pipelines'],
+          metrics: { pipelines: 12 },
+          technologies: ['EKS', 'Helm', 'Terraform'],
+          tags: ['platform', 'delivery'],
+          rewrite:
+            'Led a migration to EKS with Helm charts and Terraform modules, standardizing delivery across 12 pipelines.',
+          assumptions: [],
+        },
+      }),
+      identity as unknown as typeof responseBody.identity,
+    )
+
+    expect(parsed.bulletId).toBe('acme-1')
+    expect(parsed.bullet.tags).toEqual(['platform', 'delivery'])
+  })
+
   it('rejects an unknown role when deepening a bullet', () => {
     expect(() =>
       parseDeepenIdentityBulletResponse(

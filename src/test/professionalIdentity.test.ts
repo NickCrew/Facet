@@ -193,6 +193,15 @@ describe('professional identity schema', () => {
     expect(() => importProfessionalIdentity(missingRevision)).toThrow(/schema_revision/i)
   })
 
+  it('normalizes numeric schema_revision 3.1 into the canonical string value', () => {
+    const numericRevision = clone(baseIdentityFixture) as unknown as Record<string, unknown>
+    numericRevision.schema_revision = 3.1
+
+    const parsed = importProfessionalIdentity(numericRevision)
+
+    expect(parsed.data.schema_revision).toBe('3.1')
+  })
+
   it('requires preferences.matching in the native v3.1 contract', () => {
     const missingMatching = clone(baseIdentityFixture)
     delete (missingMatching.preferences as unknown as Record<string, unknown>).matching

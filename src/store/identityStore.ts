@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import {
   importProfessionalIdentity,
+  normalizeRuntimeIdentitySchemaRevision,
   type ProfessionalIdentityV3,
   type ProfessionalInterviewProcessPreferences,
   type ProfessionalMatchingPreferences,
@@ -1066,7 +1067,7 @@ export const useIdentityStore = create<IdentityState>()(
     }),
     {
       name: 'facet-identity-workspace',
-      version: 3,
+      version: 4,
       storage: createJSONStorage(resolveStorage),
       partialize: (state) => ({
         intakeMode: state.intakeMode,
@@ -1085,18 +1086,40 @@ export const useIdentityStore = create<IdentityState>()(
         }
 
         const state = persistedState as Partial<IdentityState> & { scanResult?: ResumeScanResult | null }
+        const currentIdentity = normalizeRuntimeIdentitySchemaRevision(
+          state.currentIdentity,
+        ) as IdentityState['currentIdentity']
+        const draft =
+          state.draft === null || state.draft === undefined
+            ? state.draft
+            : {
+                ...state.draft,
+                identity: normalizeRuntimeIdentitySchemaRevision(
+                  state.draft.identity,
+                ) as IdentityExtractionDraft['identity'],
+              }
         if (!state.scanResult) {
-          return persistedState
+          return {
+            ...state,
+            currentIdentity,
+            draft,
+          }
         }
 
-        const progress = normalizeScanProgress(state.scanResult.identity, state.scanResult.progress)
+        const identity = normalizeRuntimeIdentitySchemaRevision(
+          state.scanResult.identity,
+        ) as ProfessionalIdentityV3
+        const progress = normalizeScanProgress(identity, state.scanResult.progress)
 
         return {
           ...state,
+          currentIdentity,
+          draft,
           scanResult: {
             ...state.scanResult,
+            identity,
             progress,
-            counts: recalculateScanCounts(state.scanResult.identity, progress),
+            counts: recalculateScanCounts(identity, progress),
           },
         }
       },
