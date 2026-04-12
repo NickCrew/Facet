@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "backlog": {
+      "command": "/opt/homebrew/bin/backlog",
+      "args": [
+        "mcp",
+        "start",
+        "--cwd",
+        "/Users/nick/Developer/Facet"
+      ]
+    },
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=zxcptjtlcvbtvzxybqio"
+    }
+  }
+}
