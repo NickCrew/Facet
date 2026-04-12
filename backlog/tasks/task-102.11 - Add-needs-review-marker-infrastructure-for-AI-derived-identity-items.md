@@ -4,6 +4,7 @@ title: Add needs-review marker infrastructure for AI-derived identity items
 status: To Do
 assignee: []
 created_date: '2026-04-11 07:15'
+updated_date: '2026-04-11 08:28'
 labels:
   - feature
   - identity
@@ -16,6 +17,7 @@ references:
   - src/identity/schema.ts
 documentation:
   - main/facet/identity-to-parameters-doc-spec
+  - main/facet/generator-rules-accuracy-gap-in-v3-1
 parent_task_id: TASK-102
 priority: high
 ---
@@ -32,6 +34,12 @@ Build the shared state, persistence, and UI primitives for AI-derived identity i
 - [ ] #2 The UI can surface needs-review counts consistently for multiple strategic field editors.
 - [ ] #3 Search vector and awareness generation flows can consume the same shared needs-review primitive.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Scope note: needs-review markers track review state only. They do not replace generator_rules.accuracy or any other persistence layer for factual correction constraints.
+<!-- SECTION:NOTES:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->

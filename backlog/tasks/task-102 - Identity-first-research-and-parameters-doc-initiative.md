@@ -4,7 +4,7 @@ title: Identity-first research and parameters doc initiative
 status: To Do
 assignee: []
 created_date: '2026-04-11 06:13'
-updated_date: '2026-04-11 07:16'
+updated_date: '2026-04-11 08:28'
 labels:
   - feature
   - identity
@@ -20,6 +20,7 @@ documentation:
   - main/facet/identity-to-parameters-doc-spec
   - main/facet/job-search-parameters-method
   - main/facet/professional-identity-schema-v3-1
+  - main/facet/generator-rules-accuracy-gap-in-v3-1
 priority: high
 ---
 
@@ -48,6 +49,8 @@ TASK-102.3, TASK-102.4, and TASK-102.5 populate the strategic identity fields th
 TASK-102.6 renders the parameters doc as an IdentityPage view over the same model.
 TASK-102.7 and TASK-102.8 clean up remaining resume-shaped inference and duplicate long-lived SearchProfile state after the identity-first path is proven.
 TASK-102.9 is future polish for standalone export and is intentionally last.
+
+TASK-102.12 adds factual-correction persistence through generator_rules.accuracy so AI-derived regeneration and identity-native prompt flows inherit user-established truth constraints across sessions.
 <!-- SECTION:PLAN:END -->
 
 ## Definition of Done

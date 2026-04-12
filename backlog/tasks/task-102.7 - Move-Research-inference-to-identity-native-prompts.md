@@ -4,7 +4,7 @@ title: Move Research inference to identity-native prompts
 status: To Do
 assignee: []
 created_date: '2026-04-11 06:14'
-updated_date: '2026-04-11 07:16'
+updated_date: '2026-04-11 08:28'
 labels:
   - refactor
   - identity
@@ -16,10 +16,13 @@ dependencies:
   - TASK-102.3
   - TASK-102.4
   - TASK-102.5
+  - TASK-102.12
 references:
   - src/utils/searchProfileInference.ts
   - src/routes/research/ResearchPage.tsx
   - src/store/identityStore.ts
+documentation:
+  - main/facet/generator-rules-accuracy-gap-in-v3-1
 parent_task_id: TASK-102
 priority: medium
 ---
@@ -41,6 +44,8 @@ Replace or sharply reduce resumeData-shaped inference in Research by shifting re
 
 <!-- SECTION:NOTES:BEGIN -->
 Quality note: do not tune identity-native inference prompts against mostly stub strategic fields. Prompt tuning should happen after structured strategic-field editors are live and at least one end-to-end identity has representative strategic data.
+
+Correction note: identity-native prompts must include persisted generator_rules.accuracy constraints so prompt migration preserves correction-aware behavior rather than only changing field shape.
 <!-- SECTION:NOTES:END -->
 
 ## Definition of Done

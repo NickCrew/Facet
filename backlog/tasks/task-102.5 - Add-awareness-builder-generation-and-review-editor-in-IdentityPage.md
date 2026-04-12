@@ -4,7 +4,7 @@ title: Add awareness builder generation and review editor in IdentityPage
 status: To Do
 assignee: []
 created_date: '2026-04-11 06:14'
-updated_date: '2026-04-11 07:16'
+updated_date: '2026-04-11 08:28'
 labels:
   - feature
   - identity
@@ -12,6 +12,7 @@ labels:
 milestone: m-16
 dependencies:
   - TASK-102.11
+  - TASK-102.12
 references:
   - src/routes/identity/IdentityPage.tsx
   - src/store/identityStore.ts
@@ -19,6 +20,7 @@ references:
 documentation:
   - main/facet/identity-to-parameters-doc-spec
   - main/facet/professional-identity-schema-v3-1
+  - main/facet/generator-rules-accuracy-gap-in-v3-1
 parent_task_id: TASK-102
 priority: high
 ---
@@ -40,6 +42,8 @@ Implement the awareness builder as an identity-native generation plus review wor
 
 <!-- SECTION:NOTES:BEGIN -->
 Execution note: this task shares the same IdentityPage editor surface as TASK-102.3 and TASK-102.4. Treat the three tasks as close-sequence work owned by the same person or tightly coordinated team even though the formal dependency graph does not force serial execution.
+
+Correction note: awareness regeneration must consume persisted generator_rules.accuracy constraints so previously corrected factual mistakes are not reintroduced on regeneration.
 <!-- SECTION:NOTES:END -->
 
 ## Definition of Done
