@@ -483,4 +483,55 @@ describe('identityStore skill enrichment', () => {
     expect(useIdentityStore.getState().draft?.identity.schema_revision).toBe('3.1')
     expect(useIdentityStore.getState().scanResult?.identity.schema_revision).toBe('3.1')
   })
+
+  it('normalizes current-version persisted numeric schema_revision values on rehydrate merge', async () => {
+    const draftIdentity = createIdentity()
+    useIdentityStore.setState({
+      currentIdentity: createIdentity(),
+      draft: {
+        generatedAt: '2026-04-05T00:00:00.000Z',
+        summary: 'Draft summary',
+        followUpQuestions: [],
+        identity: draftIdentity,
+        bullets: [],
+        warnings: [],
+      },
+      scanResult: createScanResult(),
+    })
+
+    const persisted = await resolveStorage().getItem('facet-identity-workspace')
+    const parsed = JSON.parse(persisted ?? '{}') as {
+      state?: {
+        currentIdentity?: { schema_revision?: string | number }
+        draft?: { identity?: { schema_revision?: string | number } }
+        scanResult?: { identity?: { schema_revision?: string | number } }
+      }
+      version?: number
+    }
+
+    if (parsed.state?.currentIdentity) {
+      parsed.state.currentIdentity.schema_revision = 3.1
+    }
+    if (parsed.state?.draft?.identity) {
+      parsed.state.draft.identity.schema_revision = 3.1
+    }
+    if (parsed.state?.scanResult?.identity) {
+      parsed.state.scanResult.identity.schema_revision = 3.1
+    }
+    parsed.version = 4
+
+    useIdentityStore.setState({
+      currentIdentity: null,
+      draft: null,
+      scanResult: null,
+      draftDocument: '',
+    })
+    await resolveStorage().setItem('facet-identity-workspace', JSON.stringify(parsed))
+
+    await useIdentityStore.persist.rehydrate()
+
+    expect(useIdentityStore.getState().currentIdentity?.schema_revision).toBe('3.1')
+    expect(useIdentityStore.getState().draft?.identity.schema_revision).toBe('3.1')
+    expect(useIdentityStore.getState().scanResult?.identity.schema_revision).toBe('3.1')
+  })
 })

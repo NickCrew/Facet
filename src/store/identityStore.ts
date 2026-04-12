@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import {
   importProfessionalIdentity,
-  normalizeRuntimeIdentitySchemaRevision,
   normalizeRuntimeProfessionalIdentity,
   type ProfessionalIdentityV3,
   type ProfessionalInterviewProcessPreferences,
@@ -390,6 +389,44 @@ const syncIdentityDocument = (
       ? state.draftDocument
       : formatIdentityDocument(normalized),
     lastError: null,
+  }
+}
+
+const normalizePersistedIdentityState = (
+  state: Partial<IdentityState> & { scanResult?: ResumeScanResult | null },
+): Partial<IdentityState> => {
+  const currentIdentity = state.currentIdentity
+    ? normalizeRuntimeProfessionalIdentity(state.currentIdentity)
+    : state.currentIdentity
+  const draft =
+    state.draft === null || state.draft === undefined
+      ? state.draft
+      : {
+          ...state.draft,
+          identity: normalizeRuntimeProfessionalIdentity(state.draft.identity),
+        }
+
+  if (!state.scanResult) {
+    return {
+      ...state,
+      currentIdentity,
+      draft,
+    }
+  }
+
+  const identity = normalizeRuntimeProfessionalIdentity(state.scanResult.identity)
+  const progress = normalizeScanProgress(identity, state.scanResult.progress)
+
+  return {
+    ...state,
+    currentIdentity,
+    draft,
+    scanResult: {
+      ...state.scanResult,
+      identity,
+      progress,
+      counts: recalculateScanCounts(identity, progress),
+    },
   }
 }
 
@@ -1108,41 +1145,28 @@ export const useIdentityStore = create<IdentityState>()(
         }
 
         const state = persistedState as Partial<IdentityState> & { scanResult?: ResumeScanResult | null }
-        const currentIdentity = normalizeRuntimeIdentitySchemaRevision(
-          state.currentIdentity,
-        ) as IdentityState['currentIdentity']
-        const draft =
-          state.draft === null || state.draft === undefined
-            ? state.draft
-            : {
-                ...state.draft,
-                identity: normalizeRuntimeIdentitySchemaRevision(
-                  state.draft.identity,
-                ) as IdentityExtractionDraft['identity'],
-              }
-        if (!state.scanResult) {
+        return normalizePersistedIdentityState(state)
+      },
+      merge: (persistedState, currentState) => {
+        if (
+          typeof persistedState !== 'object' ||
+          persistedState === null ||
+          !('currentIdentity' in persistedState || 'draft' in persistedState || 'scanResult' in persistedState)
+        ) {
+          const state = persistedState as Partial<IdentityState>
           return {
+            ...currentState,
             ...state,
-            currentIdentity,
-            draft,
           }
         }
 
-        const identity = normalizeRuntimeIdentitySchemaRevision(
-          state.scanResult.identity,
-        ) as ProfessionalIdentityV3
-        const progress = normalizeScanProgress(identity, state.scanResult.progress)
-
+        // Same-version persisted snapshots skip migrate(), so merge() must normalize too.
+        const state = persistedState as Partial<IdentityState> & {
+          scanResult?: ResumeScanResult | null
+        }
         return {
-          ...state,
-          currentIdentity,
-          draft,
-          scanResult: {
-            ...state.scanResult,
-            identity,
-            progress,
-            counts: recalculateScanCounts(identity, progress),
-          },
+          ...currentState,
+          ...normalizePersistedIdentityState(state),
         }
       },
     },
