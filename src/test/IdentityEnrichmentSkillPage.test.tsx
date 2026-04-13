@@ -117,8 +117,8 @@ describe('IdentityEnrichmentSkillPage', () => {
     expect((screen.getByLabelText('Custom positioning') as HTMLTextAreaElement).value).toContain(
       'Platform modernization and Kubernetes operations.',
     )
-    expect(screen.getByText(/Choose a preset or select Custom/i)).toBeTruthy()
-    expect(screen.getByText('Examples')).toBeTruthy()
+    expect(screen.getByText(/Pick a generic preset or select Custom/i)).toBeTruthy()
+    expect(screen.getByText('Example custom positioning directives')).toBeTruthy()
   })
 
   it('renders persisted stale indicators on initial load', async () => {
@@ -203,16 +203,17 @@ describe('IdentityEnrichmentSkillPage', () => {
       target: { value: 'working' },
     })
     fireEvent.change(screen.getByRole('combobox', { name: 'Positioning' }), {
-      target: { value: 'Strong match signal. List first.' },
+      target: { value: 'Strong match signal. Lead with it.' },
     })
 
     expect(screen.queryByLabelText('Custom positioning')).toBeNull()
+    expect(screen.queryByText('Example custom positioning directives')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Save and exit' }))
 
     expect(useIdentityStore.getState().currentIdentity?.skills.groups[0]?.items[1]).toMatchObject({
       depth: 'working',
-      positioning: 'Strong match signal. List first.',
+      positioning: 'Strong match signal. Lead with it.',
       enriched_by: 'user',
     })
   })

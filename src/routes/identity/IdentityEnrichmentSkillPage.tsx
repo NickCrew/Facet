@@ -32,13 +32,20 @@ const CONTEXT_EXAMPLES = [
   'C#: "full platform work - ASP.NET, SQL Server, build systems, tooling"',
 ] as const
 const POSITIONING_EXAMPLES = [
-  'Strong match signal. List first.',
-  'Strong match signal, especially with Python. Rare combo.',
-  "Standard. Don't oversell.",
-  'Expected for Linux roles.',
-  'Can mention. Avoid deep Rust required roles.',
+  'Strong match signal. Lead with it.',
+  'Strong supporting signal. Mention early.',
+  "Standard expectation. Don't oversell.",
+  'Useful secondary signal. Mention when relevant.',
+  'Specialized signal. Use selectively.',
+  'Growth signal. Frame as ramping.',
   "Don't lead with this.",
-  'Can apply if other signals are strong. Flag as ramping.',
+] as const
+const CUSTOM_POSITIONING_EXAMPLES = [
+  'Strong match signal, especially with Python. Rare combo.',
+  'Expected for Linux roles. Keep it brief unless the role is infra-heavy.',
+  'Lead with platform modernization and Kubernetes operations.',
+  'Use as supporting evidence for backend breadth and systems judgment.',
+  'Position as recent ramping with real delivery, not deep specialization.',
 ] as const
 const CUSTOM_POSITIONING_VALUE = '__custom__'
 
@@ -117,6 +124,7 @@ export function IdentityEnrichmentSkillPage() {
   const contextLabelId = `${fieldBaseId}-context-label`
   const positioningLabelId = `${fieldBaseId}-positioning-label`
   const customPositioningLabelId = `${fieldBaseId}-positioning-custom-label`
+  const customPositioningHelpId = `${fieldBaseId}-positioning-custom-help`
   const errorId = `${fieldBaseId}-error`
 
   const [depth, setDepth] = useState<EditableSkillDepth>('')
@@ -632,7 +640,9 @@ export function IdentityEnrichmentSkillPage() {
             ))}
             <option value={CUSTOM_POSITIONING_VALUE}>Custom...</option>
           </select>
-          <span className="identity-field-help">Choose a preset or select Custom to write your own.</span>
+          <span className="identity-field-help">
+            Pick a generic preset or select Custom for a more specific directive.
+          </span>
           {positioningSelection === CUSTOM_POSITIONING_VALUE ? (
             <>
               <label
@@ -647,6 +657,7 @@ export function IdentityEnrichmentSkillPage() {
                 className="identity-textarea"
                 placeholder="Optional. Add a short directive for how generators should surface this skill."
                 aria-labelledby={customPositioningLabelId}
+                aria-describedby={customPositioningHelpId}
                 value={positioning}
                 onChange={(event) => {
                   setPositioning(event.target.value)
@@ -655,6 +666,18 @@ export function IdentityEnrichmentSkillPage() {
                   setError(null)
                 }}
               />
+              <span id={customPositioningHelpId} className="identity-field-help">
+                Use custom positioning when the preset is too generic and you want to steer how this
+                skill is framed.
+              </span>
+              <details className="identity-field-examples">
+                <summary>Example custom positioning directives</summary>
+                <ul className="identity-example-list">
+                  {CUSTOM_POSITIONING_EXAMPLES.map((example) => (
+                    <li key={example}>{example}</li>
+                  ))}
+                </ul>
+              </details>
             </>
           ) : null}
           {positioningStale && positioning.trim() ? (
