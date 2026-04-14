@@ -6,6 +6,7 @@ import type {
   ProfessionalSearchVectorPriority,
 } from '../identity/schema'
 import { createId } from './idUtils'
+import { parseJsonWithRepair } from './jsonParsing'
 import { callLlmProxy, extractJsonBlock, JsonExtractionError, isString } from './llmProxy'
 
 const GENERATION_MODEL = 'haiku'
@@ -38,6 +39,23 @@ const buildGenerationPrompt = (identity: ProfessionalIdentityV3) =>
     null,
     2,
   )
+
+const parseGeneratedPayload = (rawResponse: string, context: string): unknown => {
+  try {
+    const parsed = parseJsonWithRepair<unknown>(extractJsonBlock(rawResponse), context).data
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error(`${context} must be a JSON object.`)
+    }
+
+    return parsed
+  } catch (error) {
+    if (error instanceof JsonExtractionError) {
+      throw new JsonExtractionError(`${context}: ${error.message}`)
+    }
+
+    throw new Error(error instanceof Error ? error.message : `Unable to parse ${context}.`)
+  }
+}
 
 const normalizeGeneratedVectors = (payload: unknown): ProfessionalSearchVector[] => {
   const record = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}
@@ -154,12 +172,12 @@ Response schema:
   })
 
   try {
-    return normalizeGeneratedVectors(JSON.parse(extractJsonBlock(rawResponse)))
+    return normalizeGeneratedVectors(parseGeneratedPayload(rawResponse, 'Generated search vectors response'))
   } catch (error) {
     if (error instanceof JsonExtractionError) {
       throw error
     }
-    throw new Error('Failed to parse generated search vectors.')
+    throw error instanceof Error ? error : new Error('Failed to parse generated search vectors.')
   }
 }
 
@@ -193,11 +211,11 @@ Response schema:
   })
 
   try {
-    return normalizeGeneratedAwareness(JSON.parse(extractJsonBlock(rawResponse)))
+    return normalizeGeneratedAwareness(parseGeneratedPayload(rawResponse, 'Generated awareness response'))
   } catch (error) {
     if (error instanceof JsonExtractionError) {
       throw error
     }
-    throw new Error('Failed to parse generated awareness items.')
+    throw error instanceof Error ? error : new Error('Failed to parse generated awareness items.')
   }
 }
