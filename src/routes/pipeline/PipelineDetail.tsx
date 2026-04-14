@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { Edit3, Trash2, Zap, BookOpen, ArrowRight, Search } from 'lucide-react'
 import { AiActivityIndicator } from '../../components/AiActivityIndicator'
 import type { PipelineEntry } from '../../types/pipeline'
@@ -17,6 +18,8 @@ interface PipelineDetailProps {
   investigationError?: string
 }
 
+const ACTIVE_STATUSES = new Set(['screening', 'interviewing'])
+
 export function PipelineDetail({
   entry,
   onEdit,
@@ -29,7 +32,9 @@ export function PipelineDetail({
   isInvestigating,
   investigationError,
 }: PipelineDetailProps) {
-  const activeStatuses = new Set(['screening', 'interviewing'])
+  const actionGroupId = useId()
+  const showExecutionActions =
+    Boolean(entry.vectorId) || Boolean(entry.jobDescription) || ACTIVE_STATUSES.has(entry.status)
   const linkedPreset = useResumeStore((s) =>
     entry.presetId ? (s.data.presets ?? []).find((p) => p.id === entry.presetId) ?? null : null
   )
@@ -222,45 +227,76 @@ export function PipelineDetail({
         </div>
       )}
 
-      <div className="pipeline-detail-actions">
-        <button className="pipeline-btn pipeline-btn-sm" onClick={onEdit}>
-          <Edit3 size={14} /> Edit
-        </button>
-        <button
-          className={`pipeline-btn pipeline-btn-sm ${isInvestigating ? 'ai-working-button' : ''}`}
-          onClick={onInvestigate}
-          disabled={isInvestigating || !canInvestigate}
-          aria-busy={isInvestigating}
-          title={canInvestigate ? undefined : 'Configure VITE_ANTHROPIC_PROXY_URL to investigate from the pipeline.'}
+      <div className="pipeline-detail-action-groups">
+        <div
+          className="pipeline-detail-action-group"
+          role="group"
+          aria-labelledby={`${actionGroupId}-research`}
         >
-          <Search size={14} /> {isInvestigating ? 'Investigating…' : entry.research?.status === 'investigated' ? 'Refresh Research' : 'Investigate with AI'}
-        </button>
-        <AiActivityIndicator
-          active={isInvestigating}
-          label="AI researching"
-          className="pipeline-investigation-indicator"
-        />
-        {!canInvestigate ? (
-          <span className="pipeline-action-hint">AI research unavailable until the proxy is configured.</span>
+          <span id={`${actionGroupId}-research`} className="pipeline-detail-action-label">Research</span>
+          <div className="pipeline-detail-actions">
+            <button
+              className={`pipeline-btn pipeline-btn-sm ${isInvestigating ? 'ai-working-button' : ''}`}
+              onClick={onInvestigate}
+              disabled={isInvestigating || !canInvestigate}
+              aria-busy={isInvestigating}
+              title={canInvestigate ? undefined : 'Configure VITE_ANTHROPIC_PROXY_URL to investigate from the pipeline.'}
+            >
+              <Search size={14} /> {isInvestigating ? 'Investigating…' : entry.research?.status === 'investigated' ? 'Refresh Research' : 'Investigate with AI'}
+            </button>
+            <AiActivityIndicator
+              active={isInvestigating}
+              label="AI researching"
+              className="pipeline-investigation-indicator"
+            />
+            {!canInvestigate ? (
+              <span className="pipeline-action-hint">AI research unavailable until the proxy is configured.</span>
+            ) : null}
+          </div>
+        </div>
+
+        {showExecutionActions ? (
+          <div
+            className="pipeline-detail-action-group"
+            role="group"
+            aria-labelledby={`${actionGroupId}-execution`}
+          >
+            <span id={`${actionGroupId}-execution`} className="pipeline-detail-action-label">Execution</span>
+            <div className="pipeline-detail-actions">
+              {entry.vectorId && (
+                <button className="pipeline-btn pipeline-btn-sm" onClick={onOpenInBuilder}>
+                  <ArrowRight size={14} /> Open in Builder
+                </button>
+              )}
+              {entry.jobDescription && (
+                <button className="pipeline-btn pipeline-btn-sm pipeline-btn-primary" onClick={onAnalyze}>
+                  <Zap size={14} /> Analyze in Builder
+                </button>
+              )}
+              {ACTIVE_STATUSES.has(entry.status) && (
+                <button className="pipeline-btn pipeline-btn-sm" onClick={onPrep}>
+                  <BookOpen size={14} /> Prep for Interview
+                </button>
+              )}
+            </div>
+          </div>
         ) : null}
-        {entry.vectorId && (
-          <button className="pipeline-btn pipeline-btn-sm" onClick={onOpenInBuilder}>
-            <ArrowRight size={14} /> Open in Builder
-          </button>
-        )}
-        {entry.jobDescription && (
-          <button className="pipeline-btn pipeline-btn-sm pipeline-btn-primary" onClick={onAnalyze}>
-            <Zap size={14} /> Analyze in Builder
-          </button>
-        )}
-        {activeStatuses.has(entry.status) && (
-          <button className="pipeline-btn pipeline-btn-sm" onClick={onPrep}>
-            <BookOpen size={14} /> Prep for Interview
-          </button>
-        )}
-        <button className="pipeline-btn pipeline-btn-sm pipeline-btn-danger" onClick={onDelete}>
-          <Trash2 size={14} /> Delete
-        </button>
+
+        <div
+          className="pipeline-detail-action-group"
+          role="group"
+          aria-labelledby={`${actionGroupId}-management`}
+        >
+          <span id={`${actionGroupId}-management`} className="pipeline-detail-action-label">Management</span>
+          <div className="pipeline-detail-actions">
+            <button className="pipeline-btn pipeline-btn-sm" onClick={onEdit}>
+              <Edit3 size={14} /> Edit
+            </button>
+            <button className="pipeline-btn pipeline-btn-sm pipeline-btn-danger" onClick={onDelete}>
+              <Trash2 size={14} /> Delete
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )

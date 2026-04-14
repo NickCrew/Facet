@@ -66,6 +66,32 @@ describe('PipelinePage', () => {
     vi.unstubAllEnvs()
   })
 
+  it('shows a guided empty state with one primary start action', () => {
+    usePipelineStore.setState({
+      entries: [],
+      sortField: 'tier',
+      sortDir: 'asc',
+      filters: { tier: 'all', status: 'all', search: '' },
+    })
+
+    const { container } = render(<PipelinePage />)
+
+    expect(screen.getByText('Start your opportunity pipeline')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Add Entry/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Paste JD/i })).toBeTruthy()
+    expect(container.querySelectorAll('.pipeline-empty-actions .pipeline-btn-primary')).toHaveLength(1)
+    expect(screen.getByText(/Add a role, paste a JD for faster capture/)).toBeTruthy()
+  })
+
+  it('keeps one primary add action in the populated header', () => {
+    const { container } = render(<PipelinePage />)
+
+    expect(screen.getByText('Execution Workspace')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /^Add Entry$/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /^Paste JD$/i })).toBeTruthy()
+    expect(container.querySelectorAll('.pipeline-header .pipeline-btn-primary')).toHaveLength(1)
+  })
+
   it('disables pipeline investigation when the AI proxy is not configured', () => {
     vi.stubEnv('VITE_ANTHROPIC_PROXY_URL', '')
 
@@ -192,5 +218,18 @@ describe('PipelinePage', () => {
 
     expect(usePipelineStore.getState().entries[0]?.research).toBeUndefined()
     expect(usePipelineStore.getState().entries[0]?.history).toEqual([])
+  })
+
+  it('groups detail actions by research, execution, and management intent', () => {
+    render(<PipelinePage />)
+
+    fireEvent.click(screen.getByText('Acme Corp'))
+
+    expect(screen.getByText('Research')).toBeTruthy()
+    expect(screen.getByText('Execution')).toBeTruthy()
+    expect(screen.getByText('Management')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Investigate with AI/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Open in Builder/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Edit/i })).toBeTruthy()
   })
 })

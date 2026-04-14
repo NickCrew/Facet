@@ -15,10 +15,26 @@
 
 .pipeline-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-4);
   flex-wrap: wrap;
+}
+
+.pipeline-header-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 640px;
+}
+
+.pipeline-eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
 }
 
 .pipeline-header h1 {
@@ -29,11 +45,42 @@
   margin: 0;
 }
 
+.pipeline-copy,
+.pipeline-status-line {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pipeline-copy {
+  color: var(--text-secondary);
+}
+
+.pipeline-status-line {
+  color: var(--text-tertiary);
+}
+
+.pipeline-header-action-groups {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
 .pipeline-header-actions {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.pipeline-header-utilities {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 /* ── Buttons ── */
@@ -71,6 +118,19 @@
   background: var(--accent-primary-hover);
   border-color: var(--accent-primary-hover);
   color: var(--text-inverse);
+}
+
+.pipeline-btn-active {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--accent-primary-subtle);
+}
+
+.pipeline-btn-active:hover,
+.pipeline-btn-active:focus-visible {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary-subtle) 76%, var(--bg-surface) 24%);
 }
 
 .pipeline-btn-sm {
@@ -393,6 +453,26 @@
   display: flex;
   gap: var(--space-2);
   flex-wrap: wrap;
+}
+
+.pipeline-detail-action-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.pipeline-detail-action-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.pipeline-detail-action-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
 }
 
 .pipeline-investigation-indicator {
@@ -770,4 +850,11 @@
   display: flex;
   gap: var(--space-2);
   margin-top: var(--space-2);
+}
+
+.pipeline-empty-utilities {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: center;
 }

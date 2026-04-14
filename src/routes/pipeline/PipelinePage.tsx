@@ -220,6 +220,38 @@ export function PipelinePage() {
 
   const modalEntry = modal && typeof modal === 'object' && 'id' in modal ? modal : null
   const initialData = modal && typeof modal === 'object' && 'type' in modal && modal.type === 'add-prefilled' ? modal.data : undefined
+  const { activeEntryCount, interviewingCount, offerCount } = useMemo(() => {
+    let active = 0
+    let interviewing = 0
+    let offers = 0
+
+    for (const entry of entries) {
+      if (
+        entry.status !== 'rejected' &&
+        entry.status !== 'withdrawn' &&
+        entry.status !== 'closed'
+      ) {
+        active += 1
+      }
+      if (entry.status === 'interviewing') {
+        interviewing += 1
+      }
+      if (entry.status === 'offer') {
+        offers += 1
+      }
+    }
+
+    return {
+      activeEntryCount: active,
+      interviewingCount: interviewing,
+      offerCount: offers,
+    }
+  }, [entries])
+  const pipelineStatusLine = entries.length === 0
+    ? 'No tracked opportunities yet. Start with one role and grow the pipeline from there.'
+    : activeEntryCount === 0
+      ? 'All tracked opportunities are closed. Add a new role to restart the pipeline.'
+    : `${activeEntryCount} active opportunities, ${interviewingCount} in interviews, ${offerCount} offers in play.`
 
   const handleImportLegacy = useCallback(() => {
     try {
@@ -254,23 +286,31 @@ export function PipelinePage() {
     return (
       <div className="pipeline-page">
         <div className="pipeline-header">
-          <h1>Pipeline</h1>
+          <div className="pipeline-header-copy">
+            <p className="pipeline-eyebrow">Execution Workspace</p>
+            <h1>Pipeline</h1>
+            <p className="pipeline-copy">
+              Track roles, reuse research, and keep the strongest opportunities moving.
+            </p>
+            <p className="pipeline-status-line">{pipelineStatusLine}</p>
+          </div>
         </div>
         <div className="pipeline-empty">
-          <h2>No entries yet</h2>
+          <h2>Start your opportunity pipeline</h2>
           <p>
-            Track your job search pipeline. Add companies, monitor application status,
-            and analyze your strategy.
+            Add a role, paste a JD for faster capture, or pull in sample data if you want a guided tour of the workflow.
           </p>
           <div className="pipeline-empty-actions">
             <button className="pipeline-btn pipeline-btn-primary" onClick={() => setModal('add')}>
-              <Plus size={16} /> Add First Entry
+              <Plus size={16} /> Add Entry
             </button>
-            <button className="pipeline-btn pipeline-btn-primary" onClick={() => setModal('paste-jd')}>
+            <button className="pipeline-btn" onClick={() => setModal('paste-jd')}>
               <Plus size={16} /> Paste JD
             </button>
+          </div>
+          <div className="pipeline-empty-utilities">
             {hasLegacyData && (
-              <button className="pipeline-btn pipeline-btn-primary" onClick={handleImportLegacy}>
+              <button className="pipeline-btn" onClick={handleImportLegacy}>
                 <Upload size={16} /> Import Legacy Data
               </button>
             )}
@@ -293,27 +333,39 @@ export function PipelinePage() {
   return (
     <div className="pipeline-page">
       <div className="pipeline-header">
-        <h1>Pipeline</h1>
-        <div className="pipeline-header-actions">
-          <button className="pipeline-btn pipeline-btn-primary" onClick={() => setModal('add')}>
-            <Plus size={16} /> Add
-          </button>
-          <button className="pipeline-btn pipeline-btn-primary" onClick={() => setModal('paste-jd')}>
-            <Plus size={16} /> Paste JD
-          </button>
-          <button className="pipeline-btn" onClick={() => importRef.current?.click()}>
-            <Upload size={16} /> Import
-          </button>
-          <input ref={importRef} type="file" accept=".json" className="import-file-input" onChange={handleImport} />
-          <button className="pipeline-btn" onClick={handleExport}>
-            <Download size={16} /> Export
-          </button>
-          <button
-            className={`pipeline-btn ${analyticsOpen ? 'pipeline-btn-primary' : ''}`}
-            onClick={() => setAnalyticsOpen((o) => !o)}
-          >
-            <BarChart3 size={16} /> Analytics
-          </button>
+        <div className="pipeline-header-copy">
+          <p className="pipeline-eyebrow">Execution Workspace</p>
+          <h1>Pipeline</h1>
+          <p className="pipeline-copy">
+            Track roles, reuse research, and keep the strongest opportunities moving.
+          </p>
+          <p className="pipeline-status-line">{pipelineStatusLine}</p>
+        </div>
+        <div className="pipeline-header-action-groups">
+          <div className="pipeline-header-actions">
+            <button className="pipeline-btn pipeline-btn-primary" onClick={() => setModal('add')}>
+              <Plus size={16} /> Add Entry
+            </button>
+          </div>
+          <div className="pipeline-header-utilities">
+            <button className="pipeline-btn" onClick={() => setModal('paste-jd')}>
+              <Plus size={16} /> Paste JD
+            </button>
+            <button className="pipeline-btn" onClick={() => importRef.current?.click()}>
+              <Upload size={16} /> Import
+            </button>
+            <input ref={importRef} type="file" accept=".json" className="import-file-input" onChange={handleImport} />
+            <button className="pipeline-btn" onClick={handleExport}>
+              <Download size={16} /> Export
+            </button>
+            <button
+              className={`pipeline-btn ${analyticsOpen ? 'pipeline-btn-active' : ''}`}
+              onClick={() => setAnalyticsOpen((o) => !o)}
+              aria-pressed={analyticsOpen}
+            >
+              <BarChart3 size={16} /> Analytics
+            </button>
+          </div>
         </div>
       </div>
 
