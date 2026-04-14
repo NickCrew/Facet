@@ -15,7 +15,6 @@ import {
   Trash2,
   Upload,
   X,
-  Zap,
 } from 'lucide-react'
 import { DropdownMenu } from '../../components/DropdownMenu'
 import type {
@@ -415,6 +414,97 @@ export function BuildPage() {
   const bulletCount = useMemo(() => 
     assembledResult.resume.roles.reduce((acc, role) => acc + role.bullets.length, 0),
     [assembledResult.resume.roles]
+  )
+  const selectedVectorLabel = useMemo(
+    () => data.vectors.find((vector) => vector.id === selectedVector)?.label ?? 'All Vectors',
+    [data.vectors, selectedVector],
+  )
+  const comparisonVectorLabel = useMemo(
+    () => data.vectors.find((vector) => vector.id === comparisonVector)?.label ?? null,
+    [comparisonVector, data.vectors],
+  )
+  const buildStatusLine = useMemo(() => {
+    const vectorSummary = comparisonVectorLabel
+      ? `${selectedVectorLabel} active with ${comparisonVectorLabel} in comparison`
+      : `${selectedVectorLabel} active`
+
+    const pageSummary = pdfRenderPending
+      ? 'Preview is rendering.'
+      : overPageLimit
+        ? 'Resume is over the current page target.'
+        : nearPageLimit
+          ? 'Resume is near the current page target.'
+          : pdfPageCount
+            ? `${pdfPageCount} page${pdfPageCount === 1 ? '' : 's'} ready for export.`
+            : 'Preview is ready.'
+
+    return `${vectorSummary}. ${bulletCount} bullets included. ${pageSummary}`
+  }, [
+    bulletCount,
+    comparisonVectorLabel,
+    nearPageLimit,
+    overPageLimit,
+    pdfPageCount,
+    pdfRenderPending,
+    selectedVectorLabel,
+  ])
+  const workingContextItems = useMemo(
+    () => [
+      {
+        label: 'Vector',
+        value: selectedVectorLabel,
+        detail: comparisonVectorLabel ? `Comparing against ${comparisonVectorLabel}` : 'Single-vector focus',
+      },
+      {
+        label: 'Preset',
+        value: activePreset?.name ?? 'No saved preset',
+        detail: presetDirty ? 'Unsaved preset changes' : 'Preset state synced',
+      },
+      {
+        label: 'Pages',
+        value: pdfRenderPending ? 'Rendering…' : pdfPageCount ? `${pdfPageCount} page${pdfPageCount === 1 ? '' : 's'}` : '—',
+        detail: overPageLimit ? 'Over target page count' : nearPageLimit ? 'Near target page count' : 'Within page target',
+      },
+      {
+        label: 'Suggestions',
+        value: suggestionModeActive ? `${suggestionCount} ready` : 'Inactive',
+        detail: suggestionModeActive
+          ? suggestionCount > 0
+            ? 'JD-guided suggestions ready to review'
+            : 'No remaining JD suggestions'
+          : 'Turn on suggestion mode after JD analysis',
+      },
+      {
+        label: 'JD Analysis',
+        value: jdLoading
+          ? 'Analyzing…'
+          : jdAnalysisResult
+            ? 'Insights ready'
+            : jdAnalysisEndpoint
+              ? 'Not analyzed'
+              : 'AI unavailable',
+        detail: jdAnalysisResult
+          ? 'Positioning note and gap analysis available'
+          : jdAnalysisEndpoint
+            ? 'Analyze a JD to tailor this draft'
+            : 'Configure AI to analyze JDs',
+      },
+    ],
+    [
+      activePreset?.name,
+      comparisonVectorLabel,
+      jdAnalysisEndpoint,
+      jdAnalysisResult,
+      jdLoading,
+      nearPageLimit,
+      overPageLimit,
+      pdfPageCount,
+      pdfRenderPending,
+      presetDirty,
+      selectedVectorLabel,
+      suggestionCount,
+      suggestionModeActive,
+    ],
   )
 
   // Pipeline → Build handoff
@@ -877,8 +967,17 @@ export function BuildPage() {
 
   return (
     <div className={`app-shell ${draggingSplit ? 'is-dragging' : ''}`}>
-      <header className="top-bar top-bar--actions-only">
-        <div className="top-bar-actions">
+      <header className="top-bar build-top-bar">
+        <div className="build-top-bar-copy">
+          <p className="build-top-bar-eyebrow">Core Workspace</p>
+          <h1>Build</h1>
+          <p className="build-top-bar-purpose">
+            Assemble and refine a tailored resume from your identity, strategy, and job research.
+          </p>
+          <p className="build-top-bar-status">{buildStatusLine}</p>
+        </div>
+
+        <div className="top-bar-actions build-top-bar-actions">
           <UndoRedoControls />
 
           <div className="view-switcher" role="tablist" aria-label="Preview mode">
@@ -938,7 +1037,7 @@ export function BuildPage() {
             </div>
           )}
 
-          <DropdownMenu label="File" icon={FolderOpen}>
+          <DropdownMenu label="Workspace" icon={FolderOpen}>
             <DropdownMenu.Item icon={Upload} label="Import" shortcut="⌘I" onClick={() => setImportExportMode('import')} />
             <DropdownMenu.Item icon={FileJson} label="Export" shortcut="⌘E" onClick={() => setImportExportMode('export')} />
             <DropdownMenu.Divider />
@@ -947,9 +1046,6 @@ export function BuildPage() {
             <DropdownMenu.Item icon={Package} label="Download Bundle" onClick={onDownloadBundle} />
             <DropdownMenu.Divider />
             <DropdownMenu.Item icon={ScanSearch} label={jdAnalysisEndpoint ? 'Analyze JD' : 'Analyze JD (AI not configured)'} onClick={() => setJdModalOpen(true)} />
-          </DropdownMenu>
-
-          <DropdownMenu label="Actions" icon={Zap}>
             <DropdownMenu.Item icon={Paintbrush} label="Variables" onClick={() => setVariablesOpen(true)} />
             <DropdownMenu.Divider />
             <div className="dropdown-preset-section">
@@ -997,6 +1093,16 @@ export function BuildPage() {
           </button>
         </div>
       </header>
+
+      <section className="build-context-strip" aria-label="Current working context">
+        {workingContextItems.map((item) => (
+          <div key={item.label} className="build-context-card">
+            <span className="build-context-label">{item.label}</span>
+            <strong className="build-context-value">{item.value}</strong>
+            <span className="build-context-detail">{item.detail}</span>
+          </div>
+        ))}
+      </section>
 
       <VectorBar
         vectors={data.vectors}
