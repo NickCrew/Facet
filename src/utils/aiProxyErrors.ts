@@ -10,6 +10,7 @@ interface FacetAiProxyErrorPayload {
   code?: unknown
   reason?: unknown
   feature?: unknown
+  message?: unknown
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -44,6 +45,31 @@ function toErrorText(status: number, fallback: string) {
   return `AI proxy error (${status}): ${message.slice(0, 160)}`
 }
 
+function readNestedMessage(value: unknown): string {
+  if (typeof value === 'string') {
+    return value.trim()
+  }
+
+  if (!isRecord(value)) {
+    return ''
+  }
+
+  if (typeof value.message === 'string' && value.message.trim()) {
+    return value.message.trim()
+  }
+
+  return ''
+}
+
+function isBillingIssueMessage(message: string): boolean {
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes('credit balance is too low') ||
+    normalized.includes('plans & billing') ||
+    (normalized.includes('billing') && normalized.includes('anthropic api'))
+  )
+}
+
 export async function readAiProxyError(response: Response): Promise<Error> {
   const text = await response.text()
   let parsed: unknown = null
@@ -58,9 +84,14 @@ export async function readAiProxyError(response: Response): Promise<Error> {
 
   const payload = isRecord(parsed) ? (parsed as FacetAiProxyErrorPayload) : null
   const errorMessage =
-    payload && typeof payload.error === 'string' && payload.error.trim()
-      ? payload.error.trim()
-      : text.trim()
+    (
+      payload &&
+      (
+        (typeof payload.error === 'string' && payload.error.trim()) ||
+        readNestedMessage(payload.error) ||
+        (typeof payload.message === 'string' && payload.message.trim())
+      )
+    ) || text.trim()
 
   const code =
     payload?.code === 'ai_access_denied' ||
@@ -88,6 +119,18 @@ export async function readAiProxyError(response: Response): Promise<Error> {
         code,
         reason,
         feature,
+      },
+    )
+  }
+
+  if (isBillingIssueMessage(errorMessage)) {
+    return new FacetAiProxyError(
+      'AI proxy billing issue: the Anthropic account behind the proxy is out of credits. Update Plans & Billing and try again.',
+      {
+        status: response.status,
+        code: 'ai_access_denied',
+        reason: 'billing_issue',
+        feature: null,
       },
     )
   }
