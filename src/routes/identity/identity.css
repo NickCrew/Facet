@@ -157,6 +157,34 @@
   color: var(--text-inverse);
 }
 
+/*
+ * Breathing pulse for any in-flight async action. Hooks on aria-busy so the
+ * effect lights up automatically wherever a button advertises async work,
+ * including future buttons we add. The opacity dip is intentional — keeps
+ * the button readable while still signalling progress, and the disabled
+ * styling already lowers contrast so we don't double-dim past WCAG.
+ */
+.identity-btn[aria-busy="true"] {
+  animation: identity-btn-breath 1.6s var(--easing) infinite;
+}
+
+@keyframes identity-btn-breath {
+  0%, 100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-primary) 40%, transparent);
+    opacity: 0.85;
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-primary) 0%, transparent);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .identity-btn[aria-busy="true"] {
+    animation: none;
+  }
+}
+
 .identity-alert,
 .identity-notice,
 .identity-warning {

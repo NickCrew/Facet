@@ -16,10 +16,13 @@ export function DraftSummaryCard({ draft, changelog }: DraftSummaryCardProps) {
       : "No builder events yet";
 
   return (
-    <section className="identity-card identity-card-secondary">
+    <section
+      className="identity-card identity-card-secondary"
+      aria-labelledby="identity-draft-summary-heading"
+    >
       <div className="identity-card-header">
         <div>
-          <h3>What Changed</h3>
+          <h3 id="identity-draft-summary-heading">What Changed</h3>
           <p>
             Track what the draft generator produced and what the builder
             actually recorded while you refine the identity model.

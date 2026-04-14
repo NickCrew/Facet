@@ -160,6 +160,7 @@ export function ExtractionAgentCard({
             type="button"
             onClick={() => void onGenerate("fresh")}
             disabled={isGenerating || isScanning}
+            aria-busy={isGenerating || isScanning}
           >
             <Sparkles size={16} />
             {isGenerating ? "Generating…" : "Generate Draft"}
@@ -180,9 +181,9 @@ export function ExtractionAgentCard({
 
       <input
         ref={uploadRef}
-        hidden
         type="file"
         accept="application/pdf,.pdf"
+        className="sr-only"
         onChange={(event) => void onUploadChange(event)}
       />
 
@@ -321,6 +322,9 @@ export function ExtractionAgentCard({
                       bulkStatus === "running" ||
                       bulkStatus === "cancelling" ||
                       scanResult.counts.extractedBullets === 0
+                    }
+                    aria-busy={
+                      bulkStatus === "running" || bulkStatus === "cancelling"
                     }
                   >
                     <Sparkles size={16} />

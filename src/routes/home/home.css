@@ -139,6 +139,29 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  animation: home-signal-rise var(--duration-slow) var(--easing) both;
+}
+
+.home-signal-card:nth-child(1) { animation-delay: 40ms; }
+.home-signal-card:nth-child(2) { animation-delay: 110ms; }
+.home-signal-card:nth-child(3) { animation-delay: 180ms; }
+.home-signal-card:nth-child(4) { animation-delay: 250ms; }
+
+@keyframes home-signal-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-signal-card {
+    animation: none;
+  }
 }
 
 .home-signal-label {

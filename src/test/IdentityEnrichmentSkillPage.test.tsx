@@ -491,6 +491,68 @@ describe('IdentityEnrichmentSkillPage', () => {
     )
   })
 
+  it('keeps user-filled context when the AI returns an empty string for it', async () => {
+    // Regression: the AI system prompt instructs the model to return an empty
+    // string when there's nothing distinctive to say about context. Previously
+    // the handler used `suggestion.context ?? context`, and since nullish
+    // coalescing doesn't fall through for empty strings, the user's filled-in
+    // context was getting wiped. The fix switched to `||` so empty AI output
+    // falls through to the user's current value.
+    skillEnrichmentMocks.generateSkillEnrichmentSuggestionMock.mockResolvedValueOnce({
+      depth: 'strong',
+      context: '',
+      positioning: 'Updated positioning from AI.',
+    })
+    const { IdentityEnrichmentSkillPage } = await import('../routes/identity/IdentityEnrichmentSkillPage')
+    render(<IdentityEnrichmentSkillPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Draft with AI' }))
+
+    await waitFor(() => {
+      expect(skillEnrichmentMocks.generateSkillEnrichmentSuggestionMock).toHaveBeenCalledTimes(1)
+    })
+
+    // Context should NOT be cleared — the user's saved context is still there.
+    expect((screen.getByLabelText('Context') as HTMLTextAreaElement).value).toContain(
+      'customer-hosted and internal platform delivery',
+    )
+    // Non-empty positioning from the AI should still win and update the field.
+    expect((screen.getByLabelText('Custom positioning') as HTMLTextAreaElement).value).toContain(
+      'Updated positioning from AI.',
+    )
+  })
+
+  it('keeps locally-edited context when the AI returns an empty string for it', async () => {
+    // Extra guard for the in-memory case: the user has typed new context into
+    // the field (not yet saved to the store) and then hits Draft with AI. The
+    // local edit should survive an empty-string context from the AI.
+    skillEnrichmentMocks.generateSkillEnrichmentSuggestionMock.mockResolvedValueOnce({
+      depth: 'strong',
+      context: '',
+      positioning: 'Another AI positioning.',
+    })
+    const { IdentityEnrichmentSkillPage } = await import('../routes/identity/IdentityEnrichmentSkillPage')
+    render(<IdentityEnrichmentSkillPage />)
+
+    const contextField = screen.getByLabelText('Context') as HTMLTextAreaElement
+    fireEvent.change(contextField, {
+      target: { value: 'manually typed context that the AI should not erase' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Draft with AI' }))
+
+    await waitFor(() => {
+      expect(skillEnrichmentMocks.generateSkillEnrichmentSuggestionMock).toHaveBeenCalledTimes(1)
+    })
+
+    expect((screen.getByLabelText('Context') as HTMLTextAreaElement).value).toBe(
+      'manually typed context that the AI should not erase',
+    )
+    expect((screen.getByLabelText('Custom positioning') as HTMLTextAreaElement).value).toContain(
+      'Another AI positioning.',
+    )
+  })
+
   it('disables duplicate AI requests while generation is in flight', async () => {
     const deferred = deferredPromise<{
       depth?: 'strong'

@@ -19,10 +19,13 @@ export function BulletConfidenceCard({ draft }: BulletConfidenceCardProps) {
   const bulletCount = bullets.length;
 
   return (
-    <section className="identity-card identity-card-secondary">
+    <section
+      className="identity-card identity-card-secondary"
+      aria-labelledby="identity-bullet-confidence-heading"
+    >
       <div className="identity-card-header">
         <div>
-          <h3>Confidence Review</h3>
+          <h3 id="identity-bullet-confidence-heading">Confidence Review</h3>
           <p>
             Audit which bullet rewrites are stated, confirmed, corrected, or
             still inferred before you trust them elsewhere.

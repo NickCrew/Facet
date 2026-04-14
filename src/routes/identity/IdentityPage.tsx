@@ -1111,7 +1111,6 @@ export function IdentityPage() {
       >
         <div className="identity-section-stack">
           {currentIdentity &&
-          !draft &&
           enrichmentProgress &&
           enrichmentProgress.total > 0 ? (
             <section className="identity-card identity-enrichment-banner">
@@ -1123,6 +1122,10 @@ export function IdentityPage() {
                     {enrichmentProgress.complete} · Skipped{" "}
                     {enrichmentProgress.skipped}
                   </p>
+                  <p className="identity-muted">
+                    Open the skill depth wizard to review depth, context, and
+                    search signals one skill at a time.
+                  </p>
                 </div>
 
                 <div className="identity-card-actions">
@@ -1131,7 +1134,7 @@ export function IdentityPage() {
                     type="button"
                     onClick={handleContinueSkillEnrichment}
                   >
-                    Continue Skill Enrichment
+                    Open Skill Depth Wizard
                   </button>
                   {enrichmentProgress.pending === 0 ? (
                     <button
