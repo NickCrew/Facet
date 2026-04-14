@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SignJWT, exportJWK, generateKeyPair } from 'jose'
 import { buildForgedWorkspaceSnapshot } from './fixtures/workspaceSnapshot'
 
@@ -794,6 +794,62 @@ describe('facetServer persistence API', () => {
     await expect(allowed.json()).resolves.toEqual(
       expect.objectContaining({
         content: [{ type: 'text', text: '{"ok":true}' }],
+      }),
+    )
+  })
+
+  it('clamps thinking budget below max tokens for search requests', async () => {
+    const messagesCreate = vi.fn(async () => ({
+      content: [{ type: 'text', text: '{"ok":true}' }],
+      usage: { input_tokens: 0, output_tokens: 0 },
+    }))
+
+    const { createFacetServer, createInMemoryWorkspaceStore } = await loadProxyModules()
+
+    const { server } = createFacetServer({
+      allowedOrigins: ['http://localhost:5173'],
+      proxyApiKey: 'proxy-key',
+      defaultMaxTokens: 4096,
+      maxRequestTokens: 4096,
+      persistenceStore: createInMemoryWorkspaceStore(),
+      anthropicClient: {
+        messages: {
+          create: messagesCreate,
+        },
+      },
+    })
+    servers.add(server)
+
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', () => resolve())
+    })
+
+    const address = server.address()
+    if (!address || typeof address === 'string') {
+      throw new Error('Failed to bind thinking-budget test server.')
+    }
+
+    const response = await fetch(`http://127.0.0.1:${address.port}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'http://localhost:5173',
+        'X-Proxy-API-Key': 'proxy-key',
+      },
+      body: JSON.stringify({
+        model: 'sonnet',
+        system: 'Return JSON only.',
+        messages: [{ role: 'user', content: 'Find jobs.' }],
+        thinking_budget: 8000,
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 15 }],
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(messagesCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        max_tokens: 4096,
+        thinking: { type: 'enabled', budget_tokens: 4095 },
       }),
     )
   })

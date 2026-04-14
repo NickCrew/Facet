@@ -913,8 +913,6 @@ export function createFacetServer(options = {}) {
         return
       }
 
-      const thinkingBudget = thinking_budget ?? defaultThinkingBudget
-      const useThinking = thinkingBudget > 0
       const resolvedTemp = !Number.isNaN(defaultTemperature)
         ? defaultTemperature
         : (temperature ?? 0.3)
@@ -925,6 +923,15 @@ export function createFacetServer(options = {}) {
           typeof max_tokens === 'number' ? Math.floor(max_tokens) : defaultMaxTokens,
         ),
       )
+      const requestedThinkingBudget = thinking_budget ?? defaultThinkingBudget
+      const normalizedThinkingBudget = Number.isFinite(requestedThinkingBudget)
+        ? Math.max(0, Math.floor(requestedThinkingBudget))
+        : 0
+      const resolvedThinkingBudget = Math.min(
+        normalizedThinkingBudget,
+        Math.max(0, resolvedMaxTokens - 1),
+      )
+      const useThinking = resolvedThinkingBudget > 0
       const normalizedTools = normalizeTools(tools)
       if (Array.isArray(tools) && normalizedTools.length !== tools.length) {
         sendJson(res, 400, { error: 'One or more requested tools are not allowed' })
@@ -940,7 +947,7 @@ export function createFacetServer(options = {}) {
       }
 
       if (useThinking) {
-        params.thinking = { type: 'enabled', budget_tokens: thinkingBudget }
+        params.thinking = { type: 'enabled', budget_tokens: resolvedThinkingBudget }
       } else {
         params.temperature = resolvedTemp
       }
