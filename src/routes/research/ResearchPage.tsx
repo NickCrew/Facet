@@ -69,6 +69,68 @@ const serializeIdentityProfile = (profile: {
     source: profile.source,
   })
 
+const getReadinessCopy = ({
+  effectiveProfile,
+  currentIdentity,
+  isIdentitySource,
+  profileIsStale,
+  resumeVersion,
+  isSearching,
+}: {
+  effectiveProfile: Pick<SearchProfile, 'source' | 'vectors' | 'inferredFromResumeVersion'> | null
+  currentIdentity: ReturnType<typeof useIdentityStore.getState>['currentIdentity']
+  isIdentitySource: boolean
+  profileIsStale: boolean
+  resumeVersion: number
+  isSearching: boolean
+}) => {
+  if (!effectiveProfile) {
+    return {
+      sourceLabel: 'No profile',
+      freshnessLabel: 'Needs profile',
+      headline: currentIdentity
+        ? 'Build a research profile from your identity model before you search.'
+        : 'Build a search profile from your resume before you launch a run.',
+      detail: currentIdentity
+        ? 'Facet can pull skills, vectors, and constraints straight from Identity so Research starts from the same strategy model.'
+        : 'Facet will infer skills, vectors, and open questions from your resume so you can review them before running search.',
+      primaryActionLabel: currentIdentity ? 'Build Profile from Identity' : 'Build Profile from Resume',
+    }
+  }
+
+  if (isIdentitySource) {
+    return {
+      sourceLabel: 'Identity model',
+      freshnessLabel: 'Ready',
+      headline: 'Your search profile is being driven by the identity model.',
+      detail:
+        'Update strategic fields in Identity when you want to change vectors, awareness items, or filtering defaults.',
+      primaryActionLabel: isSearching ? 'Running Search…' : 'Run Search',
+    }
+  }
+
+  if (profileIsStale) {
+    return {
+      sourceLabel: 'Resume fallback',
+      freshnessLabel: `Resume stale (v${effectiveProfile.inferredFromResumeVersion} vs v${resumeVersion})`,
+      headline:
+        'Your resume-backed profile is stale. You can still search, but rebuilding will use the latest resume data.',
+      detail:
+        'Resume fallback stays available in-session when Identity is not active, but it can drift if your resume changes.',
+      primaryActionLabel: isSearching ? 'Running Search…' : 'Run Search',
+    }
+  }
+
+  return {
+    sourceLabel: 'Resume fallback',
+    freshnessLabel: 'Ready',
+    headline: 'Your resume-backed profile is ready for targeted searches.',
+    detail:
+      'Resume fallback stays available in-session when Identity is not active, but it can drift if your resume changes.',
+    primaryActionLabel: isSearching ? 'Running Search…' : 'Run Search',
+  }
+}
+
 export function ResearchPage() {
   const navigate = useNavigate()
   const resumeData = useResumeStore((state) => state.data)
@@ -163,6 +225,16 @@ export function ResearchPage() {
   )
 
   const activeRequest = activeRun ? requestById.get(activeRun.requestId) ?? null : null
+  const latestRunResultCount = activeRun?.results.length ?? 0
+  const readinessCopy = getReadinessCopy({
+    effectiveProfile,
+    currentIdentity,
+    isIdentitySource,
+    profileIsStale,
+    resumeVersion: resumeData.version,
+    isSearching,
+  })
+  const primaryActionBusy = !effectiveProfile ? isInferring : isSearching
 
   const vectorOptions = useMemo(() => {
     if (isIdentitySource) {
@@ -453,16 +525,35 @@ export function ResearchPage() {
           <button
             type="button"
             className="research-btn research-btn-primary"
-            onClick={() => void handleInfer()}
-            disabled={isInferring}
+            onClick={() => void (!effectiveProfile ? handleInfer() : handleLaunchSearch())}
+            disabled={primaryActionBusy}
+            aria-busy={primaryActionBusy}
           >
-            <Sparkles size={16} />
-            {isInferring
-              ? 'Inferring…'
-              : currentIdentity
-                ? 'Refresh from Identity'
-                : 'Build Profile from Resume'}
+            {effectiveProfile ? <Search size={16} /> : <Sparkles size={16} />}
+            {readinessCopy.primaryActionLabel}
           </button>
+          <button
+            type="button"
+            className="research-btn"
+            onClick={() => setActiveTab('profile')}
+          >
+            Review Profile
+          </button>
+          {effectiveProfile ? (
+            <button
+              type="button"
+              className="research-btn"
+              onClick={() => void handleInfer()}
+              disabled={isInferring}
+            >
+              <RefreshCcw size={16} />
+              {isInferring
+                ? 'Refreshing…'
+                : currentIdentity
+                  ? 'Refresh from Identity'
+                  : 'Refresh Resume Profile'}
+            </button>
+          ) : null}
           {effectiveProfile && !currentIdentity ? (
             <button
               type="button"
@@ -476,25 +567,44 @@ export function ResearchPage() {
         </div>
       </header>
 
+      <section className="research-card research-readiness" aria-label="Search readiness">
+        <div className="research-card-header">
+          <div>
+            <h2>Search Readiness</h2>
+            <p>{readinessCopy.headline}</p>
+          </div>
+          <AiActivityIndicator
+            active={isInferring || isSearching}
+            label={isSearching
+              ? 'AI is searching the web and ranking results.'
+              : 'AI is refreshing your research profile.'
+            }
+          />
+        </div>
+        <dl className="research-readiness-grid">
+          <div className="research-readiness-stat">
+            <dt className="research-readiness-label">Profile source</dt>
+            <dd>{readinessCopy.sourceLabel}</dd>
+          </div>
+          <div className="research-readiness-stat">
+            <dt className="research-readiness-label">Freshness</dt>
+            <dd>{readinessCopy.freshnessLabel}</dd>
+          </div>
+          <div className="research-readiness-stat">
+            <dt className="research-readiness-label">Search angles</dt>
+            <dd>{effectiveProfile?.vectors.length ?? 0}</dd>
+          </div>
+          <div className="research-readiness-stat">
+            <dt className="research-readiness-label">Latest run</dt>
+            <dd>{activeRun ? latestRunResultCount : 'None yet'}</dd>
+          </div>
+        </dl>
+        <p className="research-readiness-detail">{readinessCopy.detail}</p>
+      </section>
+
       {pageError ? (
         <div className="research-alert" role="alert">
           {pageError}
-        </div>
-      ) : null}
-
-      {profileIsStale ? (
-        <div className="research-warning" role="status">
-          Your search profile was inferred from resume version {effectiveProfile?.inferredFromResumeVersion}.
-          The current resume data is version {resumeData.version}. Rebuild the profile if you want the latest resume content reflected in search.
-        </div>
-      ) : null}
-
-      {effectiveProfile ? (
-        <div className="research-warning">
-          Active source: {isIdentitySource ? 'Identity model' : 'Resume fallback'}.
-          {isIdentitySource
-            ? ' Strategic fields are now edited in Identity, and your last resume-backed profile is preserved for this session if you switch back.'
-            : ' This workspace is still using the resume-driven bootstrap path.'}
         </div>
       ) : null}
 
@@ -923,7 +1033,7 @@ export function ResearchPage() {
                 </div>
                 <button
                   type="button"
-                  className="research-btn research-btn-primary ai-working-button"
+                  className="research-btn ai-working-button"
                   onClick={() => void handleLaunchSearch()}
                   disabled={isSearching}
                   aria-busy={isSearching}

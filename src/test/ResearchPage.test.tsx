@@ -210,7 +210,40 @@ describe('ResearchPage', () => {
     const { ResearchPage } = await import('../routes/research/ResearchPage')
     render(<ResearchPage />)
 
-    expect(screen.getByRole('status').textContent).toContain('current resume data is version 2')
+    expect(screen.getByLabelText('Search readiness').textContent).toContain(
+      'Resume stale (v1 vs v2)',
+    )
+    expect(screen.getByLabelText('Search readiness').textContent).toContain(
+      'Resume fallback stays available in-session when Identity is not active',
+    )
+  })
+
+  it('shows search readiness context and a primary run-search action for resume fallback profiles', async () => {
+    const { ResearchPage } = await import('../routes/research/ResearchPage')
+    render(<ResearchPage />)
+
+    expect(screen.getByRole('button', { name: 'Run Search' })).toBeTruthy()
+    expect(screen.getByLabelText('Search readiness').textContent).toContain('Resume fallback')
+    expect(screen.getByText('Search Readiness')).toBeTruthy()
+    expect(screen.getByText('Your resume-backed profile is ready for targeted searches.')).toBeTruthy()
+  })
+
+  it('shows identity-backed readiness context when the profile syncs from identity', async () => {
+    const identity = cloneIdentityFixture()
+    useIdentityStore.setState({
+      currentIdentity: identity,
+      draftDocument: JSON.stringify(identity, null, 2),
+    })
+
+    const { ResearchPage } = await import('../routes/research/ResearchPage')
+    render(<ResearchPage />)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Search readiness').textContent).toContain('Identity model')
+    })
+
+    expect(screen.getByRole('button', { name: 'Run Search' })).toBeTruthy()
+    expect(screen.getByText('Your search profile is being driven by the identity model.')).toBeTruthy()
   })
 
   it('does not resync an identity-backed profile when the derived payload is unchanged', async () => {
@@ -241,7 +274,7 @@ describe('ResearchPage', () => {
     render(<ResearchPage />)
 
     await waitFor(() => {
-      expect(screen.getByText(/Active source: Identity model/i)).toBeTruthy()
+      expect(screen.getByLabelText('Search readiness').textContent).toContain('Identity model')
     })
 
     expect(setProfileSpy).not.toHaveBeenCalled()
@@ -362,6 +395,7 @@ describe('ResearchPage', () => {
   })
 
   it('surfaces upgrade messaging when hosted AI profile inference is paywalled', async () => {
+    useSearchStore.setState((state) => ({ ...state, profile: null, requests: [], runs: [] }))
     mockInferSearchProfile.mockRejectedValueOnce(
       new Error('Upgrade to AI Pro to use this hosted AI feature.'),
     )
@@ -536,6 +570,7 @@ describe('ResearchPage', () => {
 
   it('shows an error when AI endpoint configuration is missing', async () => {
     vi.stubEnv('VITE_ANTHROPIC_PROXY_URL', '')
+    useSearchStore.setState((state) => ({ ...state, profile: null, requests: [], runs: [] }))
     const { ResearchPage } = await import('../routes/research/ResearchPage')
     render(<ResearchPage />)
 
@@ -591,7 +626,7 @@ describe('ResearchPage', () => {
     fireEvent.click(button)
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Inferring/i }).hasAttribute('disabled')).toBe(true)
+      expect(screen.getByRole('button', { name: /Build Profile from Resume/i }).hasAttribute('disabled')).toBe(true)
     })
 
     expect(mockInferSearchProfile).toHaveBeenCalledWith(
@@ -607,7 +642,7 @@ describe('ResearchPage', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Build Profile from Resume/i }).hasAttribute('disabled')).toBe(false)
+      expect(screen.getByRole('button', { name: /Run Search/i }).hasAttribute('disabled')).toBe(false)
     })
   })
 
