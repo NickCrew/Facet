@@ -2,6 +2,7 @@ import type { FacetAiAccessDenialReason, FacetAiFeatureKey } from '../types/host
 
 type FacetAiProxyErrorCode =
   | 'ai_access_denied'
+  | 'ai_overloaded'
   | 'auth_required'
   | 'auth_internal_error'
 
@@ -19,7 +20,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 export class FacetAiProxyError extends Error {
   status: number
   code: FacetAiProxyErrorCode | null
-  reason: FacetAiAccessDenialReason | 'auth_required' | null
+  reason: FacetAiAccessDenialReason | 'auth_required' | 'temporary_capacity' | null
   feature: FacetAiFeatureKey | null
 
   constructor(
@@ -27,7 +28,7 @@ export class FacetAiProxyError extends Error {
     options: {
       status: number
       code?: FacetAiProxyErrorCode | null
-      reason?: FacetAiAccessDenialReason | 'auth_required' | null
+      reason?: FacetAiAccessDenialReason | 'auth_required' | 'temporary_capacity' | null
       feature?: FacetAiFeatureKey | null
     },
   ) {
@@ -70,6 +71,17 @@ function isBillingIssueMessage(message: string): boolean {
   )
 }
 
+function isTemporaryCapacityMessage(message: string): boolean {
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes('overload') ||
+    normalized.includes('try again in a few minutes') ||
+    normalized.includes('try again in a moment') ||
+    normalized.includes('high demand') ||
+    normalized.includes('temporarily unavailable')
+  )
+}
+
 export async function readAiProxyError(response: Response): Promise<Error> {
   const text = await response.text()
   let parsed: unknown = null
@@ -95,6 +107,7 @@ export async function readAiProxyError(response: Response): Promise<Error> {
 
   const code =
     payload?.code === 'ai_access_denied' ||
+    payload?.code === 'ai_overloaded' ||
     payload?.code === 'auth_required' ||
     payload?.code === 'auth_internal_error'
       ? payload.code
@@ -104,6 +117,7 @@ export async function readAiProxyError(response: Response): Promise<Error> {
     payload?.reason === 'access_expired' ||
     payload?.reason === 'billing_issue' ||
     payload?.reason === 'self_hosted_proxy_unavailable' ||
+    payload?.reason === 'temporary_capacity' ||
     payload?.reason === 'auth_required'
       ? payload.reason
       : code === 'auth_required'
@@ -131,6 +145,18 @@ export async function readAiProxyError(response: Response): Promise<Error> {
         code: 'ai_access_denied',
         reason: 'billing_issue',
         feature: null,
+      },
+    )
+  }
+
+  if (response.status === 529 || (response.status >= 500 && isTemporaryCapacityMessage(errorMessage))) {
+    return new FacetAiProxyError(
+      'AI provider is temporarily overloaded. Please try again in a moment.',
+      {
+        status: response.status,
+        code: 'ai_overloaded',
+        reason: 'temporary_capacity',
+        feature,
       },
     )
   }

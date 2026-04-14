@@ -854,6 +854,54 @@ describe('facetServer persistence API', () => {
     )
   })
 
+  it('preserves upstream overload messages for 529 provider failures', async () => {
+    const { createFacetServer, createInMemoryWorkspaceStore } = await loadProxyModules()
+
+    const { server } = createFacetServer({
+      allowedOrigins: ['http://localhost:5173'],
+      proxyApiKey: 'proxy-key',
+      persistenceStore: createInMemoryWorkspaceStore(),
+      anthropicClient: {
+        messages: {
+          create: async () => {
+            const error = new Error('Overloaded. Please try again in a few minutes.')
+            Object.assign(error, { status: 529 })
+            throw error
+          },
+        },
+      },
+    })
+    servers.add(server)
+
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', () => resolve())
+    })
+
+    const address = server.address()
+    if (!address || typeof address === 'string') {
+      throw new Error('Failed to bind overload test server.')
+    }
+
+    const response = await fetch(`http://127.0.0.1:${address.port}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'http://localhost:5173',
+        'X-Proxy-API-Key': 'proxy-key',
+      },
+      body: JSON.stringify({
+        model: 'sonnet',
+        system: 'Return JSON only.',
+        messages: [{ role: 'user', content: 'Investigate this job.' }],
+      }),
+    })
+
+    expect(response.status).toBe(529)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Overloaded. Please try again in a few minutes.',
+    })
+  })
+
   it('allows hosted identity bullet deepening requests when the entitlement includes identity.deepen', async () => {
     const { server, baseUrl, accessToken } = await startHostedServer({
       entitlement: {

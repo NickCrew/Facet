@@ -971,8 +971,15 @@ export function createFacetServer(options = {}) {
       sendJson(res, 200, result)
     } catch (error) {
       const status = error?.status ?? 500
-      const message =
-        status >= 500 ? 'Internal proxy error' : (error?.message ?? 'Internal proxy error')
+      const fallbackMessage = 'Internal proxy error'
+      const upstreamMessage =
+        typeof error?.message === 'string' && error.message.trim()
+          ? error.message.trim()
+          : fallbackMessage
+      let message = upstreamMessage
+      if (status >= 500 && status !== 529) {
+        message = fallbackMessage
+      }
       console.error(`[proxy] ${status}: ${message}`)
       sendJson(res, status, { error: message })
     }

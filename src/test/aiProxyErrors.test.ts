@@ -28,4 +28,26 @@ describe('readAiProxyError', () => {
     expect((error as FacetAiProxyError).code).toBe('ai_access_denied')
     expect((error as FacetAiProxyError).status).toBe(400)
   })
+
+  it('maps provider overload payloads to a friendly retryable error', async () => {
+    const response = new Response(
+      JSON.stringify({
+        error: 'Overloaded. Please try again in a few minutes.',
+      }),
+      {
+        status: 529,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    )
+
+    const error = await readAiProxyError(response)
+
+    expect(error).toBeInstanceOf(FacetAiProxyError)
+    expect(error.message).toBe(
+      'AI provider is temporarily overloaded. Please try again in a moment.',
+    )
+    expect((error as FacetAiProxyError).code).toBe('ai_overloaded')
+    expect((error as FacetAiProxyError).reason).toBe('temporary_capacity')
+    expect((error as FacetAiProxyError).status).toBe(529)
+  })
 })
